@@ -479,42 +479,108 @@ function MacroPage({st}){
 
 // ── EVENTS ────────────────────────────────────────────────────────────────────
 function EventsPage({st}){
-  function SignalBlock({label,sig,color}){
-    return(
-      <GlowCard color={color} style={{marginBottom:22}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div style={{fontSize:10,color,letterSpacing:3,textTransform:"uppercase"}}>{label}</div>
-          <Badge color={sig.active&&sig.prediction?G.green:G.textSub}>{sig.active&&sig.prediction?"Signal Live":"Waiting"}</Badge>
-        </div>
-        {/* ALWAYS show countdown */}
-        <CDRow target={sig.countdownTo} color={color}/>
-        {sig.active&&sig.prediction?(
-          <div style={{marginTop:20}}>
-            <div style={{background:G.goldBg2,border:`1px solid ${color}44`,borderRadius:G.rs,padding:"14px 16px",marginBottom:14}}>
-              <div style={{fontSize:9,color,letterSpacing:1,marginBottom:5}}>REGIMEEDGE PREDICTION</div>
-              <div style={{fontSize:20,fontWeight:900,color:G.text,fontFamily:"'Playfair Display',serif"}}>{sig.prediction}</div>
-            </div>
-            <p style={{color:G.text,fontSize:14,lineHeight:1.85,margin:"0 0 12px"}}>{sig.body}</p>
-            <div style={{fontSize:11,color:G.textSub,fontStyle:"italic",marginBottom:sig.result?14:0}}>{sig.posted} · Posted by RegimeEdge</div>
-            {sig.result&&<div style={{padding:"12px 14px",background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs}}><div style={{fontSize:13,color:G.green,fontWeight:700}}>Result: {sig.result}</div></div>}
-          </div>
-        ):(
-          <div style={{marginTop:20,textAlign:"center",padding:"18px 0",background:G.surface,borderRadius:G.rs}}>
-            <div style={{fontSize:13,color:G.textSub}}>Pre-forecast not yet posted.</div>
-            <div style={{fontSize:11,color:G.textDim,marginTop:5}}>RegimeEdge posts before the release.</div>
-          </div>
-        )}
-      </GlowCard>
-    );
-  }
+  const UPCOMING=[
+    { id:"nfp", title:"Non-Farm Payrolls", short:"NFP", date:"Jun 5, 2026", time:"12:30 UTC", color:G.gold, icon:"📊",
+      desc:"Monthly US jobs report. Largest single monthly driver of gold and USD volatility.", impact:"Very High",
+      sig: st.nfpSignal },
+    { id:"fomc", title:"FOMC Rate Decision", short:"FOMC", date:"Jun 17–18, 2026", time:"18:00 UTC", color:G.blue, icon:"🏦",
+      desc:"Federal Reserve policy statement and rate decision. Determines USD and gold macro direction.", impact:"Very High",
+      sig: st.fomcSignal },
+    { id:"cpi", title:"US CPI Inflation", short:"CPI", date:"Jun 10, 2026", time:"12:30 UTC", color:"#f472b6", icon:"📈",
+      desc:"Consumer price index release. Primary inflation gauge feeding into Fed rate path expectations.", impact:"High",
+      sig: null },
+    { id:"gdp", title:"US GDP (Q1 Final)", short:"GDP", date:"Jun 26, 2026", time:"12:30 UTC", color:G.textSub, icon:"🏛",
+      desc:"Quarterly economic output. Confirms growth trajectory and risk sentiment direction.", impact:"Medium",
+      sig: null },
+  ];
+  const impactColor=(i)=>i==="Very High"?G.gold:i==="High"?"#f472b6":G.textSub;
+
   return(
     <div style={{padding:"32px 22px"}}>
-      <SH label="High Conviction" title="NFP & FOMC"/>
-      <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:16,marginBottom:24}}>
-        <p style={{color:G.gold,fontSize:12,lineHeight:1.8,margin:0,fontWeight:600}}>⚡ NFP signal posted the night before release. FOMC signal 2–3 hours before announcement. Position before it's late.</p>
+      <SH label="High Conviction" title="High Impact Events"/>
+      <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:16,marginBottom:28}}>
+        <p style={{color:G.gold,fontSize:12,lineHeight:1.8,margin:0,fontWeight:600}}>⚡ RegimeEdge posts pre-event signals before NFP and FOMC. Position before the market moves.</p>
       </div>
-      <SignalBlock label="Non-Farm Payrolls (NFP)" sig={st.nfpSignal} color={G.gold}/>
-      <SignalBlock label="FOMC Rate Decision" sig={st.fomcSignal} color="#60a5fa"/>
+
+      {UPCOMING.map(ev=>(
+        <div key={ev.id} style={{marginBottom:16}}>
+          <div style={{background:G.card,border:`1px solid ${ev.color}33`,borderRadius:G.r,overflow:"hidden",
+            boxShadow:`0 0 24px ${ev.color}0a`}}>
+            {/* Card header bar */}
+            <div style={{height:3,background:`linear-gradient(90deg,${ev.color},${ev.color}44)`}}/>
+            <div style={{padding:"16px 18px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:`${ev.color}14`,border:`1px solid ${ev.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{ev.icon}</div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:800,color:G.text,lineHeight:1.2}}>{ev.title}</div>
+                    <div style={{fontSize:10,color:G.textSub,marginTop:2}}>{ev.short}</div>
+                  </div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:10,fontWeight:700,color:impactColor(ev.impact),letterSpacing:0.5}}>{ev.impact}</div>
+                  <div style={{fontSize:9,color:G.textDim,marginTop:2}}>IMPACT</div>
+                </div>
+              </div>
+
+              <div style={{display:"flex",gap:14,marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:11,color:G.textSub}}>📅</span>
+                  <span style={{fontSize:11,color:G.text,fontWeight:600}}>{ev.date}</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:11,color:G.textSub}}>🕐</span>
+                  <span style={{fontSize:11,color:G.textSub}}>{ev.time}</span>
+                </div>
+              </div>
+
+              <p style={{color:G.textSub,fontSize:12,lineHeight:1.75,margin:"0 0 14px"}}>{ev.desc}</p>
+
+              {/* Signal block — only for NFP/FOMC */}
+              {ev.sig&&(
+                <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14,marginTop:2}}>
+                  {ev.sig.active&&ev.sig.prediction?(
+                    <div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                        <div style={{fontSize:9,color:G.gold,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>RegimeEdge Signal — Live</div>
+                        <div style={{width:7,height:7,borderRadius:"50%",background:G.green,boxShadow:`0 0 8px ${G.green}`}}/>
+                      </div>
+                      <div style={{background:G.goldBg2,border:`1px solid ${ev.color}44`,borderRadius:G.rs,padding:"12px 14px",marginBottom:10}}>
+                        <div style={{fontSize:18,fontWeight:900,color:G.text,fontFamily:"'Playfair Display',serif"}}>{ev.sig.prediction}</div>
+                      </div>
+                      {ev.sig.body&&<p style={{color:G.text,fontSize:13,lineHeight:1.8,margin:"0 0 8px"}}>{ev.sig.body}</p>}
+                      {ev.sig.result&&(
+                        <div style={{padding:"10px 14px",background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs,marginTop:8}}>
+                          <div style={{fontSize:12,color:G.green,fontWeight:700}}>Result: {ev.sig.result}</div>
+                        </div>
+                      )}
+                    </div>
+                  ):(
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:7,height:7,borderRadius:"50%",background:G.textDim,flexShrink:0}}/>
+                      <div style={{fontSize:12,color:G.textSub}}>Pre-forecast not yet posted. RegimeEdge signals before the release.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.r,padding:16,marginTop:8}}>
+        <div style={{fontSize:11,fontWeight:700,color:G.textSub,marginBottom:8,letterSpacing:1}}>HOW REGIMEEDGE USES EVENTS</div>
+        {[
+          "NFP signal posted the night before — so you're positioned, not reacting.",
+          "FOMC signal posted 2–3 hours before announcement.",
+          "These are directional pre-forecasts based on macro conditions, not short-term guesses.",
+        ].map((t,i)=>(
+          <div key={i} style={{display:"flex",gap:9,marginBottom:7,alignItems:"flex-start"}}>
+            <span style={{color:G.gold,fontSize:11,flexShrink:0,marginTop:1}}>◈</span>
+            <span style={{color:G.textSub,fontSize:12,lineHeight:1.65}}>{t}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -557,29 +623,31 @@ function ExchangePage({st}){
   if(step==="buyer") return(
     <div style={{padding:"32px 22px"}}>
       <button onClick={()=>setStep("main")} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:13,marginBottom:22,fontFamily:"inherit"}}>← Back</button>
-      <SH label="P2P Exchange" title="Buyer Instructions"/>
-      <GlowCard color={G.green} style={{marginBottom:16}}>
-        {[["1. Know your amount","Decide exactly how much USDT you need. Minimum $5, maximum $25."],["2. No payment yet","You do NOT pay until a verified seller with your exact amount is confirmed."],["3. Seller found first","Admin finds a verified seller. You are notified when matched."],["4. Pay admin escrow","Send ETBirr to admin escrow account only — never directly to the seller."],["5. Seller sends USDT","Admin instructs seller to send USDT to you once your payment is received."],["6. Confirm & close","You confirm USDT received → admin releases ETBirr to seller. Both protected."]].map(([t,d],i,arr)=>(
-          <div key={i} style={{borderBottom:i<arr.length-1?`1px solid ${G.border}`:"none",paddingBottom:i<arr.length-1?16:0,marginBottom:i<arr.length-1?16:0}}>
-            <div style={{fontSize:13,fontWeight:700,color:G.green,marginBottom:5}}>{t}</div>
-            <div style={{fontSize:13,color:G.textSub,lineHeight:1.75}}>{d}</div>
-          </div>
-        ))}
-      </GlowCard>
-      <Card style={{marginBottom:16}}>
-        <div style={{fontSize:10,color:G.textSub,letterSpacing:2,marginBottom:14}}>EXCHANGE RULES</div>
-        {[["Time limit","20 minutes max"],["Fee","$0.10 per side"],["Min / Max","$5 – $25 USDT"],["Release time","Under 20 min"]].map(([l,v])=>(
-          <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${G.border}`}}>
-            <span style={{fontSize:13,color:G.textSub}}>{l}</span><span style={{fontSize:13,color:G.text,fontWeight:600}}>{v}</span>
-          </div>
-        ))}
-      </Card>
-      <div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:22,background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:16}}>
-        <input type="checkbox" id="agree" checked={agreed} onChange={e=>setAgreed(e.target.checked)} style={{marginTop:3,accentColor:G.gold}}/>
-        <label htmlFor="agree" style={{fontSize:13,color:G.text,lineHeight:1.75,cursor:"pointer"}}>I have read and understood the buyer rules. I agree to follow the process exactly.</label>
+      <SH label="P2P Exchange" title="Buyer Verification"/>
+      <div style={{background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.r,padding:16,marginBottom:18}}>
+        <p style={{color:G.red,fontSize:12,margin:0,lineHeight:1.75}}>⚠ Identity verification is required for all participants — buyers and sellers alike. Any attempt to bypass the process = immediate permanent ban.</p>
       </div>
-      <a href={ADMIN_TG} target="_blank" rel="noreferrer" onClick={e=>{if(!agreed){e.preventDefault();alert("Please agree to the rules first.");}}}>
-        <button style={{width:"100%",padding:15,background:agreed?G.gold:G.border,border:"none",borderRadius:G.rs,color:agreed?"#000":G.textSub,fontSize:14,fontWeight:800,cursor:agreed?"pointer":"not-allowed",fontFamily:"inherit"}}>I'm Ready — Contact Admin →</button>
+      <Card style={{marginBottom:16}}>
+        <div style={{fontSize:13,color:G.textSub,lineHeight:1.8,marginBottom:16}}><strong style={{color:G.text}}>Buyer process:</strong> Submit your details. Admin finds a verified seller. You pay into admin escrow. USDT is sent to you after your payment clears. Every step is monitored.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:11}}>
+          <FI value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="Full legal name"/>
+          <FI value={form.phone} onChange={v=>setForm(f=>({...f,phone:v}))} placeholder="Phone number"/>
+          <FI value={form.telegram} onChange={v=>setForm(f=>({...f,telegram:v}))} placeholder="Telegram username (@...)"/>
+          <FI value={form.amount} onChange={v=>setForm(f=>({...f,amount:v}))} placeholder="USDT amount needed (max $50)"/>
+          <div>
+            <div style={{fontSize:12,color:G.textSub,marginBottom:7}}>ID card photo (front)</div>
+            <button onClick={()=>idRef.current.click()} style={{width:"100%",padding:13,background:G.surface,border:`1px dashed ${idPhoto?G.green:G.border}`,borderRadius:G.rs,color:idPhoto?G.green:G.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{idPhoto?"✓ ID uploaded":"📷 Upload ID card"}</button>
+            <input ref={idRef} type="file" accept="image/*" onChange={hf(setIdPhoto)} style={{display:"none"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:12,color:G.textSub,marginBottom:7}}>Photo holding your ID</div>
+            <button onClick={()=>holdRef.current.click()} style={{width:"100%",padding:13,background:G.surface,border:`1px dashed ${holdPhoto?G.green:G.border}`,borderRadius:G.rs,color:holdPhoto?G.green:G.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{holdPhoto?"✓ Photo uploaded":"📷 Upload holding-ID photo"}</button>
+            <input ref={holdRef} type="file" accept="image/*" onChange={hf(setHoldPhoto)} style={{display:"none"}}/>
+          </div>
+        </div>
+      </Card>
+      <a href={ADMIN_TG} target="_blank" rel="noreferrer" onClick={e=>{if(!ok){e.preventDefault();alert("Complete all fields and upload both photos.");}}}>
+        <button style={{width:"100%",padding:15,background:ok?G.gold:G.border,border:"none",borderRadius:G.rs,color:ok?"#000":G.textSub,fontSize:14,fontWeight:800,cursor:ok?"pointer":"not-allowed",fontFamily:"inherit"}}>Submit & Contact Admin →</button>
       </a>
     </div>
   );
@@ -684,6 +752,25 @@ function ExchangePage({st}){
 }
 
 // ── EDGE TERMINAL (EA Bot — admin-gated, full-featured) ───────────────────────
+const TC = "#a78bfa"; // terminal accent — defined at module level so all terminal components can use it
+
+// Module-level terminal card primitives — MUST stay outside any function
+// (defining them inside causes React to recreate the component type on every render, destroying the DOM = keyboard closes)
+const TCard=({children,style={}})=>(
+  <div style={{background:"#111315",border:"1px solid #2A2D35",borderRadius:10,padding:14,marginBottom:11,...style}}>{children}</div>
+);
+const TLabel=({children})=>(
+  <div style={{fontSize:8,letterSpacing:2,color:"#8A8F9E",textTransform:"uppercase",fontFamily:"monospace",marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+    <span style={{width:3,height:10,background:TC,borderRadius:2,display:"inline-block",flexShrink:0}}/>
+    {children}
+  </div>
+);
+const IndRow=({label,val,dir})=>(
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:"1px solid rgba(42,45,53,0.5)"}}>
+    <span style={{fontSize:10,color:"#8A8F9E"}}>{label}</span>
+    <span style={{fontSize:10,fontWeight:600,fontFamily:"monospace",color:dir==="buy"?"#22c55e":dir==="sell"?"#ef4444":"#EEF0F4"}}>{val}</span>
+  </div>
+);
 
 // ─ locked state ───────────────────────────────────────────────────────────────
 function TerminalLocked({user}){
@@ -896,22 +983,6 @@ function TerminalFull(){
     {id:"log",icon:"≡",label:"LOG"},
     {id:"settings",icon:"⚙",label:"CONFIG"},
   ];
-
-  const TCard=({children,style={}})=>(
-    <div style={{background:G.bgDeep,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:14,marginBottom:11,...style}}>{children}</div>
-  );
-  const TLabel=({children})=>(
-    <div style={{fontSize:8,letterSpacing:2,color:G.textSub,textTransform:"uppercase",fontFamily:M,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
-      <span style={{width:3,height:10,background:TC,borderRadius:2,display:"inline-block",flexShrink:0}}/>
-      {children}
-    </div>
-  );
-  const IndRow=({label,val,dir})=>(
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${G.border}44`}}>
-      <span style={{fontSize:10,color:G.textSub}}>{label}</span>
-      <span style={{fontSize:10,fontWeight:600,fontFamily:M,color:dir==="buy"?G.green:dir==="sell"?G.red:G.text}}>{val}</span>
-    </div>
-  );
 
   return(
     <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 140px)",fontFamily:M}}>
@@ -1996,8 +2067,11 @@ export default function App(){
     })();
   },[]);
 
-  // ── EA approval check from DB
-  const checkApproval=async(userId)=>{
+  // ── EA approval check — reads from content state (synced with admin panel) + DB as backup
+  const checkApproval=async(userId,email,approvedList)=>{
+    // Primary: check the eaApprovedUsers list from app_content (synced with admin panel)
+    if(email&&(approvedList||[]).includes(email)) return true;
+    // Secondary: check profiles table
     try{
       const rows=await sbDB(`/profiles?id=eq.${userId}&select=ea_approved`);
       const approved=rows?.[0]?.ea_approved||false;
@@ -2028,8 +2102,8 @@ export default function App(){
           const u={ name:d.user_metadata?.username||d.email.split("@")[0], email:d.email, id:d.id, emailConfirmed:!!d.email_confirmed_at, created_at:d.created_at };
           setUser(u);
           try{ localStorage.setItem("re_user_cache",JSON.stringify(u)); }catch{}
-          // Async EA check
-          checkApproval(d.id).then(setIsApproved);
+          // Async EA check — pass email and current approved list
+          checkApproval(d.id, d.email, st.eaApprovedUsers||[]).then(setIsApproved);
         }else{
           // Only clear if no cached user (network issue shouldn't log you out)
           const cached=JSON.parse(localStorage.getItem("re_user_cache")||"null");
@@ -2040,11 +2114,11 @@ export default function App(){
     })();
   },[]);
 
-  // Re-check EA approval when user changes
+  // Re-check EA approval when user or approved list changes
   useEffect(()=>{
-    if(user?.id) checkApproval(user.id).then(setIsApproved);
+    if(user?.id) checkApproval(user.id, user.email, st.eaApprovedUsers||[]).then(setIsApproved);
     else setIsApproved(false);
-  },[user?.id]);
+  },[user?.id, JSON.stringify(st.eaApprovedUsers)]);
 
   const handleLogout=async()=>{
     await sbSignOut();
@@ -2061,10 +2135,31 @@ export default function App(){
     setUser(u);
     setShowAuth(false);
     try{ localStorage.setItem("re_user_cache",JSON.stringify(u)); }catch{}
-    if(u?.id) checkApproval(u.id).then(setIsApproved);
+    if(u?.id) checkApproval(u.id, u.email, st.eaApprovedUsers||[]).then(setIsApproved);
   };
 
-  const nav=p=>{setPage(p);setMenuOpen(false);setOpenGroup(null);setShowProfileMenu(false);};
+  const nav=p=>{
+    setPage(p);
+    setMenuOpen(false);
+    setOpenGroup(null);
+    setShowProfileMenu(false);
+    // Push browser history so Android back button returns to previous page instead of exiting
+    window.history.pushState({page:p},"",null);
+  };
+
+  // Listen to browser back/forward button
+  useEffect(()=>{
+    // Set initial state
+    window.history.replaceState({page:"home"},"",null);
+    const onPop=(e)=>{
+      const p=e.state?.page||"home";
+      setPage(p);
+      setMenuOpen(false);
+      setShowProfileMenu(false);
+    };
+    window.addEventListener("popstate",onPop);
+    return()=>window.removeEventListener("popstate",onPop);
+  },[]);
 
   const pages={
     home:<HomePage st={st} setPage={setPage}/>,
@@ -2124,8 +2219,8 @@ export default function App(){
         </div>
       </div>
 
-      {/* Click-outside to close profile dropdown */}
-      {showProfileMenu&&<div onClick={()=>setShowProfileMenu(false)} style={{position:"fixed",inset:0,zIndex:150}}/>}
+      {/* Click-outside to close profile dropdown — z-index BELOW header so dropdown stays clickable */}
+      {showProfileMenu&&<div onClick={()=>setShowProfileMenu(false)} style={{position:"fixed",inset:0,zIndex:90}}/>}
 
       {/* Slide-down menu */}
       <div style={{position:"fixed",top:54,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,zIndex:99,
