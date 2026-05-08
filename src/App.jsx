@@ -16,8 +16,8 @@ const ADMIN_TG = "https://t.me/RegimeEdge_Admin";
 const INIT = {
   weeklyBias:{ direction:"Bullish", dayLabel:"Bullish Week", body:"Gold remains in a strong macro uptrend. Real yields declining, DXY weakening below 98.5. Hold longs, avoid selling into strength this week.", image:null, updatedAt:"Monday, May 5", updatedNote:"" },
   dailyBias:{ direction:"Bullish", dayLabel:"Bullish Day", body:"Intraday — Gold holding above 3280 support. Bias remains long for the session. Watch DXY for direction confirmation.", updatedAt:"Today, 08:00 AM" },
-  nfpSignal:{ active:false, prediction:"", body:"", countdownTo:"2025-06-06T12:30:00Z", posted:"", result:"" },
-  fomcSignal:{ active:false, prediction:"", body:"", countdownTo:"2025-06-18T18:00:00Z", posted:"", result:"" },
+  nfpSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-05T12:30:00Z", posted:"", result:"" },
+  fomcSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-17T18:00:00Z", posted:"", result:"" },
   news:[
     { id:1, headline:"Fed officials signal patience on rate cuts as inflation stays above 2%", take:"Bearish short-term for gold — but structural bull trend intact.", time:"Today", tag:"FOMC" },
     { id:2, headline:"US Dollar weakens as ISM manufacturing misses expectations", take:"Bullish for gold. Dollar weakness = gold strength. Confirms weekly bias.", time:"Today", tag:"USD" },
@@ -38,8 +38,8 @@ const INIT = {
     { id:8, week:"Mar 10 – Mar 14", bias:"Bullish", result:"green", note:"CPI softer than expected. Gold +1.6%." },
   ],
   p2pTransactions:[
-    { id:"TXN-0012", buyer:"Abebe T.", seller:"Yonas M.", amount:150, status:"Completed", time:"2h ago" },
-    { id:"TXN-0011", buyer:"Selam B.", seller:"Pending", amount:80, status:"Pending", time:"5h ago" },
+    { id:"TXN-0027", buyer:"Abebe T.", seller:"Yonas M.", amount:45, status:"Completed", time:"2h ago" },
+    { id:"TXN-0026", buyer:"Selam B.", seller:"Pending", amount:30, status:"Pending", time:"5h ago" },
   ],
   eaApprovedUsers:[],
 };
@@ -622,9 +622,9 @@ function ExchangePage({st}){
       <GlowCard color={G.gold} style={{marginBottom:18}}>
         <div style={{fontSize:26,marginBottom:12}}>⬡</div>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.gold,marginBottom:12,fontWeight:900}}>We Don't Touch Your Money. We Watch Over It.</div>
-        <p style={{color:G.text,fontSize:13,lineHeight:1.9,margin:"0 0 16px"}}>RegimeEdge Exchange is a <strong style={{color:G.gold}}>peer-to-peer escrow service</strong>. We connect verified sellers with buyers and oversee every transaction. No money moves directly between strangers.</p>
+        <p style={{color:G.text,fontSize:13,lineHeight:1.9,margin:"0 0 16px"}}>RegimeEdge Exchange is a <strong style={{color:G.gold}}>Peer-to-Peer (P2P) escrow service</strong>. We connect verified traders and oversee every transaction. No money moves directly between strangers.</p>
         <Div/>
-        {["Verified sellers — identity confirmed with national ID","Every exchange monitored start to finish","Buyer pays admin escrow — never directly to seller","USDT sent only after buyer payment is secured","Zero tolerance — any scam = permanent ban + report"].map((t,i)=>(
+        {["Both buyers and sellers — identity verified with national ID","Every exchange monitored from start to finish","Buyer pays into admin escrow — never directly to seller","USDT released only after buyer payment is fully secured","Zero tolerance — any violation = permanent ban + report"].map((t,i)=>(
           <div key={i} style={{display:"flex",gap:10,marginBottom:10,alignItems:"flex-start"}}>
             <span style={{color:G.gold,fontSize:12,marginTop:1,flexShrink:0}}>✓</span>
             <span style={{color:G.textSub,fontSize:13,lineHeight:1.65}}>{t}</span>
@@ -633,14 +633,14 @@ function ExchangePage({st}){
       </GlowCard>
       <Card style={{marginBottom:16}}>
         <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Exchange Rules</div>
-        {[["Payment time","20 min max"],["Fee per trader","$0.10"],["Min / Max","$5 – $25 USDT"],["Admin days","Primarily weekends"],["Release time","Under 20 min"]].map(([l,v])=>(
+        {[["Payment time","20 min max"],["Fee per trader","$0.10"],["Min / Max","$5 – $50 USDT"],["Available days","Business Days"],["Release time","Under 20 min"]].map(([l,v])=>(
           <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${G.border}`}}>
             <span style={{fontSize:13,color:G.textSub}}>{l}</span><span style={{fontSize:13,color:G.text,fontWeight:600}}>{v}</span>
           </div>
         ))}
       </Card>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:22}}>
-        {[["247+","Trades Done"],["<15min","Avg Release"],["0","Scams"]].map(([v,l])=>(
+        {[["27+","Trades Done"],["<15min","Avg Release"],["0","Scams"]].map(([v,l])=>(
           <div key={l} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:12,textAlign:"center"}}>
             <div style={{fontSize:18,fontWeight:900,color:G.gold,fontFamily:"'Playfair Display',serif"}}>{v}</div>
             <div style={{fontSize:10,color:G.textSub,marginTop:3}}>{l}</div>
@@ -684,9 +684,8 @@ function ExchangePage({st}){
 }
 
 // ── EDGE TERMINAL (EA Bot — admin-gated, full-featured) ───────────────────────
-const TC="#a78bfa"; // terminal color
 
-// ─ locked states ──────────────────────────────────────────────────────────────
+// ─ locked state ───────────────────────────────────────────────────────────────
 function TerminalLocked({user}){
   return(
     <div style={{padding:"32px 22px"}}>
@@ -714,7 +713,6 @@ function TerminalLocked({user}){
           </div>
         ))}
       </Card>
-      {/* How to get started */}
       <GlowCard color={G.gold} style={{marginBottom:14}}>
         <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:12,letterSpacing:1}}>HOW TO GET STARTED</div>
         {[
@@ -730,13 +728,11 @@ function TerminalLocked({user}){
           </div>
         ))}
       </GlowCard>
-      {/* MT5 desktop */}
       <Card style={{marginBottom:14}}>
         <div style={{fontSize:11,color:G.textSub,fontWeight:700,marginBottom:8}}>WANT MT5 DESKTOP VERSION?</div>
         <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:"0 0 12px"}}>The EA is also available for MetaTrader 5 desktop. Contact admin — it's completely free.</p>
         <a href={ADMIN_TG} target="_blank" rel="noreferrer" style={{display:"block",padding:11,background:"none",border:`1px solid ${G.borderLight}`,borderRadius:G.rs,color:G.textSub,textAlign:"center",fontSize:12,fontWeight:700,textDecoration:"none"}}>Get MT5 Version →</a>
       </Card>
-      {/* Demo notice */}
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.r,padding:14}}>
         <p style={{color:G.textSub,fontSize:12,lineHeight:1.75,margin:0}}>⚠ This EA currently runs on <strong style={{color:G.text}}>Demo accounts only</strong>. Real account trading EA is in development — vote below to help prioritize it.</p>
       </div>
@@ -780,9 +776,17 @@ function TerminalFull(){
   const[cfgPeRR,setCfgPeRR]=useState(cfg.peRR||"2");
   const priceRef=useRef(null);
   const tickRef=useRef(null);
+  const sessionTokensRef=useRef({cst:"",secToken:""}); // Capital.com session tokens
   const BASE_URL="https://demo-api-capital.backend-capital.com";
 
   const addLog=(type,msg)=>setLog(l=>[{time:new Date().toLocaleTimeString(),type,msg},...l.slice(0,199)]);
+
+  const capHeaders=(apiKey)=>({
+    "X-CAP-API-KEY": apiKey,
+    "CST": sessionTokensRef.current.cst,
+    "X-SECURITY-TOKEN": sessionTokensRef.current.secToken,
+    "Content-Type": "application/json",
+  });
 
   // save config
   const saveConfig=()=>{
@@ -791,16 +795,21 @@ function TerminalFull(){
     setCfg(c); addLog("info","Configuration saved ✓");
   };
 
-  // connect to Capital.com
+  // connect to Capital.com — captures CST + X-SECURITY-TOKEN from response headers
   const connect=async()=>{
     if(!cfgEmail||!cfgApiKey||!cfgPassword){addLog("err","Fill in email, API key and password first.");return;}
     setConnecting(true); addLog("info","Connecting to Capital.com...");
     try{
       const r=await fetch(`${BASE_URL}/api/v1/session`,{method:"POST",headers:{"X-CAP-API-KEY":cfgApiKey,"Content-Type":"application/json"},body:JSON.stringify({identifier:cfgEmail,password:cfgPassword})});
-      if(!r.ok)throw new Error("Auth failed: "+r.status);
+      if(!r.ok)throw new Error("Auth failed — check your API key, email, and password. Status: "+r.status);
       const d=await r.json();
       if(d.dealingEnabled===false)throw new Error("Account not enabled for trading");
-      setConnected(true); addLog("trade","Connected ✓ — Capital.com Demo account active");
+      // ── Capture session tokens from response headers (required for all further calls)
+      const cst=r.headers.get("CST")||"";
+      const secToken=r.headers.get("X-SECURITY-TOKEN")||"";
+      sessionTokensRef.current={cst,secToken};
+      addLog("info",`Session tokens captured — CST: ${cst?"✓":"missing"}, SecToken: ${secToken?"✓":"missing"}`);
+      setConnected(true); addLog("trade","Connected ✓ — Capital.com Demo active");
       startPriceFeed(cfgApiKey);
       fetchAccount(cfgApiKey);
     }catch(e){
@@ -818,7 +827,8 @@ function TerminalFull(){
   const startPriceFeed=async(apiKey)=>{
     const fetchPrice=async()=>{
       try{
-        const r=await fetch(`${BASE_URL}/api/v1/markets/GOLD`,{headers:{"X-CAP-API-KEY":apiKey}});
+        const r=await fetch(`${BASE_URL}/api/v1/markets/GOLD`,{headers:capHeaders(apiKey)});
+        if(!r.ok)return;
         const d=await r.json();
         const bid=d.snapshot?.bid||d.bid;
         if(bid){
@@ -835,11 +845,20 @@ function TerminalFull(){
 
   const fetchAccount=async(apiKey)=>{
     try{
-      const r=await fetch(`${BASE_URL}/api/v1/accounts`,{headers:{"X-CAP-API-KEY":apiKey}});
+      const r=await fetch(`${BASE_URL}/api/v1/accounts`,{headers:capHeaders(apiKey)});
+      if(!r.ok){ addLog("warn","Account fetch failed: "+r.status); return; }
       const d=await r.json();
       const acc=d.accounts?.[0];
-      if(acc){setAccount({balance:acc.balance?.toFixed(2)||"—",equity:acc.equity?.toFixed(2)||"—",pnl:"—",dd:"—"});}
-    }catch{}
+      if(acc){
+        setAccount({
+          balance:"$"+Number(acc.balance||0).toFixed(2),
+          equity:"$"+Number(acc.equity||0).toFixed(2),
+          pnl:"$"+Number(acc.unrealisedProfitAndLoss||0).toFixed(2),
+          dd:"—"
+        });
+        addLog("info",`Account loaded — Balance: $${Number(acc.balance||0).toFixed(2)}`);
+      }
+    }catch(e){ addLog("warn","Account error: "+e.message); }
   };
 
   const startBot=()=>{
@@ -1703,9 +1722,10 @@ function MenuIcon({open}){
 }
 
 // ── PROFILE PAGE ─────────────────────────────────────────────────────────────
-function ProfilePage({user,onLogout,onSignIn}){
-  const[tab,setTab]=useState("profile"); // profile | security
+function ProfilePage({user,onLogout,onSignIn,isApproved}){
+  const[tab,setTab]=useState("profile");
   const[username,setUsername]=useState(user?.name||"");
+  const[phone,setPhone]=useState("");
   const[saving,setSaving]=useState(false);
   const[msg,setMsg]=useState("");
   const[err,setErr]=useState("");
@@ -1729,19 +1749,20 @@ function ProfilePage({user,onLogout,onSignIn}){
     ? new Date(user.created_at).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})
     : "Recently joined";
 
-  const saveUsername=async()=>{
+  const saveProfile=async()=>{
     if(!username.trim()||username.trim().length<3){setErr("Username must be at least 3 characters.");return;}
     if(!/^[a-zA-Z0-9_]+$/.test(username.trim())){setErr("Only letters, numbers, underscores.");return;}
+    if(phone&&!/^\+?[\d\s\-]{7,15}$/.test(phone.trim())){setErr("Enter a valid phone number or leave blank.");return;}
     setSaving(true); setErr(""); setMsg("");
     try {
       const token=localStorage.getItem("re_access_token");
       await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`,{
         method:"PATCH",
         headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token}`,"Prefer":"return=minimal"},
-        body:JSON.stringify({username:username.trim()})
+        body:JSON.stringify({username:username.trim(),phone:phone.trim()||null})
       });
-      setMsg("Username updated successfully!");
-    } catch(e){ setErr("Failed to update. Try again."); }
+      setMsg("Profile updated!");
+    } catch{ setErr("Failed to update. Try again."); }
     finally{ setSaving(false); }
   };
 
@@ -1819,30 +1840,42 @@ function ProfilePage({user,onLogout,onSignIn}){
             ))}
           </div>
 
-          {/* Edit username */}
+          {/* Edit profile */}
           <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16}}>
-            <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Edit Username</div>
+            <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Edit Profile</div>
             {msg&&<div style={{color:G.green,fontSize:12,padding:"9px 12px",background:G.greenBg,border:`1px solid ${G.green}33`,borderRadius:8,marginBottom:12}}>✓ {msg}</div>}
             {err&&<div style={{color:G.red,fontSize:12,padding:"9px 12px",background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:8,marginBottom:12}}>⚠ {err}</div>}
-            <FI value={username} onChange={v=>{setUsername(v);setErr("");setMsg("");}} placeholder="New username" style={{marginBottom:12}}/>
-            <button onClick={saveUsername} disabled={saving} style={{width:"100%",padding:13,background:saving?"none":G.gold,border:saving?`1px solid ${G.gold}44`:"none",borderRadius:G.rs,color:saving?G.gold:"#000",fontSize:13,fontWeight:800,cursor:saving?"not-allowed":"pointer",fontFamily:"inherit",transition:"all 0.2s"}}>
-              {saving?"Saving…":"Save Username"}
+            <div style={{fontSize:11,color:G.textSub,marginBottom:6}}>Username</div>
+            <FI value={username} onChange={v=>{setUsername(v);setErr("");setMsg("");}} placeholder="Username" style={{marginBottom:12}}/>
+            <div style={{fontSize:11,color:G.textSub,marginBottom:6}}>Phone Number <span style={{color:G.textDim}}>(optional)</span></div>
+            <FI value={phone} onChange={v=>{setPhone(v);setErr("");}} placeholder="+251 9XX XXX XXX" style={{marginBottom:12}}/>
+            <button onClick={saveProfile} disabled={saving} style={{width:"100%",padding:13,background:saving?"none":G.gold,border:saving?`1px solid ${G.gold}44`:"none",borderRadius:G.rs,color:saving?G.gold:"#000",fontSize:13,fontWeight:800,cursor:saving?"not-allowed":"pointer",fontFamily:"inherit",transition:"all 0.2s"}}>
+              {saving?"Saving…":"Save Profile"}
             </button>
           </div>
 
-          {/* EA Terminal access */}
-          <div style={{background:`linear-gradient(135deg,#a78bfa0a,${G.card})`,border:`1px solid #a78bfa33`,borderRadius:G.r,padding:18,marginBottom:20}}>
+          {/* EA Terminal access — shows real approval status */}
+          <div style={{background:`linear-gradient(135deg,#a78bfa0a,${G.card})`,border:`1px solid ${isApproved?"#a78bfa55":"#a78bfa22"}`,borderRadius:G.r,padding:18,marginBottom:20}}>
             <div style={{fontSize:10,color:"#a78bfa",letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>EdgeTerminal Access</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:3}}>EA Terminal</div>
-                <div style={{fontSize:11,color:G.textSub}}>Requires admin approval</div>
+                <div style={{fontSize:11,color:G.textSub}}>{isApproved?"Approved — access granted":"Requires admin approval"}</div>
               </div>
-              <span style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${G.textSub}33`,color:G.textSub,fontSize:10,fontWeight:700}}>PENDING</span>
+              {isApproved?(
+                <span style={{padding:"5px 12px",borderRadius:20,background:"rgba(167,139,250,0.12)",border:"1px solid #a78bfa44",color:"#a78bfa",fontSize:10,fontWeight:700}}>APPROVED ✓</span>
+              ):(
+                <span style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${G.textSub}33`,color:G.textSub,fontSize:10,fontWeight:700}}>PENDING</span>
+              )}
             </div>
+            {!isApproved&&(
+              <a href={ADMIN_TG} target="_blank" rel="noreferrer" style={{display:"block",marginTop:12,padding:"9px 14px",background:"none",border:`1px solid ${"#a78bfa"}33`,borderRadius:G.rs,color:"#a78bfa",fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>
+                Request Access on Telegram →
+              </a>
+            )}
           </div>
 
-          {/* Logout */}
+          {/* Sign out */}
           <button onClick={onLogout} style={{width:"100%",padding:14,background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.rs,color:G.red,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Sign Out</button>
         </div>
       )}
@@ -1901,7 +1934,7 @@ const BNAV=[
   {id:"weekly",icon:"◈",label:"Bias"},
   {id:"events",icon:"⚡",label:"Events"},
   {id:"exchange",icon:"⬡",label:"Exchange"},
-  {id:"profile",icon:"👤",label:"Profile"},
+  {id:"terminal",icon:"◎",label:"Terminal"},
 ];
 
 // Menu: 6 priority groups with accordion
@@ -1922,9 +1955,21 @@ const MENU_GROUPS=[
 
 export default function App(){
   const[st,setSt]=useState(INIT);
-  const update=(key,val)=>setSt(s=>({...s,[key]:Array.isArray(val)?val:typeof val==="object"?{...s[key],...val}:val}));
-  const addItem=(key,item)=>setSt(s=>({...s,[key]:[item,...s[key]]}));
-  const removeItem=(key,id)=>setSt(s=>({...s,[key]:s[key].filter(i=>i.id!==id)}));
+
+  // ── Content update — writes to both local state AND Supabase DB
+  const update=(key,val)=>setSt(s=>{
+    const newVal=Array.isArray(val)?val:typeof val==="object"?{...s[key],...val}:val;
+    const newSt={...s,[key]:newVal};
+    // Persist to Supabase (fire-and-forget, fails silently if not logged in)
+    sbDB("/app_content",{
+      method:"POST",
+      headers:{"Prefer":"resolution=merge-duplicates"},
+      body:JSON.stringify({key,value:newVal,updated_at:new Date().toISOString()})
+    }).catch(()=>{});
+    return newSt;
+  });
+  const addItem=(key,item)=>update(key,[item,...st[key]]);
+  const removeItem=(key,id)=>update(key,st[key].filter(i=>i.id!==id));
 
   const[page,setPage]=useState("home");
   const[menuOpen,setMenuOpen]=useState(false);
@@ -1932,31 +1977,94 @@ export default function App(){
   const[showAuth,setShowAuth]=useState(false);
   const[showAdminLogin,setShowAdminLogin]=useState(false);
   const[showAdmin,setShowAdmin]=useState(false);
+  const[showProfileMenu,setShowProfileMenu]=useState(false);
   const[user,setUser]=useState(null);
   const[sessionLoading,setSessionLoading]=useState(true);
+  const[isApproved,setIsApproved]=useState(false);
 
-  // Restore session on mount
+  // ── Load content from Supabase on mount
   useEffect(()=>{
     (async()=>{
-      try {
-        const d = await sbGetUser();
-        if(d && d.email) {
-          setUser({ name: d.user_metadata?.username || d.email.split("@")[0], email: d.email, id: d.id, emailConfirmed: !!d.email_confirmed_at, created_at: d.created_at });
+      try{
+        const rows=await sbDB("/app_content?select=key,value");
+        if(rows?.length){
+          const patch={};
+          rows.forEach(({key,value})=>{ if(INIT[key]!==undefined)patch[key]=value; });
+          if(Object.keys(patch).length) setSt(s=>({...s,...patch}));
         }
-      } catch(e) {
-        // Network error on startup — don't crash, just leave user logged out
-        console.warn("Session restore failed:", e.message);
-      }
-      finally { setSessionLoading(false); }
+      }catch(e){ console.warn("Content load:",e.message); }
     })();
   },[]);
 
-  const handleLogout = async () => {
-    await sbSignOut();
-    setUser(null);
+  // ── EA approval check from DB
+  const checkApproval=async(userId)=>{
+    try{
+      const rows=await sbDB(`/profiles?id=eq.${userId}&select=ea_approved`);
+      const approved=rows?.[0]?.ea_approved||false;
+      try{ localStorage.setItem("re_ea_"+userId,approved?"1":"0"); }catch{}
+      return approved;
+    }catch{
+      try{ return localStorage.getItem("re_ea_"+userId)==="1"; }catch{ return false; }
+    }
   };
 
-  const isApproved=user&&(st.eaApprovedUsers||[]).includes(user.email);
+  // ── Restore session on mount — instant from cache, then async verify
+  useEffect(()=>{
+    // 1. Immediate restore from localStorage cache (no flicker/logout flash)
+    try{
+      const cached=JSON.parse(localStorage.getItem("re_user_cache")||"null");
+      if(cached?.id){
+        setUser(cached);
+        // Restore EA approval from localStorage while we verify async
+        setIsApproved(localStorage.getItem("re_ea_"+cached.id)==="1");
+      }
+    }catch{}
+
+    // 2. Async verify with Supabase (updates if token refreshed or metadata changed)
+    (async()=>{
+      try{
+        const d=await sbGetUser();
+        if(d?.email){
+          const u={ name:d.user_metadata?.username||d.email.split("@")[0], email:d.email, id:d.id, emailConfirmed:!!d.email_confirmed_at, created_at:d.created_at };
+          setUser(u);
+          try{ localStorage.setItem("re_user_cache",JSON.stringify(u)); }catch{}
+          // Async EA check
+          checkApproval(d.id).then(setIsApproved);
+        }else{
+          // Only clear if no cached user (network issue shouldn't log you out)
+          const cached=JSON.parse(localStorage.getItem("re_user_cache")||"null");
+          if(!cached?.id){ setUser(null); }
+        }
+      }catch(e){ console.warn("Session verify:",e.message); }
+      finally{ setSessionLoading(false); }
+    })();
+  },[]);
+
+  // Re-check EA approval when user changes
+  useEffect(()=>{
+    if(user?.id) checkApproval(user.id).then(setIsApproved);
+    else setIsApproved(false);
+  },[user?.id]);
+
+  const handleLogout=async()=>{
+    await sbSignOut();
+    setUser(null);
+    setIsApproved(false);
+    setShowProfileMenu(false);
+    try{
+      localStorage.removeItem("re_user_cache");
+      localStorage.removeItem("re_ea_"+(user?.id||""));
+    }catch{}
+  };
+
+  const handleAuth=(u)=>{
+    setUser(u);
+    setShowAuth(false);
+    try{ localStorage.setItem("re_user_cache",JSON.stringify(u)); }catch{}
+    if(u?.id) checkApproval(u.id).then(setIsApproved);
+  };
+
+  const nav=p=>{setPage(p);setMenuOpen(false);setOpenGroup(null);setShowProfileMenu(false);};
 
   const pages={
     home:<HomePage st={st} setPage={setPage}/>,
@@ -1968,14 +2076,11 @@ export default function App(){
     archive:<ArchivePage st={st}/>,
     terminal:<TerminalPage st={st} user={user} isApproved={isApproved}/>,
     strategy:<StrategyPage/>,
-    profile:<ProfilePage user={user} onLogout={handleLogout} onSignIn={()=>setShowAuth(true)}/>,
+    profile:<ProfilePage user={user} onLogout={handleLogout} onSignIn={()=>setShowAuth(true)} isApproved={isApproved}/>,
   };
-
-  const nav=p=>{setPage(p);setMenuOpen(false);setOpenGroup(null);};
 
   return(
     <div style={{background:G.bg,minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:G.text,
-      // Full viewport width, no artificial max-width clipping on mobile
       width:"100%",maxWidth:480,margin:"0 auto",position:"relative",boxSizing:"border-box"}}>
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;700;800&display=swap" rel="stylesheet"/>
 
@@ -1984,9 +2089,32 @@ export default function App(){
         <button onClick={()=>nav("home")} style={{background:"none",border:"none",cursor:"pointer",padding:0}}>
           <span style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:G.text}}>Regime<span style={{color:G.gold}}>Edge</span></span>
         </button>
-        <div style={{display:"flex",gap:9,alignItems:"center"}}>
+        <div style={{display:"flex",gap:9,alignItems:"center",position:"relative"}}>
           {user?(
-            <button onClick={()=>nav("profile")} style={{background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:20,padding:"5px 13px",color:G.gold,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{user.name.split(" ")[0]}</button>
+            <>
+              <button onClick={()=>setShowProfileMenu(v=>!v)} style={{background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:20,padding:"5px 13px",color:G.gold,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5}}>
+                {user.name.split(" ")[0]} <span style={{fontSize:9,opacity:0.7}}>▾</span>
+              </button>
+              {/* Profile dropdown */}
+              {showProfileMenu&&(
+                <div style={{position:"absolute",top:42,right:0,background:"rgba(27,30,36,0.98)",border:`1px solid ${G.border}`,borderRadius:14,padding:12,width:200,boxShadow:"0 12px 40px rgba(0,0,0,0.5)",backdropFilter:"blur(12px)",zIndex:200}}>
+                  <div style={{padding:"8px 10px 12px",borderBottom:`1px solid ${G.border}`,marginBottom:8}}>
+                    <div style={{fontSize:13,fontWeight:700,color:G.text}}>{user.name}</div>
+                    <div style={{fontSize:11,color:G.textSub,marginTop:2}}>{user.email}</div>
+                    {isApproved&&<div style={{fontSize:10,color:"#a78bfa",marginTop:4}}>◎ EA Terminal Active</div>}
+                  </div>
+                  {[["👤 My Profile","profile"],["🔒 Security","profile"],["◎ Terminal","terminal"]].map(([label,pg])=>(
+                    <button key={label} onClick={()=>nav(pg)} style={{display:"block",width:"100%",padding:"10px 10px",background:"none",border:"none",color:G.text,fontSize:13,fontWeight:500,cursor:"pointer",textAlign:"left",fontFamily:"inherit",borderRadius:8}}>
+                      {label}
+                    </button>
+                  ))}
+                  <div style={{height:1,background:G.border,margin:"8px 0"}}/>
+                  <button onClick={handleLogout} style={{display:"block",width:"100%",padding:"10px 10px",background:"none",border:"none",color:G.red,fontSize:13,fontWeight:600,cursor:"pointer",textAlign:"left",fontFamily:"inherit",borderRadius:8}}>
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </>
           ):(
             <button onClick={()=>setShowAuth(true)} style={{background:G.gold,border:"none",borderRadius:20,padding:"6px 15px",color:"#000",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 12px rgba(212,175,55,0.3)"}}>Sign In</button>
           )}
@@ -1995,6 +2123,9 @@ export default function App(){
           </button>
         </div>
       </div>
+
+      {/* Click-outside to close profile dropdown */}
+      {showProfileMenu&&<div onClick={()=>setShowProfileMenu(false)} style={{position:"fixed",inset:0,zIndex:150}}/>}
 
       {/* Slide-down menu */}
       <div style={{position:"fixed",top:54,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,zIndex:99,
@@ -2009,7 +2140,7 @@ export default function App(){
                   <span style={{width:3,height:16,background:page===grp.id?grp.color:"transparent",borderRadius:2,flexShrink:0,display:"inline-block"}}/>
                   {grp.label}
                   {grp.id==="terminal"&&!isApproved&&<span style={{marginLeft:"auto",fontSize:10,color:G.textSub,border:`1px solid ${G.border}`,borderRadius:6,padding:"2px 7px"}}>Approval needed</span>}
-                  {grp.id==="terminal"&&isApproved&&<span style={{marginLeft:"auto",fontSize:10,color:G.green}}>✓</span>}
+                  {grp.id==="terminal"&&isApproved&&<span style={{marginLeft:"auto",fontSize:10,color:G.green}}>✓ Approved</span>}
                 </button>
               ):(
                 <div>
@@ -2071,7 +2202,7 @@ export default function App(){
         ))}
       </div>
 
-      {showAuth&&<AuthModal onAuth={u=>{setUser(u);setShowAuth(false);}} onClose={()=>setShowAuth(false)}/>}
+      {showAuth&&<AuthModal onAuth={handleAuth} onClose={()=>setShowAuth(false)}/>}
       {showAdminLogin&&<AdminLogin onSuccess={()=>{setShowAdminLogin(false);setShowAdmin(true);}} onClose={()=>setShowAdminLogin(false)}/>}
       {showAdmin&&<AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={()=>setShowAdmin(false)}/>}
     </div>
