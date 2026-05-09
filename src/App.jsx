@@ -14,10 +14,10 @@ const ADMIN_PASS = "12345@Jon";
 const ADMIN_TG = "https://t.me/RegimeEdge_Admin";
 
 const INIT = {
-  weeklyBias:{ direction:"Bullish", dayLabel:"Bullish Week", body:"Gold remains in a strong macro uptrend. Real yields declining, DXY weakening below 98.5. Hold longs, avoid selling into strength this week.", image:null, updatedAt:"Monday, May 5", updatedNote:"" },
-  dailyBias:{ direction:"Bullish", dayLabel:"Bullish Day", body:"Intraday — Gold holding above 3280 support. Bias remains long for the session. Watch DXY for direction confirmation.", updatedAt:"Today, 08:00 AM" },
-  nfpSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-05T12:30:00Z", posted:"", result:"" },
-  fomcSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-17T18:00:00Z", posted:"", result:"" },
+  weeklyBias:{ direction:"Bullish", dayLabel:"Bullish Week", body:"Gold remains in a strong macro uptrend. Real yields declining, DXY weakening below 98.5. Hold longs, avoid selling into strength this week.", image:null, updatedAt:"Monday, May 5", updatedNote:"", postedAt:null },
+  dailyBias:{ direction:"Bullish", dayLabel:"Bullish Day", body:"Intraday — Gold holding above 3280 support. Bias remains long for the session. Watch DXY for direction confirmation.", updatedAt:"Today, 08:00 AM", postedAt:null },
+  nfpSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-05T12:30:00Z", posted:"", result:"", eventDate:"2026-06-05" },
+  fomcSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-17T18:00:00Z", posted:"", result:"", eventDate:"2026-06-17" },
   news:[
     { id:1, headline:"Fed officials signal patience on rate cuts as inflation stays above 2%", take:"Bearish short-term for gold — but structural bull trend intact.", time:"Today", tag:"FOMC" },
     { id:2, headline:"US Dollar weakens as ISM manufacturing misses expectations", take:"Bullish for gold. Dollar weakness = gold strength. Confirms weekly bias.", time:"Today", tag:"USD" },
@@ -48,8 +48,13 @@ const INIT = {
 function useCountdown(target) {
   const [t,setT] = useState({d:0,h:0,m:0,s:0});
   useEffect(()=>{
-    const tick=()=>{ const diff=new Date(target)-new Date(); if(diff<=0){setT({d:0,h:0,m:0,s:0});return;} setT({d:Math.floor(diff/86400000),h:Math.floor((diff%86400000)/3600000),m:Math.floor((diff%3600000)/60000),s:Math.floor((diff%60000)/1000)}); };
-    tick(); const id=setInterval(tick,1000); return()=>clearInterval(id);
+    let id;
+    const tick=()=>{
+      const diff=new Date(target)-new Date();
+      if(diff<=0){ setT({d:0,h:0,m:0,s:0}); clearInterval(id); return; }
+      setT({d:Math.floor(diff/86400000),h:Math.floor((diff%86400000)/3600000),m:Math.floor((diff%3600000)/60000),s:Math.floor((diff%60000)/1000)});
+    };
+    tick(); id=setInterval(tick,1000); return()=>clearInterval(id);
   },[target]); return t;
 }
 
@@ -1399,7 +1404,35 @@ function TerminalFull(){
 }
 
 function TerminalPage({st,user,isApproved}){
-  if(!user||!isApproved) return <TerminalLocked user={user}/>;
+  // Re-verify approval directly from DB each time the terminal page is opened
+  // This prevents the "background color only" bug where the prop is stale
+  const[verified,setVerified]=useState(isApproved);
+  const[checking,setChecking]=useState(!isApproved);
+
+  useEffect(()=>{
+    if(!user?.id){ setVerified(false); setChecking(false); return; }
+    if(isApproved){ setVerified(true); setChecking(false); return; }
+    // Fresh check from DB
+    (async()=>{
+      setChecking(true);
+      try{
+        const rows=await sbDB(`/ea_approvals?user_id=eq.${user.id}&select=approved`);
+        if(rows?.[0]?.approved===true){ setVerified(true); try{localStorage.setItem("re_ea_"+user.id,"1");}catch{} return; }
+        // Also check profiles fallback
+        const prows=await sbDB(`/profiles?id=eq.${user.id}&select=ea_approved`);
+        if(prows?.[0]?.ea_approved===true){ setVerified(true); try{localStorage.setItem("re_ea_"+user.id,"1");}catch{} return; }
+        setVerified(false);
+      }catch{ setVerified(isApproved); }
+      finally{ setChecking(false); }
+    })();
+  },[user?.id, isApproved]);
+
+  if(checking) return(
+    <div style={{padding:"60px 22px",textAlign:"center"}}>
+      <div style={{fontSize:12,color:G.textSub,letterSpacing:1}}>Checking access...</div>
+    </div>
+  );
+  if(!user||!verified) return <TerminalLocked user={user}/>;
   return <TerminalFull/>;
 }
 
@@ -1459,198 +1492,6 @@ function StrategyPage(){
   );
 }
 
-// ── ADMIN PANEL ───────────────────────────────────────────────────────────────
-function AdminPanel({st,update,addItem,removeItem,onClose}){
-  const[tab,setTab]=useState("bias");
-  const[wb,setWb]=useState(st.weeklyBias);
-  const[db,setDb]=useState(st.dailyBias);
-  const[nfp,setNfp]=useState(st.nfpSignal);
-  const[fomc,setFomc]=useState(st.fomcSignal);
-  const[nn,setNn]=useState({headline:"",take:"",tag:"Gold"});
-  const[no,setNo]=useState({text:"",type:"announcement"});
-  const[aw,setAw]=useState({week:"",bias:"Bullish",result:"green",note:""});
-  const[eaEmail,setEaEmail]=useState("");
-  const imgRef=useRef();
-  const TABS=["bias","events","news","notices","terminal","archive"];
-
-  const DB=({val,onChange})=>(
-    <div style={{display:"flex",gap:7,marginBottom:14}}>
-      {["Bullish","Bearish","Neutral"].map(d=>(
-        <button key={d} onClick={()=>onChange(d)} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${val===d?(d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold):G.border}`,background:val===d?(d==="Bullish"?G.greenBg:d==="Bearish"?G.redBg:G.goldBg):"none",color:val===d?(d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold):G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{d}</button>
-      ))}
-    </div>
-  );
-
-  return(
-    <div style={{position:"fixed",inset:0,background:G.bgDeep,zIndex:300,overflowY:"auto"}}>
-      <div style={{padding:"14px 20px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:G.bgDeep,zIndex:1}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,color:G.gold}}>Admin · RegimeEdge</div>
-        <button onClick={onClose} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:22}}>✕</button>
-      </div>
-      <div style={{display:"flex",overflowX:"auto",borderBottom:`1px solid ${G.border}`,padding:"0 14px"}}>
-        {TABS.map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:`2px solid ${tab===t?G.gold:"transparent"}`,color:tab===t?G.gold:G.textSub,fontSize:11,fontWeight:700,padding:"11px 12px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",textTransform:"capitalize"}}>{t==="terminal"?"EA Access":t}</button>)}
-      </div>
-      <div style={{padding:18}}>
-        {tab==="bias"&&<>
-          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Weekly Bias</div>
-          <DB val={wb.direction} onChange={d=>setWb(b=>({...b,direction:d,dayLabel:`${d} Week`}))}/>
-          <FTA value={wb.body} onChange={v=>setWb(b=>({...b,body:v}))} placeholder="Weekly analysis..." rows={4}/>
-          <div style={{height:10}}/>
-          <FI value={wb.updatedAt} onChange={v=>setWb(b=>({...b,updatedAt:v}))} placeholder="Updated label e.g. Monday, May 5" style={{marginBottom:9}}/>
-          <FI value={wb.updatedNote} onChange={v=>setWb(b=>({...b,updatedNote:v}))} placeholder="Wednesday update note (optional)" style={{marginBottom:11}}/>
-          <button onClick={()=>imgRef.current.click()} style={{width:"100%",padding:12,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:wb.image?G.green:G.textSub,fontSize:13,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>{wb.image?"✓ Chart uploaded":"📷 Upload TradingView chart"}</button>
-          <input ref={imgRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setWb(b=>({...b,image:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
-          {wb.image&&<button onClick={()=>setWb(b=>({...b,image:null}))} style={{background:"none",border:"none",color:G.red,fontSize:12,cursor:"pointer",marginBottom:10,fontFamily:"inherit"}}>Remove image</button>}
-          <Btn onClick={()=>{update("weeklyBias",wb);alert("Weekly bias saved!");}} style={{width:"100%"}}> Save Weekly Bias</Btn>
-          <Div/>
-          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Daily Bias</div>
-          <DB val={db.direction} onChange={d=>setDb(b=>({...b,direction:d,dayLabel:`${d} Day`}))}/>
-          <FTA value={db.body} onChange={v=>setDb(b=>({...b,body:v}))} placeholder="Daily note..." rows={3}/>
-          <div style={{height:10}}/>
-          <FI value={db.updatedAt} onChange={v=>setDb(b=>({...b,updatedAt:v}))} placeholder="Updated at e.g. Today, 08:00 AM" style={{marginBottom:11}}/>
-          <Btn onClick={()=>{update("dailyBias",db);alert("Daily bias saved!");}} style={{width:"100%"}}>Save Daily Bias</Btn>
-        </>}
-
-        {tab==="events"&&<>
-          {[["NFP Signal",nfp,setNfp,"nfpSignal"],["FOMC Signal",fomc,setFomc,"fomcSignal"]].map(([label,sig,setSig,key])=>(
-            <div key={key}>
-              <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>{label}</div>
-              <div style={{display:"flex",gap:7,marginBottom:11}}>
-                {["Bullish Gold","Bearish Gold","Neutral"].map(p=>(
-                  <button key={p} onClick={()=>setSig(s=>({...s,prediction:p}))} style={{flex:1,padding:8,borderRadius:8,border:`1px solid ${sig.prediction===p?G.gold:G.border}`,background:sig.prediction===p?G.goldBg:"none",color:sig.prediction===p?G.gold:G.textSub,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
-                ))}
-              </div>
-              <FTA value={sig.body} onChange={v=>setSig(s=>({...s,body:v}))} placeholder="Signal analysis..." rows={3}/>
-              <div style={{height:9}}/>
-              <FI value={sig.countdownTo} onChange={v=>setSig(s=>({...s,countdownTo:v}))} placeholder="ISO date e.g. 2025-06-06T12:30:00Z" style={{marginBottom:9}}/>
-              <FI value={sig.posted} onChange={v=>setSig(s=>({...s,posted:v}))} placeholder="Post label e.g. Posted tonight before release" style={{marginBottom:9}}/>
-              <FI value={sig.result} onChange={v=>setSig(s=>({...s,result:v}))} placeholder="Post-event result (fill after release)" style={{marginBottom:11}}/>
-              <div style={{display:"flex",gap:9,marginBottom:22}}>
-                <Btn onClick={()=>{update(key,{...sig,active:true});setSig(s=>({...s,active:true}));alert("Signal activated!");}} style={{flex:1}}>Activate</Btn>
-                <Btn variant="danger" onClick={()=>{update(key,{...sig,active:false});setSig(s=>({...s,active:false}));alert("Deactivated.");}} style={{flex:1}}>Deactivate</Btn>
-              </div>
-              <Div/>
-            </div>
-          ))}
-        </>}
-
-        {tab==="news"&&<>
-          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Post News</div>
-          <FI value={nn.headline} onChange={v=>setNn(n=>({...n,headline:v}))} placeholder="News headline" style={{marginBottom:9}}/>
-          <FTA value={nn.take} onChange={v=>setNn(n=>({...n,take:v}))} placeholder="RegimeEdge take..." rows={2}/>
-          <div style={{height:9}}/>
-          <select value={nn.tag} onChange={e=>setNn(n=>({...n,tag:e.target.value}))} style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:11,color:G.text,fontSize:13,outline:"none",marginBottom:11}}>
-            {["Gold","USD","FOMC","NFP","Risk","Macro"].map(t=><option key={t} value={t}>{t}</option>)}
-          </select>
-          <Btn onClick={()=>{if(!nn.headline)return;addItem("news",{...nn,id:Date.now(),time:"Just now"});setNn({headline:"",take:"",tag:"Gold"});alert("News posted!");}} style={{width:"100%",marginBottom:22}}>Post News</Btn>
-          {st.news.map(n=><div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:12,color:G.text,flex:1,marginRight:9,lineHeight:1.5}}>{n.headline}</div>
-            <Btn variant="danger" onClick={()=>removeItem("news",n.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
-          </div>)}
-        </>}
-
-        {tab==="notices"&&<>
-          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Post Notice</div>
-          <FTA value={no.text} onChange={v=>setNo(n=>({...n,text:v}))} placeholder="Notice text..." rows={3}/>
-          <div style={{height:9}}/>
-          <select value={no.type} onChange={e=>setNo(n=>({...n,type:e.target.value}))} style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:11,color:G.text,fontSize:13,outline:"none",marginBottom:11}}>
-            {["announcement","exchange","promo"].map(t=><option key={t} value={t}>{t}</option>)}
-          </select>
-          <Btn onClick={()=>{if(!no.text)return;addItem("notices",{...no,id:Date.now(),time:"Just now"});setNo({text:"",type:"announcement"});alert("Notice posted!");}} style={{width:"100%",marginBottom:22}}>Post Notice</Btn>
-          {st.notices.map(n=><div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:12,color:G.text,flex:1,marginRight:9}}>{n.text}</div>
-            <Btn variant="danger" onClick={()=>removeItem("notices",n.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
-          </div>)}
-        </>}
-
-        {tab==="terminal"&&<>
-          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:6}}>EdgeTerminal Access</div>
-          <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,marginBottom:18}}>Approve a user's email to unlock EdgeTerminal permanently.</p>
-          <div style={{display:"flex",gap:9,marginBottom:18}}>
-            <FI value={eaEmail} onChange={setEaEmail} placeholder="User email" style={{marginBottom:0}}/>
-            <Btn onClick={async()=>{
-              if(!eaEmail)return;
-              const list=[...(st.eaApprovedUsers||[])];
-              if(list.includes(eaEmail)){alert("Already approved.");return;}
-              list.push(eaEmail);
-              update("eaApprovedUsers",list);
-              // ── Persist to Supabase profiles table so it survives reloads ──
-              try{
-                // Try upsert by email — write ea_approved=true to profiles
-                await sbDB(`/profiles?email=eq.${encodeURIComponent(eaEmail)}`,{
-                  method:"PATCH",
-                  headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
-                  body:JSON.stringify({ea_approved:true})
-                });
-              }catch(e){
-                // If profile row doesn't exist yet, insert it
-                try{
-                  await sbDB("/profiles",{
-                    method:"POST",
-                    headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
-                    body:JSON.stringify({email:eaEmail,ea_approved:true})
-                  });
-                }catch(e2){
-                  console.warn("EA approval DB write failed:",e2.message,"(app_content list still updated)");
-                }
-              }
-              // Also persist to app_content so eaApprovedUsers survives on next load
-              try{
-                await sbDB("/app_content?key=eq.eaApprovedUsers",{
-                  method:"PATCH",
-                  headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
-                  body:JSON.stringify({value:list})
-                });
-              }catch{
-                try{
-                  await sbDB("/app_content",{
-                    method:"POST",
-                    headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
-                    body:JSON.stringify({key:"eaApprovedUsers",value:list})
-                  });
-                }catch(e3){console.warn("app_content update failed:",e3.message);}
-              }
-              alert(`Access granted to ${eaEmail} ✓`);
-              setEaEmail("");
-            }} style={{flexShrink:0,padding:"13px 16px"}}>Approve</Btn>
-          </div>
-          <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>Approved ({(st.eaApprovedUsers||[]).length})</div>
-          {(st.eaApprovedUsers||[]).map((email,i)=>(
-            <div key={i} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:13,color:G.green}}>✓ {email}</div>
-              <Btn variant="danger" onClick={async()=>{
-                update("eaApprovedUsers",(st.eaApprovedUsers||[]).filter(e=>e!==email));
-                // Also revoke in Supabase profiles
-                try{
-                  await sbDB(`/profiles?email=eq.${encodeURIComponent(email)}`,{
-                    method:"PATCH",
-                    headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
-                    body:JSON.stringify({ea_approved:false})
-                  });
-                }catch(e){console.warn("Revoke profiles write failed:",e.message);}
-              }} style={{padding:"5px 9px",fontSize:11}}>Revoke</Btn>
-            </div>
-          ))}
-        </>}
-
-        {tab==="archive"&&<>
-          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Add Week</div>
-          <FI value={aw.week} onChange={v=>setAw(a=>({...a,week:v}))} placeholder="Week range e.g. May 5 – May 9" style={{marginBottom:9}}/>
-          <div style={{display:"flex",gap:7,marginBottom:9}}>
-            {["Bullish","Bearish","Neutral"].map(d=><button key={d} onClick={()=>setAw(a=>({...a,bias:d}))} style={{flex:1,padding:8,borderRadius:8,border:`1px solid ${aw.bias===d?G.gold:G.border}`,background:aw.bias===d?G.goldBg:"none",color:aw.bias===d?G.gold:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>{d}</button>)}
-          </div>
-          <div style={{display:"flex",gap:9,marginBottom:9}}>
-            {["green","red"].map(r=><button key={r} onClick={()=>setAw(a=>({...a,result:r}))} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${aw.result===r?(r==="green"?G.green:G.red):G.border}`,background:aw.result===r?(r==="green"?G.greenBg:G.redBg):"none",color:aw.result===r?(r==="green"?G.green:G.red):G.textSub,fontSize:13,cursor:"pointer"}}>{r==="green"?"🟢 Green":"🔴 Red"}</button>)}
-          </div>
-          <FI value={aw.note} onChange={v=>setAw(a=>({...a,note:v}))} placeholder="Result note" style={{marginBottom:11}}/>
-          <Btn onClick={()=>{if(!aw.week)return;addItem("archiveWeeks",{...aw,id:Date.now()});setAw({week:"",bias:"Bullish",result:"green",note:""});alert("Week added!");}} style={{width:"100%"}}>Add to Archive</Btn>
-        </>}
-      </div>
-    </div>
-  );
-}
-
-// ── SUPABASE AUTH SYSTEM ──────────────────────────────────────────────────────
 // ⚙️  Setup: Replace these two values with your Supabase project credentials.
 // Create a free project at https://supabase.com → Project Settings → API
 const SUPABASE_URL = "https://gongzbdpfbxkaypfwkht.supabase.co";
@@ -1920,12 +1761,18 @@ function AuthModal({onAuth,onClose}){
   );
 }
 
+// ── ADMIN PANEL REMOVED ───────────────────────────────────────────────────────
+// All content management is now done directly in Supabase Table Editor.
+// See ADMIN_GUIDE below for instructions.
+// The hidden "Admin Panel" menu entry still exists but now opens the Supabase dashboard.
+
 function AdminLogin({onSuccess,onClose}){
   const[pass,setPass]=useState(""); const[err,setErr]=useState(false);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:250,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)"}}>
-      <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:26,width:"100%",maxWidth:300}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.gold,marginBottom:18}}>Admin Access</div>
+      <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:26,width:"100%",maxWidth:320}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.gold,marginBottom:6}}>Admin Access</div>
+        <div style={{fontSize:12,color:G.textSub,marginBottom:18,lineHeight:1.6}}>Content is now managed via Supabase. Enter the admin password to open the dashboard.</div>
         <FI value={pass} onChange={v=>{setPass(v);setErr(false);}} placeholder="Password" type="password" style={{marginBottom:err?8:14}}/>
         {err&&<div style={{color:G.red,fontSize:12,marginBottom:12}}>Incorrect password.</div>}
         <div style={{display:"flex",gap:9}}>
@@ -1935,6 +1782,15 @@ function AdminLogin({onSuccess,onClose}){
       </div>
     </div>
   );
+}
+
+// Admin "panel" now just opens Supabase Table Editor in a new tab
+function AdminPanel({st,update,addItem,removeItem,onClose}){
+  useEffect(()=>{
+    window.open("https://supabase.com/dashboard/project/gongzbdpfbxkaypfwkht/editor","_blank");
+    onClose();
+  },[]);
+  return null;
 }
 
 // ── SOCIAL ICONS ──────────────────────────────────────────────────────────────
@@ -1972,6 +1828,25 @@ function ProfilePage({user,onLogout,onSignIn,isApproved}){
   const[username,setUsername]=useState(user?.name||"");
   const[phone,setPhone]=useState("");
   const[saving,setSaving]=useState(false);
+
+  // Load existing profile data (phone, username) from Supabase on mount
+  useEffect(()=>{
+    if(!user?.id) return;
+    (async()=>{
+      try{
+        const token=localStorage.getItem("re_access_token");
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=username,phone`,{
+          headers:{"apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token||SUPABASE_ANON_KEY}`}
+        });
+        if(!res.ok) return;
+        const rows=await res.json();
+        if(rows?.[0]){
+          if(rows[0].username) setUsername(rows[0].username);
+          if(rows[0].phone) setPhone(rows[0].phone);
+        }
+      }catch{}
+    })();
+  },[user?.id]);
   const[msg,setMsg]=useState("");
   const[err,setErr]=useState("");
   const[newPass,setNewPass]=useState("");
@@ -2001,26 +1876,20 @@ function ProfilePage({user,onLogout,onSignIn,isApproved}){
     setSaving(true); setErr(""); setMsg("");
     try {
       const token=localStorage.getItem("re_access_token");
-      // Try PATCH first — if profile row doesn't exist (new signup), fall back to INSERT (upsert)
-      const patchRes=await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`,{
-        method:"PATCH",
-        headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token}`,"Prefer":"return=minimal"},
-        body:JSON.stringify({username:username.trim(),phone:phone.trim()||null})
+      // Upsert: creates or updates the profile row in one call
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/profiles`,{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "apikey":SUPABASE_ANON_KEY,
+          "Authorization":`Bearer ${token}`,
+          "Prefer":"resolution=merge-duplicates,return=minimal"
+        },
+        body:JSON.stringify({id:user.id,email:user.email,username:username.trim(),phone:phone.trim()||null})
       });
-      if(patchRes.ok){
-        // Check if any row was actually updated (empty body = no row existed)
-        const text=await patchRes.text();
-        if(!text){
-          // No existing row — insert instead
-          await fetch(`${SUPABASE_URL}/rest/v1/profiles`,{
-            method:"POST",
-            headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token}`,"Prefer":"return=minimal"},
-            body:JSON.stringify({id:user.id,email:user.email,username:username.trim(),phone:phone.trim()||null})
-          });
-        }
-      }
+      if(!res.ok){ const d=await res.json().catch(()=>({})); throw new Error(d.message||"Save failed"); }
       setMsg("Profile updated!");
-    } catch{ setErr("Failed to update. Try again."); }
+    } catch(e){ setErr(e.message||"Failed to update. Try again."); }
     finally{ setSaving(false); }
   };
 
@@ -2216,7 +2085,14 @@ export default function App(){
 
   // ── Content update — writes to both local state AND Supabase DB
   const update=(key,val)=>setSt(s=>{
-    const newVal=Array.isArray(val)?val:typeof val==="object"?{...s[key],...val}:val;
+    let newVal=Array.isArray(val)?val:typeof val==="object"?{...s[key],...val}:val;
+    // Stamp postedAt when content is actively saved
+    if(["weeklyBias","dailyBias"].includes(key)&&typeof newVal==="object"&&!newVal.postedAt){
+      newVal={...newVal,postedAt:new Date().toISOString()};
+    }
+    if(["nfpSignal","fomcSignal"].includes(key)&&typeof newVal==="object"&&newVal.active&&!newVal.postedAt){
+      newVal={...newVal,postedAt:new Date().toISOString()};
+    }
     const newSt={...s,[key]:newVal};
     // Persist to Supabase app_content table (upsert by key)
     sbDB("/app_content",{
@@ -2251,25 +2127,62 @@ export default function App(){
         if(rows?.length){
           const patch={};
           rows.forEach(({key,value})=>{ if(INIT[key]!==undefined)patch[key]=value; });
-          if(Object.keys(patch).length) setSt(s=>({...s,...patch}));
+          if(Object.keys(patch).length) setSt(s=>{
+            const newSt={...s,...patch};
+            // Auto-expiry after load: deactivate signals whose event date has passed
+            const now=new Date();
+            if(newSt.nfpSignal?.eventDate){
+              const d=new Date(newSt.nfpSignal.eventDate); d.setHours(23,59,59);
+              if(now>d && newSt.nfpSignal.active) newSt.nfpSignal={...newSt.nfpSignal,active:false};
+            }
+            if(newSt.fomcSignal?.eventDate){
+              const d=new Date(newSt.fomcSignal.eventDate); d.setHours(23,59,59);
+              if(now>d && newSt.fomcSignal.active) newSt.fomcSignal={...newSt.fomcSignal,active:false};
+            }
+            // Auto-expire daily bias after 1 day
+            if(newSt.dailyBias?.postedAt){
+              const age=(now-new Date(newSt.dailyBias.postedAt))/(1000*60*60);
+              if(age>24) newSt.dailyBias={...newSt.dailyBias,body:"",dayLabel:"No bias posted yet",direction:"Neutral"};
+            }
+            // Auto-expire weekly bias after 6 days
+            if(newSt.weeklyBias?.postedAt){
+              const age=(now-new Date(newSt.weeklyBias.postedAt))/(1000*60*60*24);
+              if(age>6) newSt.weeklyBias={...newSt.weeklyBias,body:"",dayLabel:"No bias posted yet",direction:"Neutral",image:null};
+            }
+            return newSt;
+          });
         }
       }catch(e){ console.warn("Content load:",e.message); }
     })();
   },[]);
 
-  // ── EA approval check — reads from content state (synced with admin panel) + DB as backup
+  // ── EA approval check — uses dedicated ea_approvals table (most reliable)
+  // Falls back to profiles.ea_approved, then eaApprovedUsers email list
   const checkApproval=async(userId,email,approvedList)=>{
-    // Primary: check the eaApprovedUsers list from app_content (synced with admin panel)
-    if(email&&(approvedList||[]).includes(email)) return true;
-    // Secondary: check profiles table
+    // Try dedicated ea_approvals table first (set by admin via Supabase)
+    try{
+      const token=localStorage.getItem("re_access_token");
+      const rows=await sbDB(`/ea_approvals?user_id=eq.${userId}&select=approved`);
+      if(rows?.[0]?.approved===true){
+        try{ localStorage.setItem("re_ea_"+userId,"1"); }catch{}
+        return true;
+      }
+      if(rows?.[0]?.approved===false){
+        try{ localStorage.setItem("re_ea_"+userId,"0"); }catch{}
+        return false;
+      }
+    }catch{}
+    // Fallback: profiles.ea_approved
     try{
       const rows=await sbDB(`/profiles?id=eq.${userId}&select=ea_approved`);
       const approved=rows?.[0]?.ea_approved||false;
       try{ localStorage.setItem("re_ea_"+userId,approved?"1":"0"); }catch{}
       return approved;
-    }catch{
-      try{ return localStorage.getItem("re_ea_"+userId)==="1"; }catch{ return false; }
-    }
+    }catch{}
+    // Fallback: email list in app_content
+    if(email&&(approvedList||[]).includes(email)) return true;
+    // Last resort: cached value
+    try{ return localStorage.getItem("re_ea_"+userId)==="1"; }catch{ return false; }
   };
 
   // ── Restore session on mount — instant from cache, then async verify
