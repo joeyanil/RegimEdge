@@ -620,9 +620,12 @@ function ExchangePage({st}){
   const ok=form.name&&form.phone&&form.telegram&&form.amount&&idPhoto&&holdPhoto;
   const SC={Pending:G.gold,"Waiting Confirmation":G.blue,Completed:G.green,Refunded:G.textSub,Disputed:G.red};
 
+  // Reset form data when switching between buyer/seller/main to prevent data bleeding
+  const goStep=(s)=>{ setStep(s); setForm({name:"",phone:"",telegram:"",amount:""}); setIdPhoto(null); setHoldPhoto(null); };
+
   if(step==="buyer") return(
     <div style={{padding:"32px 22px"}}>
-      <button onClick={()=>setStep("main")} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:13,marginBottom:22,fontFamily:"inherit"}}>← Back</button>
+      <button onClick={()=>goStep("main")} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:13,marginBottom:22,fontFamily:"inherit"}}>← Back</button>
       <SH label="P2P Exchange" title="Buyer Verification"/>
       <div style={{background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.r,padding:16,marginBottom:18}}>
         <p style={{color:G.red,fontSize:12,margin:0,lineHeight:1.75}}>⚠ Identity verification is required for all participants — buyers and sellers alike. Any attempt to bypass the process = immediate permanent ban.</p>
@@ -654,7 +657,7 @@ function ExchangePage({st}){
 
   if(step==="seller") return(
     <div style={{padding:"32px 22px"}}>
-      <button onClick={()=>setStep("main")} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:13,marginBottom:22,fontFamily:"inherit"}}>← Back</button>
+      <button onClick={()=>goStep("main")} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:13,marginBottom:22,fontFamily:"inherit"}}>← Back</button>
       <SH label="P2P Exchange" title="Seller Verification"/>
       <div style={{background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.r,padding:16,marginBottom:18}}>
         <p style={{color:G.red,fontSize:12,margin:0,lineHeight:1.75}}>⚠ All sellers are strictly monitored. Any scam attempt = immediate permanent ban and full identity report.</p>
@@ -736,12 +739,12 @@ function ExchangePage({st}){
       )}
       <div style={{fontSize:14,color:G.textSub,textAlign:"center",marginBottom:18,fontWeight:500}}>Who are you?</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <button onClick={()=>setStep("buyer")} style={{background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.r,padding:"22px 12px",cursor:"pointer"}}>
+        <button onClick={()=>goStep("buyer")} style={{background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.r,padding:"22px 12px",cursor:"pointer"}}>
           <div style={{fontSize:26,marginBottom:10}}>💰</div>
           <div style={{fontSize:15,fontWeight:800,color:G.green,marginBottom:5,fontFamily:"'Playfair Display',serif"}}>I'm a Buyer</div>
           <div style={{fontSize:11,color:G.textSub,lineHeight:1.5}}>Buy USDT with ETBirr</div>
         </button>
-        <button onClick={()=>setStep("seller")} style={{background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"22px 12px",cursor:"pointer"}}>
+        <button onClick={()=>goStep("seller")} style={{background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"22px 12px",cursor:"pointer"}}>
           <div style={{fontSize:26,marginBottom:10}}>📤</div>
           <div style={{fontSize:15,fontWeight:800,color:G.gold,marginBottom:5,fontFamily:"'Playfair Display',serif"}}>I'm a Seller</div>
           <div style={{fontSize:11,color:G.textSub,lineHeight:1.5}}>Sell USDT for ETBirr</div>
@@ -827,6 +830,33 @@ function TerminalLocked({user}){
   );
 }
 
+// ── INDICATOR UTILITIES (defined outside component — not recreated on every render) ──
+function calcRSI(data,period=14){
+  if(data.length<=period)return 50;
+  let gains=0,losses=0;
+  for(let i=1;i<=period;i++){const d=data[i]-data[i-1];if(d>=0)gains+=d;else losses+=Math.abs(d);}
+  let ag=gains/period,al=losses/period;
+  for(let i=period+1;i<data.length;i++){const d=data[i]-data[i-1];const g=d>=0?d:0,l=d<0?Math.abs(d):0;ag=(ag*(period-1)+g)/period;al=(al*(period-1)+l)/period;}
+  if(al===0)return 100;return 100-(100/(1+(ag/al)));
+}
+function calcEMA(data,period){
+  if(data.length<period)return data[data.length-1]||0;
+  const k=2/(period+1);
+  let ema=data.slice(0,period).reduce((a,b)=>a+b,0)/period;
+  for(let i=period;i<data.length;i++)ema=data[i]*k+ema*(1-k);
+  return ema;
+}
+function calcATR(data,period=14){
+  if(data.length<period+1)return 0;
+  const trs=data.slice(1).map((c,i)=>Math.abs(c-data[i]));
+  let atr=trs.slice(0,period).reduce((a,b)=>a+b,0)/period;
+  for(let i=period;i<trs.length;i++)atr=(atr*(period-1)+trs[i])/period;
+  return atr;
+}
+function extractCloses(prices){
+  return(prices||[]).map(c=>{const b=c.closePrice?.bid||0,a=c.closePrice?.ask||0;return a&&b?(b+a)/2:b||a||0;}).filter(v=>v>0);
+}
+
 // ─ full terminal ──────────────────────────────────────────────────────────────
 function TerminalFull(){
   const M="monospace";
@@ -845,24 +875,45 @@ function TerminalFull(){
   const[log,setLog]=useState([]);
   const[votes,setVotes]=useState(()=>{ try{return parseInt(localStorage.getItem("re_real_votes")||"0");}catch{return 0;}});
   const[voted,setVoted]=useState(()=>{ try{return!!localStorage.getItem("re_real_voted");}catch{return false;}});
+  const[botLoading,setBotLoading]=useState(false);
   // indicators
   const[inds,setInds]=useState({rsi:"—",ema9:"—",closeEma:"—",bid:"—",buyStack:0,sellStack:0,lastBuy:"—",lastSell:"—",lot:"—",sentiment:"—",entry:"—",grid:"—",stackRoom:"—",dayDD:"—",
     peFast:"—",peSlow:"—",peAtr:"—",peTrend:"—",pePullback:"—",peEngulf:"—",peSession:"—",peReason:"—"});
-  // config
-  const[cfg,setCfg]=useState(()=>{ try{return JSON.parse(localStorage.getItem("juno_cfg")||"{}");}catch{return {};}});
-  const[cfgEmail,setCfgEmail]=useState(cfg.email||"");
-  const[cfgApiKey,setCfgApiKey]=useState(cfg.apikey||"");
-  const[cfgPassword,setCfgPassword]=useState(cfg.password||"");
-  const[cfgBaseEquity,setCfgBaseEquity]=useState(cfg.baseEquity||"10");
-  const[cfgMaxLayers,setCfgMaxLayers]=useState(cfg.maxLayers||"8");
-  const[cfgGap,setCfgGap]=useState(cfg.gap||"2.5");
-  const[cfgRisk,setCfgRisk]=useState(cfg.risk||"2");
-  const[cfgMaxDD,setCfgMaxDD]=useState(cfg.maxdd||"5");
-  const[cfgSpread,setCfgSpread]=useState(cfg.spread||"50");
-  const[cfgPeLot,setCfgPeLot]=useState(cfg.peLot||"0.01");
-  const[cfgPeRR,setCfgPeRR]=useState(cfg.peRR||"2");
+  // config — uncontrolled refs to prevent keyboard dismissal on re-render (mobile fix)
+  const cfgInit=useRef(()=>{ try{return JSON.parse(localStorage.getItem("juno_cfg")||"{}");}catch{return {};}})();
+  const[cfg,setCfg]=useState(cfgInit);
+  const cfgEmailRef=useRef(null);
+  const cfgApiKeyRef=useRef(null);
+  const cfgPasswordRef=useRef(null);
+  const cfgBaseEquityRef=useRef(null);
+  const cfgMaxLayersRef=useRef(null);
+  const cfgGapRef=useRef(null);
+  const cfgRiskRef=useRef(null);
+  const cfgMaxDDRef=useRef(null);
+  const cfgSpreadRef=useRef(null);
+  const cfgPeLotRef=useRef(null);
+  const cfgPeRRRef=useRef(null);
+  // helpers to read current ref values
+  const getCfgValues=()=>({
+    email:cfgEmailRef.current?.value||cfg.email||"",
+    apikey:cfgApiKeyRef.current?.value||cfg.apikey||"",
+    password:cfgPasswordRef.current?.value||cfg.password||"",
+    baseEquity:cfgBaseEquityRef.current?.value||cfg.baseEquity||"10",
+    maxLayers:cfgMaxLayersRef.current?.value||cfg.maxLayers||"8",
+    gap:cfgGapRef.current?.value||cfg.gap||"2.5",
+    risk:cfgRiskRef.current?.value||cfg.risk||"2",
+    maxdd:cfgMaxDDRef.current?.value||cfg.maxdd||"5",
+    spread:cfgSpreadRef.current?.value||cfg.spread||"50",
+    peLot:cfgPeLotRef.current?.value||cfg.peLot||"0.01",
+    peRR:cfgPeRRRef.current?.value||cfg.peRR||"2",
+  });
+  // shim values for connect() which still reads cfgEmail etc.
+  const cfgEmail=cfg.email||"";
+  const cfgApiKey=cfg.apikey||"";
+  const cfgPassword=cfg.password||"";
   const priceRef=useRef(null);
   const tickRef=useRef(null);
+  const botPollRef=useRef(null); // replaces window._botPollRef — proper cleanup
   const sessionTokensRef=useRef({cst:"",secToken:""}); // Capital.com session tokens
   const BASE_URL="https://demo-api-capital.backend-capital.com";
 
@@ -875,19 +926,20 @@ function TerminalFull(){
     "Content-Type": "application/json",
   });
 
-  // save config
+  // save config — reads from uncontrolled refs so no focus lost on mobile
   const saveConfig=()=>{
-    const c={email:cfgEmail,apikey:cfgApiKey,password:cfgPassword,baseEquity:cfgBaseEquity,maxLayers:cfgMaxLayers,gap:cfgGap,risk:cfgRisk,maxdd:cfgMaxDD,spread:cfgSpread,peLot:cfgPeLot,peRR:cfgPeRR};
+    const c=getCfgValues();
     try{localStorage.setItem("juno_cfg",JSON.stringify(c));}catch{}
     setCfg(c); addLog("info","Configuration saved ✓");
   };
 
   // connect to Capital.com — captures CST + X-SECURITY-TOKEN from response headers
   const connect=async()=>{
-    if(!cfgEmail||!cfgApiKey||!cfgPassword){addLog("err","Fill in email, API key and password first.");return;}
+    const v=getCfgValues();
+    if(!v.email||!v.apikey||!v.password){addLog("err","Fill in email, API key and password first.");return;}
     setConnecting(true); addLog("info","Connecting to Capital.com...");
     try{
-      const r=await fetch(`${BASE_URL}/api/v1/session`,{method:"POST",headers:{"X-CAP-API-KEY":cfgApiKey,"Content-Type":"application/json"},body:JSON.stringify({identifier:cfgEmail,password:cfgPassword})});
+      const r=await fetch(`${BASE_URL}/api/v1/session`,{method:"POST",headers:{"X-CAP-API-KEY":v.apikey,"Content-Type":"application/json"},body:JSON.stringify({identifier:v.email,password:v.password})});
       if(!r.ok)throw new Error("Auth failed — check your API key, email, and password. Status: "+r.status);
       const d=await r.json();
       if(d.dealingEnabled===false)throw new Error("Account not enabled for trading");
@@ -897,8 +949,8 @@ function TerminalFull(){
       sessionTokensRef.current={cst,secToken};
       addLog("info",`Session tokens captured — CST: ${cst?"✓":"missing"}, SecToken: ${secToken?"✓":"missing"}`);
       setConnected(true); addLog("trade","Connected ✓ — Capital.com Demo active");
-      startPriceFeed(cfgApiKey);
-      fetchAccount(cfgApiKey);
+      startPriceFeed(v.apikey);
+      fetchAccount(v.apikey);
     }catch(e){
       addLog("err","Connection failed: "+e.message); setConnected(false);
     }finally{setConnecting(false);}
@@ -906,7 +958,8 @@ function TerminalFull(){
 
   const disconnect=()=>{
     setConnected(false); setRunning(false);
-    if(tickRef.current)clearInterval(tickRef.current);
+    if(tickRef.current){clearInterval(tickRef.current);tickRef.current=null;}
+    if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
     setPrice(null); setAccount({balance:"—",equity:"—",pnl:"—",dd:"—"});
     setPositions([]); addLog("info","Disconnected.");
   };
@@ -915,6 +968,12 @@ function TerminalFull(){
     const fetchPrice=async()=>{
       try{
         const r=await fetch(`${BASE_URL}/api/v1/markets/GOLD`,{headers:capHeaders(apiKey)});
+        if(r.status===401){
+          // Session expired — disconnect and prompt user to reconnect
+          addLog("warn","Capital.com session expired. Please reconnect.");
+          disconnect();
+          return;
+        }
         if(!r.ok)return;
         const d=await r.json();
         const bid=d.snapshot?.bid||d.bid;
@@ -948,21 +1007,80 @@ function TerminalFull(){
     }catch(e){ addLog("warn","Account error: "+e.message); }
   };
 
-  const startBot=()=>{
+  const startBot=async()=>{
     if(!connected){addLog("err","Connect to Capital.com first.");return;}
-    setRunning(true);
+    if(running||botLoading) return; // prevent double-click race
+    setBotLoading(true);
+    const v=getCfgValues();
     addLog("trade",`${bot==="axum"?"Axum AI":"PrecisionEdge"} bot started ✓`);
-    addLog("info","Monitoring XAU/USD market...");
-    // simulate some indicator updates
-    setTimeout(()=>{
-      setInds(i=>({...i,rsi:"52.3",ema9:price||"—",closeEma:"Above",bid:price||"—",sentiment:"Bullish",entry:"Waiting",grid:"Layer 0",stackRoom:"8 slots free"}));
-      setSignal("MONITORING");setSignalDir(0);
-    },1500);
+    addLog("info","Fetching live candles from Capital.com...");
+    try{
+      const r=await fetch(`${BASE_URL}/api/v1/prices/GOLD?resolution=MINUTE&max=50`,{headers:capHeaders(v.apikey)});
+      if(!r.ok) throw new Error("Candle fetch failed: "+r.status);
+      const d=await r.json();
+      const closes=extractCloses(d.prices);
+      if(closes.length<14) throw new Error("Not enough candle data (got "+closes.length+")");
+
+      const rsi=calcRSI(closes).toFixed(1);
+      const ema9=calcEMA(closes,9).toFixed(2);
+      const ema20=calcEMA(closes,20).toFixed(2);
+      const atr=calcATR(closes).toFixed(2);
+      const lastClose=closes[closes.length-1];
+      const closeVsEma=lastClose>parseFloat(ema9)?"Above":"Below";
+      const trend=parseFloat(ema9)>parseFloat(ema20)?"UP":"DOWN";
+      const currentBid=priceRef.current?.toString()||ema9;
+      const rsiN=parseFloat(rsi);
+      const sentiment=rsiN>55?"Bullish":rsiN<45?"Bearish":"Neutral";
+      const signalStr=rsiN>60&&closeVsEma==="Above"?"BUY SIGNAL":rsiN<40&&closeVsEma==="Below"?"SELL SIGNAL":"MONITORING";
+      const sDir=signalStr==="BUY SIGNAL"?1:signalStr==="SELL SIGNAL"?-1:0;
+      const equity=parseFloat((account.equity||"$10").replace("$",""))||10;
+      const dynamicLot=Math.max(0.01,(equity*(parseFloat(v.risk||2)/100)/100)).toFixed(2);
+
+      if(bot==="axum"){
+        setInds(i=>({...i,rsi,ema9,closeEma:closeVsEma,bid:currentBid,buyStack:0,sellStack:0,lastBuy:"—",lastSell:"—",
+          lot:dynamicLot,sentiment,entry:signalStr==="MONITORING"?"Waiting":signalStr,
+          grid:"Layer 0",stackRoom:`${v.maxLayers||8} slots free`,dayDD:"0.00%"}));
+      } else {
+        setInds(i=>({...i,peFast:ema9,peSlow:ema20,peAtr:atr,peTrend:trend,
+          pePullback:closeVsEma==="Below"&&trend==="UP"?"Yes":"No",
+          peEngulf:"Watching",peSession:"Active",peReason:`RSI ${rsi} · EMA9 ${ema9} · ATR ${atr}`}));
+      }
+      setSignal(signalStr); setSignalDir(sDir);
+      setRunning(true);
+      addLog("trade",`Indicators loaded — RSI: ${rsi} · EMA9: ${ema9} · Trend: ${trend}`);
+      addLog("info","Monitoring XAU/USD every 60s...");
+
+      // Store poll in ref (not window) — reliable cleanup on stop/disconnect/unmount
+      if(botPollRef.current) clearInterval(botPollRef.current);
+      botPollRef.current=setInterval(async()=>{
+        try{
+          const pr=await fetch(`${BASE_URL}/api/v1/prices/GOLD?resolution=MINUTE&max=50`,{headers:capHeaders(v.apikey)});
+          if(!pr.ok) return;
+          const pd=await pr.json();
+          const pc=extractCloses(pd.prices);
+          if(pc.length<14) return;
+          const nr=calcRSI(pc).toFixed(1),ne=calcEMA(pc,9).toFixed(2),ne20=calcEMA(pc,20).toFixed(2);
+          const nc=pc[pc.length-1],nVsE=nc>parseFloat(ne)?"Above":"Below";
+          const nSent=parseFloat(nr)>55?"Bullish":parseFloat(nr)<45?"Bearish":"Neutral";
+          if(bot==="axum") setInds(i=>({...i,rsi:nr,ema9:ne,closeEma:nVsE,sentiment:nSent,bid:priceRef.current?.toString()||ne}));
+          else setInds(i=>({...i,peFast:ne,peSlow:ne20,peTrend:parseFloat(ne)>parseFloat(ne20)?"UP":"DOWN"}));
+        }catch{}
+      },60000);
+
+    }catch(e){
+      addLog("warn","Data fetch failed: "+e.message+" — using last known price.");
+      setInds(i=>({...i,bid:priceRef.current?.toString()||"—",sentiment:"Waiting",entry:"No data",grid:"—"}));
+      setSignal("MONITORING"); setSignalDir(0);
+      setRunning(true);
+    }finally{
+      setBotLoading(false);
+    }
   };
 
   const stopBot=()=>{
     setRunning(false);
-    setSignal("NO SIGNAL");setSignalDir(0);
+    setSignal("NO SIGNAL"); setSignalDir(0);
+    if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
     addLog("info","Bot stopped.");
   };
 
@@ -974,7 +1092,10 @@ function TerminalFull(){
     addLog("info","Vote recorded — thank you!");
   };
 
-  useEffect(()=>()=>{if(tickRef.current)clearInterval(tickRef.current);},[]);
+  useEffect(()=>()=>{
+    if(tickRef.current)clearInterval(tickRef.current);
+    if(botPollRef.current)clearInterval(botPollRef.current);
+  },[]);
 
   const TABS=[
     {id:"dashboard",icon:"◈",label:"DASH"},
@@ -1070,8 +1191,8 @@ function TerminalFull(){
 
             {/* Controls */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:11}}>
-              <button onClick={startBot} disabled={!connected||running} style={{padding:13,background:(!connected||running)?"none":"linear-gradient(135deg,#22c55e,#16a34a)",border:(!connected||running)?`1px solid ${G.border}`:"none",borderRadius:G.rs,color:(!connected||running)?G.textSub:"#000",fontSize:11,fontWeight:700,letterSpacing:1,cursor:(!connected||running)?"not-allowed":"pointer",fontFamily:M}}>
-                ▶ START
+              <button onClick={startBot} disabled={!connected||running||botLoading} style={{padding:13,background:(!connected||running||botLoading)?"none":"linear-gradient(135deg,#22c55e,#16a34a)",border:(!connected||running||botLoading)?`1px solid ${G.border}`:"none",borderRadius:G.rs,color:(!connected||running||botLoading)?G.textSub:"#000",fontSize:11,fontWeight:700,letterSpacing:1,cursor:(!connected||running||botLoading)?"not-allowed":"pointer",fontFamily:M}}>
+                {botLoading?"FETCHING...":"▶ START"}
               </button>
               <button onClick={stopBot} disabled={!running} style={{padding:13,background:running?G.redBg:"none",border:running?`1px solid ${G.red}44`:`1px solid ${G.border}`,borderRadius:G.rs,color:running?G.red:G.textSub,fontSize:11,fontWeight:700,letterSpacing:1,cursor:running?"pointer":"not-allowed",fontFamily:M}}>
                 ■ STOP
@@ -1212,44 +1333,50 @@ function TerminalFull(){
               </div>
               <div style={{marginBottom:10}}>
                 <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>EMAIL</div>
-                <FI value={cfgEmail} onChange={setCfgEmail} placeholder="your@email.com" type="email"/>
+                <input ref={cfgEmailRef} defaultValue={cfg.email||""} placeholder="your@email.com" type="email"
+                  style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div style={{marginBottom:10}}>
                 <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>API KEY</div>
-                <FI value={cfgApiKey} onChange={setCfgApiKey} placeholder="Enter API key"/>
+                <input ref={cfgApiKeyRef} defaultValue={cfg.apikey||""} placeholder="Enter API key"
+                  style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div style={{marginBottom:14}}>
                 <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>API PASSWORD</div>
-                <FI value={cfgPassword} onChange={setCfgPassword} placeholder="API password" type="password"/>
+                <input ref={cfgPasswordRef} defaultValue={cfg.password||""} placeholder="API password" type="password"
+                  style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
             </TCard>
 
             <TCard>
               <TLabel>Axum AI Parameters</TLabel>
-              {[["Base Equity ($)",cfgBaseEquity,setCfgBaseEquity,"number"],["Max Grid Layers",cfgMaxLayers,setCfgMaxLayers,"number"],["Grid Gap (pts)",cfgGap,setCfgGap,"number"]].map(([l,v,sv,t])=>(
+              {[["Base Equity ($)",cfgBaseEquityRef,cfg.baseEquity||"10","number"],["Max Grid Layers",cfgMaxLayersRef,cfg.maxLayers||"8","number"],["Grid Gap (pts)",cfgGapRef,cfg.gap||"2.5","number"]].map(([l,r,dv,t])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
-                  <FI value={v} onChange={sv} placeholder={l} type={t}/>
+                  <input ref={r} defaultValue={dv} placeholder={l} type={t}
+                    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               ))}
             </TCard>
 
             <TCard>
               <TLabel>PrecisionEdge Parameters</TLabel>
-              {[["Lot Size",cfgPeLot,setCfgPeLot,"number"],["Risk/Reward Ratio",cfgPeRR,setCfgPeRR,"number"]].map(([l,v,sv,t])=>(
+              {[["Lot Size",cfgPeLotRef,cfg.peLot||"0.01","number"],["Risk/Reward Ratio",cfgPeRRRef,cfg.peRR||"2","number"]].map(([l,r,dv,t])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
-                  <FI value={v} onChange={sv} placeholder={l} type={t}/>
+                  <input ref={r} defaultValue={dv} placeholder={l} type={t}
+                    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               ))}
             </TCard>
 
             <TCard>
               <TLabel>Risk Management</TLabel>
-              {[["Risk % per trade",cfgRisk,setCfgRisk],["Max Daily DD %",cfgMaxDD,setCfgMaxDD],["Max Spread (pts)",cfgSpread,setCfgSpread]].map(([l,v,sv])=>(
+              {[["Risk % per trade",cfgRiskRef,cfg.risk||"2"],["Max Daily DD %",cfgMaxDDRef,cfg.maxdd||"5"],["Max Spread (pts)",cfgSpreadRef,cfg.spread||"50"]].map(([l,r,dv])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
-                  <FI value={v} onChange={sv} placeholder={l} type="number"/>
+                  <input ref={r} defaultValue={dv} placeholder={l} type="number"
+                    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               ))}
             </TCard>
@@ -1441,11 +1568,49 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,marginBottom:18}}>Approve a user's email to unlock EdgeTerminal permanently.</p>
           <div style={{display:"flex",gap:9,marginBottom:18}}>
             <FI value={eaEmail} onChange={setEaEmail} placeholder="User email" style={{marginBottom:0}}/>
-            <Btn onClick={()=>{
+            <Btn onClick={async()=>{
               if(!eaEmail)return;
               const list=[...(st.eaApprovedUsers||[])];
-              if(!list.includes(eaEmail)){list.push(eaEmail);update("eaApprovedUsers",list);alert(`Access granted to ${eaEmail}`);}
-              else alert("Already approved.");
+              if(list.includes(eaEmail)){alert("Already approved.");return;}
+              list.push(eaEmail);
+              update("eaApprovedUsers",list);
+              // ── Persist to Supabase profiles table so it survives reloads ──
+              try{
+                // Try upsert by email — write ea_approved=true to profiles
+                await sbDB(`/profiles?email=eq.${encodeURIComponent(eaEmail)}`,{
+                  method:"PATCH",
+                  headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
+                  body:JSON.stringify({ea_approved:true})
+                });
+              }catch(e){
+                // If profile row doesn't exist yet, insert it
+                try{
+                  await sbDB("/profiles",{
+                    method:"POST",
+                    headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
+                    body:JSON.stringify({email:eaEmail,ea_approved:true})
+                  });
+                }catch(e2){
+                  console.warn("EA approval DB write failed:",e2.message,"(app_content list still updated)");
+                }
+              }
+              // Also persist to app_content so eaApprovedUsers survives on next load
+              try{
+                await sbDB("/app_content?key=eq.eaApprovedUsers",{
+                  method:"PATCH",
+                  headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
+                  body:JSON.stringify({value:list})
+                });
+              }catch{
+                try{
+                  await sbDB("/app_content",{
+                    method:"POST",
+                    headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
+                    body:JSON.stringify({key:"eaApprovedUsers",value:list})
+                  });
+                }catch(e3){console.warn("app_content update failed:",e3.message);}
+              }
+              alert(`Access granted to ${eaEmail} ✓`);
               setEaEmail("");
             }} style={{flexShrink:0,padding:"13px 16px"}}>Approve</Btn>
           </div>
@@ -1453,7 +1618,17 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           {(st.eaApprovedUsers||[]).map((email,i)=>(
             <div key={i} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:13,color:G.green}}>✓ {email}</div>
-              <Btn variant="danger" onClick={()=>update("eaApprovedUsers",(st.eaApprovedUsers||[]).filter(e=>e!==email))} style={{padding:"5px 9px",fontSize:11}}>Revoke</Btn>
+              <Btn variant="danger" onClick={async()=>{
+                update("eaApprovedUsers",(st.eaApprovedUsers||[]).filter(e=>e!==email));
+                // Also revoke in Supabase profiles
+                try{
+                  await sbDB(`/profiles?email=eq.${encodeURIComponent(email)}`,{
+                    method:"PATCH",
+                    headers:{"Content-Type":"application/json","Prefer":"return=minimal"},
+                    body:JSON.stringify({ea_approved:false})
+                  });
+                }catch(e){console.warn("Revoke profiles write failed:",e.message);}
+              }} style={{padding:"5px 9px",fontSize:11}}>Revoke</Btn>
             </div>
           ))}
         </>}
@@ -1690,7 +1865,6 @@ function AuthModal({onAuth,onClose}){
           </div>
         )}
 
-        {mode!=="forgot"&&false&&null}
         <div style={{marginBottom:11}}>
           <div style={{fontSize:10,color:G.textSub,letterSpacing:1.5,marginBottom:6,textTransform:"uppercase"}}>Email</div>
           <FI value={email} onChange={v=>{setEmail(v);clearErr();}} placeholder="your@email.com" type="email"/>
@@ -1827,11 +2001,24 @@ function ProfilePage({user,onLogout,onSignIn,isApproved}){
     setSaving(true); setErr(""); setMsg("");
     try {
       const token=localStorage.getItem("re_access_token");
-      await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`,{
+      // Try PATCH first — if profile row doesn't exist (new signup), fall back to INSERT (upsert)
+      const patchRes=await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`,{
         method:"PATCH",
         headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token}`,"Prefer":"return=minimal"},
         body:JSON.stringify({username:username.trim(),phone:phone.trim()||null})
       });
+      if(patchRes.ok){
+        // Check if any row was actually updated (empty body = no row existed)
+        const text=await patchRes.text();
+        if(!text){
+          // No existing row — insert instead
+          await fetch(`${SUPABASE_URL}/rest/v1/profiles`,{
+            method:"POST",
+            headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token}`,"Prefer":"return=minimal"},
+            body:JSON.stringify({id:user.id,email:user.email,username:username.trim(),phone:phone.trim()||null})
+          });
+        }
+      }
       setMsg("Profile updated!");
     } catch{ setErr("Failed to update. Try again."); }
     finally{ setSaving(false); }
@@ -2031,12 +2218,15 @@ export default function App(){
   const update=(key,val)=>setSt(s=>{
     const newVal=Array.isArray(val)?val:typeof val==="object"?{...s[key],...val}:val;
     const newSt={...s,[key]:newVal};
-    // Persist to Supabase (fire-and-forget, fails silently if not logged in)
+    // Persist to Supabase app_content table (upsert by key)
     sbDB("/app_content",{
       method:"POST",
-      headers:{"Prefer":"resolution=merge-duplicates"},
+      headers:{
+        "Prefer":"resolution=merge-duplicates,return=minimal",
+        "Content-Type":"application/json",
+      },
       body:JSON.stringify({key,value:newVal,updated_at:new Date().toISOString()})
-    }).catch(()=>{});
+    }).catch(e=>console.warn("Content persist failed:",e.message));
     return newSt;
   });
   const addItem=(key,item)=>update(key,[item,...st[key]]);
