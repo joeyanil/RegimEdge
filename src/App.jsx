@@ -909,9 +909,16 @@ function TerminalFull(){
   const[signal,setSignal]=useState("NO SIGNAL");
   const[signalDir,setSignalDir]=useState(0);
   const[log,setLog]=useState([]);
-  const[votes,setVotes]=useState(()=>{ try{return parseInt(localStorage.getItem("re_real_votes")||"0");}catch{return 0;}});
-  const[voted,setVoted]=useState(()=>{ try{return!!localStorage.getItem("re_real_voted");}catch{return false;}});
+  // ── Bot ratings (Supabase-backed, shared across all users) ──
+  const[botRatings,setBotRatings]=useState({axum:{stars:0,count:0},precision:{stars:0,count:0}});
+  const[myBotRating,setMyBotRating]=useState({axum:0,precision:0}); // 0=not rated
+  const[ratingsLoading,setRatingsLoading]=useState(false);
+  // ── EA vote (Supabase-backed so it persists across reloads) ──
+  const[votes,setVotes]=useState(0);
+  const[voted,setVoted]=useState(false);
+  const[votesLoading,setVotesLoading]=useState(false);
   const[botLoading,setBotLoading]=useState(false);
+  const[closingId,setClosingId]=useState(null); // dealId being closed
   // indicators
   const[inds,setInds]=useState({rsi:"—",ema9:"—",closeEma:"—",bid:"—",buyStack:0,sellStack:0,lastBuy:"—",lastSell:"—",lot:"—",sentiment:"—",entry:"—",grid:"—",stackRoom:"—",dayDD:"—",
     peFast:"—",peSlow:"—",peAtr:"—",peTrend:"—",pePullback:"—",peEngulf:"—",peSession:"—",peReason:"—"});
@@ -976,6 +983,137 @@ function TerminalFull(){
     setCfgSaved(true);
     addLog("info","Configuration saved ✓");
     setTimeout(()=>setCfgSaved(false),2500);
+  };
+
+  // ── SUPABASE RATINGS HELPERS ────────────────────────────────────────────────
+  // Table needed (run once in Supabase SQL editor):
+  //   create table bot_ratings (id serial primary key, bot text, user_key text unique, stars int, created_at timestamptz default now());
+  //   create table ea_votes (id serial primary key, user_key text unique, created_at timestamptz default now());
+  //   alter table bot_ratings enable row level security;
+  //   alter table ea_votes enable row level security;
+  //   create policy "public read" on bot_ratings for select using (true);
+  //   create policy "public insert" on bot_ratings for insert with check (true);
+  //   create policy "public upsert" on bot_ratings for update using (true);
+  //   create policy "public read" on ea_votes for select using (true);
+  //   create policy "public insert" on ea_votes for insert with check (true);
+
+  const getUserKey=()=>{
+    let k;try{k=localStorage.getItem("re_ukey");}catch{}
+    if(!k){k=Math.random().toString(36).slice(2)+Date.now().toString(36);try{localStorage.setItem("re_ukey",k);}catch{}}
+    return k;
+  };
+
+  const loadRatings=async()=>{
+    setRatingsLoading(true);
+    try{
+      const userKey=getUserKey();
+      const rows=await sbDB("/bot_ratings?select=bot,stars,user_key");
+      if(!Array.isArray(rows)){setRatingsLoading(false);return;}
+      const axumRows=rows.filter(r=>r.bot==="axum");
+      const precRows=rows.filter(r=>r.bot==="precision");
+      const avg=arr=>arr.length?arr.reduce((s,r)=>s+r.stars,0)/arr.length:0;
+      setBotRatings({
+        axum:{stars:parseFloat(avg(axumRows).toFixed(1)),count:axumRows.length},
+        precision:{stars:parseFloat(avg(precRows).toFixed(1)),count:precRows.length},
+      });
+      const myAxum=rows.find(r=>r.bot==="axum"&&r.user_key===userKey);
+      const myPrec=rows.find(r=>r.bot==="precision"&&r.user_key===userKey);
+      setMyBotRating({axum:myAxum?.stars||0,precision:myPrec?.stars||0});
+    }catch(e){console.warn("Ratings load error:",e);}
+    setRatingsLoading(false);
+  };
+
+  const submitBotRating=async(botKey,stars)=>{
+    const userKey=getUserKey();
+    setMyBotRating(p=>({...p,[botKey]:stars}));
+    // optimistic update
+    setBotRatings(p=>{
+      const prev=p[botKey];
+      const wasRated=myBotRating[botKey]>0;
+      const newCount=wasRated?prev.count:prev.count+1;
+      const newTotal=wasRated?(prev.stars*prev.count-myBotRating[botKey]+stars):(prev.stars*prev.count+stars);
+      return {...p,[botKey]:{stars:parseFloat((newTotal/newCount).toFixed(1)),count:newCount}};
+    });
+    try{
+      // upsert — insert or update by user_key+bot
+      await sbDB("/bot_ratings",{
+        method:"POST",
+        headers:{"Prefer":"resolution=merge-duplicates"},
+        body:JSON.stringify({bot:botKey,user_key:userKey,stars}),
+      });
+    }catch(e){console.warn("Rating submit error:",e);}
+  };
+
+  const loadVotes=async()=>{
+    setVotesLoading(true);
+    try{
+      const userKey=getUserKey();
+      const rows=await sbDB("/ea_votes?select=user_key");
+      if(Array.isArray(rows)){
+        setVotes(rows.length);
+        setVoted(rows.some(r=>r.user_key===userKey));
+      }
+    }catch(e){console.warn("Votes load error:",e);}
+    setVotesLoading(false);
+  };
+
+  const handleVote=async()=>{
+    if(voted||votesLoading)return;
+    const userKey=getUserKey();
+    setVoted(true); setVotes(v=>v+1); // optimistic
+    try{
+      await sbDB("/ea_votes",{method:"POST",body:JSON.stringify({user_key:userKey})});
+    }catch(e){
+      // if duplicate key (already voted from another session), still keep voted=true
+      console.warn("Vote submit:",e);
+    }
+  };
+
+  // ── TRADE EXECUTION ─────────────────────────────────────────────────────────
+  const placeOrder=async(direction,lot,atr,apiKey)=>{
+    const epic=activeEpic();
+    const bid=priceRef.current||0;
+    if(!bid){addLog("err","No price available — cannot place order.");return;}
+    const atrN=parseFloat(atr)||0;
+    const v=getCfgValues();
+    const rr=parseFloat(v.peRR||2);
+    // SL/TP based on ATR (2x ATR for SL, RR*2x for TP)
+    const slDist=atrN*2||bid*0.005; // fallback 0.5% if ATR=0
+    const tpDist=slDist*rr;
+    const sl=direction==="BUY"?parseFloat((bid-slDist).toFixed(2)):parseFloat((bid+slDist).toFixed(2));
+    const tp=direction==="BUY"?parseFloat((bid+tpDist).toFixed(2)):parseFloat((bid-tpDist).toFixed(2));
+    const body={epic,direction,size:parseFloat(lot),guaranteedStop:false,stopLevel:sl,profitLevel:tp};
+    addLog("trade",`Placing ${direction} ${lot} lots @ ${bid.toFixed(2)} | SL:${sl} TP:${tp}`);
+    try{
+      const r=await fetch(`${BASE_URL}/api/v1/positions`,{method:"POST",headers:capHeaders(apiKey),body:JSON.stringify(body)});
+      const d=await r.json();
+      if(!r.ok||d.errorCode){
+        addLog("err","Order rejected: "+(d.errorCode||d.message||r.status));
+        return null;
+      }
+      const dealId=d.dealReference||d.dealId||"unknown";
+      addLog("trade",`✓ Order placed — Deal: ${dealId}`);
+      setStats(s=>({...s,trades:s.trades+1}));
+      return dealId;
+    }catch(e){addLog("err","Order error: "+e.message);return null;}
+  };
+
+  const closePosition=async(dealId,apiKey)=>{
+    if(closingId===dealId) return; // prevent double-tap
+    setClosingId(dealId);
+    addLog("info",`Closing position ${dealId}...`);
+    try{
+      const r=await fetch(`${BASE_URL}/api/v1/positions/${dealId}`,{method:"DELETE",headers:capHeaders(apiKey)});
+      if(r.status===200||r.status===204){
+        addLog("trade",`✓ Position ${dealId} closed`);
+        // remove from local positions immediately
+        setPositions(ps=>ps.filter(p=>p.dealId!==dealId));
+      } else {
+        const d=await r.json().catch(()=>({}));
+        addLog("err","Close failed: "+(d.errorCode||d.message||r.status));
+      }
+    }catch(e){addLog("err","Close error: "+e.message);}
+    finally{setClosingId(null);}
   };
 
   // FIX: silent auto-reconnect — tries to re-auth before giving up
@@ -1095,12 +1233,15 @@ function TerminalFull(){
         if(!pr.ok) return;
         const pd=await pr.json();
         const pos=(pd.positions||[]).map(p=>({
+          dealId:p.position?.dealId||p.dealId||"",
           dir:p.position?.direction||"BUY",
           lot:p.position?.size||0,
           open:p.position?.openLevel||0,
           sl:p.position?.stopLevel||"—",
           tp:p.position?.profitLevel||"—",
           pnl:p.position?.upl||0,
+          epic:p.market?.epic||epic,
+          pair:p.market?.instrumentName||activePairLabel(),
         }));
         setPositions(pos);
         const totalPnl=pos.reduce((s,p)=>s+p.pnl,0);
@@ -1177,9 +1318,17 @@ function TerminalFull(){
           const nc=pc.closes[pc.closes.length-1],nVsE=nc>parseFloat(ne)?"Above":"Below";
           const nSent=parseFloat(nr)>55?"Bullish":parseFloat(nr)<45?"Bearish":"Neutral";
           const nSig=parseFloat(nr)>60&&nVsE==="Above"?"BUY SIGNAL":parseFloat(nr)<40&&nVsE==="Below"?"SELL SIGNAL":"MONITORING";
+          const prevSig=signal; // capture before setState
           setSignal(nSig); setSignalDir(nSig==="BUY SIGNAL"?1:nSig==="SELL SIGNAL"?-1:0);
           if(bot==="axum") setInds(i=>({...i,rsi:nr,ema9:ne,closeEma:nVsE,sentiment:nSent,bid:priceRef.current?.toString()||ne}));
           else setInds(i=>({...i,peFast:ne,peSlow:ne20,peAtr:natr,peTrend:parseFloat(ne)>parseFloat(ne20)?"UP":"DOWN",peReason:`RSI ${nr} · EMA9 ${ne} · ATR ${natr}`}));
+          // ── Execute trade when signal flips to BUY or SELL (not on repeated same signal)
+          if(nSig!==prevSig&&(nSig==="BUY SIGNAL"||nSig==="SELL SIGNAL")){
+            const direction=nSig==="BUY SIGNAL"?"BUY":"SELL";
+            const equity2=parseFloat((account.equity||"$10").replace(/[$+−]/g,""))||10;
+            const lot2=Math.max(0.01,(equity2*(parseFloat(v.risk||2)/100)/100)).toFixed(2);
+            placeOrder(direction,lot2,natr,v.apikey);
+          }
         }catch{}
       },30000);
 
@@ -1207,13 +1356,10 @@ function TerminalFull(){
     addLog("info","Bot stopped.");
   };
 
-  const handleVote=()=>{
-    if(voted)return;
-    const n=votes+1;
-    setVotes(n);setVoted(true);
-    try{localStorage.setItem("re_real_votes",String(n));localStorage.setItem("re_real_voted","1");}catch{}
-    addLog("info","Vote recorded — thank you!");
-  };
+  useEffect(()=>{
+    loadRatings();
+    loadVotes();
+  },[]);
 
   useEffect(()=>()=>{
     if(tickRef.current)clearInterval(tickRef.current);
@@ -1368,19 +1514,63 @@ function TerminalFull(){
               ))}
             </div>
 
-            {/* Demo notice + vote */}
+            {/* Bot Ratings — shared, real, Supabase-backed */}
+            <TCard style={{background:G.surface,marginBottom:11}}>
+              <TLabel>Rate the Bots — Shared with All Users</TLabel>
+              {ratingsLoading?(
+                <div style={{fontSize:10,color:G.textSub,textAlign:"center",padding:"10px 0"}}>Loading ratings...</div>
+              ):[
+                {key:"axum",name:"Axum AI",color:G.gold},
+                {key:"precision",name:"PrecisionEdge",color:G.blue},
+              ].map(({key,name,color})=>{
+                const r=botRatings[key];
+                const myR=myBotRating[key];
+                return(
+                  <div key={key} style={{marginBottom:14,paddingBottom:14,borderBottom:`1px solid ${G.border}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,color,letterSpacing:0.5}}>{name}</div>
+                        <div style={{fontSize:9,color:G.textSub,marginTop:2}}>
+                          {r.count>0?`${r.stars}★ avg · ${r.count} rating${r.count===1?"":"s"}`:"No ratings yet"}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:3}}>
+                        {[1,2,3,4,5].map(s=>(
+                          <button key={s} onClick={()=>submitBotRating(key,s)}
+                            style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:s<=(myR||0)?color:G.border,transition:"color 0.15s",padding:"2px"}}>★</button>
+                        ))}
+                      </div>
+                    </div>
+                    {r.count>0&&(
+                      <div style={{height:3,background:G.border,borderRadius:2,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${(r.stars/5)*100}%`,background:color,borderRadius:2,transition:"width 0.5s"}}/>
+                      </div>
+                    )}
+                    {myR>0&&<div style={{fontSize:9,color,marginTop:4}}>Your rating: {myR}★</div>}
+                  </div>
+                );
+              })}
+            </TCard>
+
+            {/* Demo notice + EA vote — Supabase-backed */}
             <TCard style={{background:G.goldBg,border:`1px solid ${G.gold}22`}}>
               <div style={{fontSize:10,color:G.gold,fontWeight:700,marginBottom:6,letterSpacing:1}}>DEMO TRADING ONLY</div>
               <p style={{fontSize:11,color:G.textSub,lineHeight:1.7,margin:"0 0 12px"}}>This EA currently runs on demo accounts only. No real money is used. Vote below if you want a Real Account EA built.</p>
               <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:12,marginBottom:10}}>
                 <div style={{fontSize:9,color:TC,letterSpacing:2,marginBottom:6}}>REAL ACCOUNT EA — COMING VERY SOON</div>
-                <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:4}}>{votes} traders voted</div>
-                <div style={{height:4,background:G.border,borderRadius:2,overflow:"hidden",marginBottom:10}}>
-                  <div style={{height:"100%",width:`${Math.min(100,votes)}%`,background:TC,borderRadius:2,transition:"width 0.5s"}}/>
-                </div>
+                {votesLoading?(
+                  <div style={{fontSize:11,color:G.textSub}}>Loading...</div>
+                ):(
+                  <>
+                    <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:4}}>{votes} trader{votes===1?"":"s"} voted</div>
+                    <div style={{height:4,background:G.border,borderRadius:2,overflow:"hidden",marginBottom:10}}>
+                      <div style={{height:"100%",width:`${Math.min(100,votes)}%`,background:TC,borderRadius:2,transition:"width 0.5s"}}/>
+                    </div>
+                  </>
+                )}
               </div>
-              <button onClick={handleVote} disabled={voted} style={{width:"100%",padding:11,background:voted?"none":TC,border:voted?`1px solid ${TC}44`:"none",borderRadius:G.rs,color:voted?TC:"#fff",fontSize:11,fontWeight:700,letterSpacing:1,cursor:voted?"default":"pointer",fontFamily:M,opacity:voted?0.6:1}}>
-                {voted?"✓ VOTED — Thank you!":"VOTE FOR REAL ACCOUNT EA"}
+              <button onClick={handleVote} disabled={voted||votesLoading} style={{width:"100%",padding:11,background:voted?"none":TC,border:voted?`1px solid ${TC}44`:"none",borderRadius:G.rs,color:voted?TC:"#fff",fontSize:11,fontWeight:700,letterSpacing:1,cursor:voted?"default":"pointer",fontFamily:M,opacity:voted?0.6:1}}>
+                {voted?"✓ VOTED — Thank you!":votesLoading?"Loading...":"VOTE FOR REAL ACCOUNT EA"}
               </button>
             </TCard>
           </div>
@@ -1393,20 +1583,40 @@ function TerminalFull(){
             {positions.length===0?(
               <TCard style={{textAlign:"center",padding:"28px 0"}}>
                 <div style={{fontSize:11,color:G.textSub,letterSpacing:1}}>No open positions</div>
+                {running&&<div style={{fontSize:10,color:G.textDim,marginTop:8}}>Bot is monitoring — positions appear here when a trade fires</div>}
               </TCard>
-            ):positions.map((p,i)=>(
-              <TCard key={i}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:12,fontWeight:700,color:p.dir==="BUY"?G.green:G.red,fontFamily:M}}>{p.dir}</span>
-                  <span style={{fontSize:14,fontWeight:700,color:p.pnl>=0?G.green:G.red}}>{p.pnl>=0?"+":""}{p.pnl.toFixed(2)}</span>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-                  {[["Lot",p.lot],["Open",p.open],["SL",p.sl],["TP",p.tp]].map(([l,v])=>(
-                    <div key={l} style={{fontSize:9,color:G.textSub}}>{l}: <span style={{color:G.text}}>{v}</span></div>
-                  ))}
-                </div>
-              </TCard>
-            ))}
+            ):positions.map((p,i)=>{
+              const isClosing=closingId===p.dealId;
+              const v=getCfgValues();
+              return(
+                <TCard key={p.dealId||i} style={{borderColor:p.dir==="BUY"?G.green+"33":G.red+"33"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:12,fontWeight:700,color:p.dir==="BUY"?G.green:G.red,fontFamily:M}}>{p.dir}</span>
+                      <span style={{fontSize:9,color:G.textSub}}>{p.pair||activePairLabel()}</span>
+                    </div>
+                    <span style={{fontSize:16,fontWeight:700,color:p.pnl>=0?G.green:G.red,fontFamily:M}}>
+                      {p.pnl>=0?"+":""}{typeof p.pnl==="number"?p.pnl.toFixed(2):p.pnl}
+                    </span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:12}}>
+                    {[["Lot",p.lot],["Open",p.open],["SL",p.sl],["TP",p.tp]].map(([l,val])=>(
+                      <div key={l} style={{background:G.surface,borderRadius:6,padding:"6px 4px",textAlign:"center"}}>
+                        <div style={{fontSize:8,color:G.textSub,marginBottom:2}}>{l}</div>
+                        <div style={{fontSize:10,fontWeight:700,color:G.text,fontFamily:M}}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={()=>closePosition(p.dealId,v.apikey)}
+                    disabled={isClosing||!p.dealId}
+                    style={{width:"100%",padding:"10px",background:isClosing?"none":G.redBg,border:`1px solid ${G.red}${isClosing?"22":"66"}`,borderRadius:G.rs,color:isClosing?G.textDim:G.red,fontSize:10,fontWeight:700,letterSpacing:1,cursor:isClosing?"wait":"pointer",fontFamily:M,transition:"all 0.2s"}}>
+                    {isClosing?"CLOSING...":"✕  CLOSE POSITION"}
+                  </button>
+                  {!p.dealId&&<div style={{fontSize:9,color:G.textDim,textAlign:"center",marginTop:4}}>Deal ID missing — close on Capital.com</div>}
+                </TCard>
+              );
+            })}
           </div>
         )}
 
