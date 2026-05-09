@@ -835,6 +835,14 @@ function TerminalLocked({user}){
   );
 }
 
+// ── PAIR CONFIG ────────────────────────────────────────────────────────────────
+// Maps display label → Capital.com epic name for markets + prices endpoints
+const PAIRS=[
+  {label:"XAU/USD",epic:"GOLD"},
+  {label:"BTC/USD",epic:"BITCOIN"},
+  {label:"EUR/USD",epic:"EURUSD"},
+];
+
 // ── INDICATOR UTILITIES (defined outside component — not recreated on every render) ──
 function calcRSI(data,period=14){
   if(data.length<=period)return 50;
@@ -851,22 +859,40 @@ function calcEMA(data,period){
   for(let i=period;i<data.length;i++)ema=data[i]*k+ema*(1-k);
   return ema;
 }
-function calcATR(data,period=14){
-  if(data.length<period+1)return 0;
-  const trs=data.slice(1).map((c,i)=>Math.abs(c-data[i]));
+// FIX: Real ATR using high/low/close — previously only used closes (inaccurate)
+function calcATR(highs,lows,closes,period=14){
+  if(!highs||!lows||highs.length<period+1)return 0;
+  const trs=closes.slice(1).map((c,i)=>{
+    const h=highs[i+1],l=lows[i+1],prevC=closes[i];
+    return Math.max(h-l,Math.abs(h-prevC),Math.abs(l-prevC));
+  });
   let atr=trs.slice(0,period).reduce((a,b)=>a+b,0)/period;
   for(let i=period;i<trs.length;i++)atr=(atr*(period-1)+trs[i])/period;
   return atr;
 }
-function extractCloses(prices){
-  return(prices||[]).map(c=>{const b=c.closePrice?.bid||0,a=c.closePrice?.ask||0;return a&&b?(b+a)/2:b||a||0;}).filter(v=>v>0);
+// FIX: extractCandles now returns highs, lows AND closes for real ATR
+function extractCandles(prices){
+  const out={closes:[],highs:[],lows:[]};
+  (prices||[]).forEach(c=>{
+    const cb=c.closePrice?.bid||0,ca=c.closePrice?.ask||0;
+    const hb=c.highPrice?.bid||0,ha=c.highPrice?.ask||0;
+    const lb=c.lowPrice?.bid||0,la=c.lowPrice?.ask||0;
+    const close=ca&&cb?(cb+ca)/2:cb||ca||0;
+    const high=ha&&hb?(hb+ha)/2:hb||ha||close;
+    const low=la&&lb?(lb+la)/2:lb||la||close;
+    if(close>0){out.closes.push(close);out.highs.push(high);out.lows.push(low);}
+  });
+  return out;
 }
+// Keep backward-compat alias
+function extractCloses(prices){return extractCandles(prices).closes;}
 
 // ─ full terminal ──────────────────────────────────────────────────────────────
 function TerminalFull(){
   const M="monospace";
   const[tab,setTab]=useState("dashboard");
   const[bot,setBot]=useState("axum");
+  const[pair,setPair]=useState(0); // index into PAIRS array
   const[running,setRunning]=useState(false);
   const[connected,setConnected]=useState(false);
   const[connecting,setConnecting]=useState(false);
@@ -911,15 +937,20 @@ function TerminalFull(){
     peLot:cfgPeLotRef.current?.value||cfg.peLot||"0.01",
     peRR:cfgPeRRRef.current?.value||cfg.peRR||"2",
   });
-  // shim values for connect() which still reads cfgEmail etc.
   const cfgEmail=cfg.email||"";
   const cfgApiKey=cfg.apikey||"";
   const cfgPassword=cfg.password||"";
   const priceRef=useRef(null);
   const tickRef=useRef(null);
-  const botPollRef=useRef(null); // replaces window._botPollRef — proper cleanup
-  const sessionTokensRef=useRef({cst:"",secToken:""}); // Capital.com session tokens
+  const botPollRef=useRef(null);
+  const accountPollRef=useRef(null); // FIX: continuous account refresh
+  const sessionTokensRef=useRef({cst:"",secToken:""});
+  const savedCredsRef=useRef({email:"",apikey:"",password:""}); // FIX: for auto-reconnect
   const BASE_URL="https://demo-api-capital.backend-capital.com";
+
+  // FIX: active epic always in sync with selected pair
+  const activeEpic=()=>PAIRS[pair]?.epic||"GOLD";
+  const activePairLabel=()=>PAIRS[pair]?.label||"XAU/USD";
 
   const addLog=(type,msg)=>setLog(l=>[{time:new Date().toLocaleTimeString(),type,msg},...l.slice(0,199)]);
 
@@ -937,6 +968,22 @@ function TerminalFull(){
     setCfg(c); addLog("info","Configuration saved ✓");
   };
 
+  // FIX: silent auto-reconnect — tries to re-auth before giving up
+  const silentReconnect=async()=>{
+    const {email,apikey,password}=savedCredsRef.current;
+    if(!email||!apikey||!password) return false;
+    try{
+      const r=await fetch(`${BASE_URL}/api/v1/session`,{method:"POST",headers:{"X-CAP-API-KEY":apikey,"Content-Type":"application/json"},body:JSON.stringify({identifier:email,password})});
+      if(!r.ok) return false;
+      const cst=r.headers.get("CST")||"";
+      const secToken=r.headers.get("X-SECURITY-TOKEN")||"";
+      if(!cst) return false;
+      sessionTokensRef.current={cst,secToken};
+      addLog("info","Session refreshed automatically ✓");
+      return true;
+    }catch{return false;}
+  };
+
   // connect to Capital.com — captures CST + X-SECURITY-TOKEN from response headers
   const connect=async()=>{
     const v=getCfgValues();
@@ -947,14 +994,16 @@ function TerminalFull(){
       if(!r.ok)throw new Error("Auth failed — check your API key, email, and password. Status: "+r.status);
       const d=await r.json();
       if(d.dealingEnabled===false)throw new Error("Account not enabled for trading");
-      // ── Capture session tokens from response headers (required for all further calls)
       const cst=r.headers.get("CST")||"";
       const secToken=r.headers.get("X-SECURITY-TOKEN")||"";
       sessionTokensRef.current={cst,secToken};
+      // FIX: save creds for auto-reconnect
+      savedCredsRef.current={email:v.email,apikey:v.apikey,password:v.password};
       addLog("info",`Session tokens captured — CST: ${cst?"✓":"missing"}, SecToken: ${secToken?"✓":"missing"}`);
       setConnected(true); addLog("trade","Connected ✓ — Capital.com Demo active");
       startPriceFeed(v.apikey);
-      fetchAccount(v.apikey);
+      await fetchAccount(v.apikey);
+      startAccountPoll(v.apikey); // FIX: keep account refreshing
     }catch(e){
       addLog("err","Connection failed: "+e.message); setConnected(false);
     }finally{setConnecting(false);}
@@ -964,6 +1013,7 @@ function TerminalFull(){
     setConnected(false); setRunning(false);
     if(tickRef.current){clearInterval(tickRef.current);tickRef.current=null;}
     if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
+    if(accountPollRef.current){clearInterval(accountPollRef.current);accountPollRef.current=null;}
     setPrice(null); setAccount({balance:"—",equity:"—",pnl:"—",dd:"—"});
     setPositions([]); addLog("info","Disconnected.");
   };
@@ -971,11 +1021,11 @@ function TerminalFull(){
   const startPriceFeed=async(apiKey)=>{
     const fetchPrice=async()=>{
       try{
-        const r=await fetch(`${BASE_URL}/api/v1/markets/GOLD`,{headers:capHeaders(apiKey)});
+        const epic=activeEpic();
+        const r=await fetch(`${BASE_URL}/api/v1/markets/${epic}`,{headers:capHeaders(apiKey)});
         if(r.status===401){
-          // Session expired — disconnect and prompt user to reconnect
-          addLog("warn","Capital.com session expired. Please reconnect.");
-          disconnect();
+          const ok=await silentReconnect();
+          if(!ok){addLog("warn","Session expired. Please reconnect.");disconnect();}
           return;
         }
         if(!r.ok)return;
@@ -993,42 +1043,86 @@ function TerminalFull(){
     tickRef.current=setInterval(fetchPrice,3000);
   };
 
+  // FIX: Correct account field mapping — Capital.com returns balance/equity inside accounts[].balance.balance etc.
+  // or as top-level fields depending on endpoint. We try both shapes.
   const fetchAccount=async(apiKey)=>{
     try{
       const r=await fetch(`${BASE_URL}/api/v1/accounts`,{headers:capHeaders(apiKey)});
+      if(r.status===401){await silentReconnect();return;}
       if(!r.ok){ addLog("warn","Account fetch failed: "+r.status); return; }
       const d=await r.json();
-      const acc=d.accounts?.[0];
+      // Capital.com demo API returns: { accounts: [{ accountId, accountName, preferred, status, accountType, preferred, currency, balance: { balance, deposit, profitLoss, available } }] }
+      const acc=d.accounts?.find(a=>a.preferred)||d.accounts?.[0];
       if(acc){
+        // balance object shape
+        const bal=acc.balance;
+        const balNum=typeof bal==="object"?bal.balance:bal;
+        const equity=typeof bal==="object"?bal.deposit:(acc.equity||0);
+        const pnl=typeof bal==="object"?bal.profitLoss:(acc.unrealisedProfitAndLoss||0);
+        const balV=Number(balNum||0);
+        const eqV=Number(equity||0);
+        const pnlV=Number(pnl||0);
         setAccount({
-          balance:"$"+Number(acc.balance||0).toFixed(2),
-          equity:"$"+Number(acc.equity||0).toFixed(2),
-          pnl:"$"+Number(acc.unrealisedProfitAndLoss||0).toFixed(2),
+          balance:"$"+balV.toFixed(2),
+          equity:"$"+(eqV||balV).toFixed(2),
+          pnl:(pnlV>=0?"+$":"−$")+Math.abs(pnlV).toFixed(2),
           dd:"—"
         });
-        addLog("info",`Account loaded — Balance: $${Number(acc.balance||0).toFixed(2)}`);
+        addLog("info",`Account loaded — Balance: $${balV.toFixed(2)}`);
       }
     }catch(e){ addLog("warn","Account error: "+e.message); }
   };
 
+  // FIX: continuous account refresh every 30s + live P&L from positions
+  const startAccountPoll=async(apiKey)=>{
+    if(accountPollRef.current) clearInterval(accountPollRef.current);
+    const refresh=async()=>{
+      await fetchAccount(apiKey);
+      // also fetch open positions for live P&L
+      try{
+        const pr=await fetch(`${BASE_URL}/api/v1/positions`,{headers:capHeaders(apiKey)});
+        if(!pr.ok) return;
+        const pd=await pr.json();
+        const pos=(pd.positions||[]).map(p=>({
+          dir:p.position?.direction||"BUY",
+          lot:p.position?.size||0,
+          open:p.position?.openLevel||0,
+          sl:p.position?.stopLevel||"—",
+          tp:p.position?.profitLevel||"—",
+          pnl:p.position?.upl||0,
+        }));
+        setPositions(pos);
+        const totalPnl=pos.reduce((s,p)=>s+p.pnl,0);
+        setAccount(a=>({...a,pnl:(totalPnl>=0?"+$":"−$")+Math.abs(totalPnl).toFixed(2)}));
+      }catch{}
+    };
+    accountPollRef.current=setInterval(refresh,30000);
+  };
+
   const startBot=async()=>{
     if(!connected){addLog("err","Connect to Capital.com first.");return;}
-    if(running||botLoading) return; // prevent double-click race
+    if(running||botLoading) return;
     setBotLoading(true);
     const v=getCfgValues();
+    const epic=activeEpic();
+    const pairLabel=activePairLabel();
     addLog("trade",`${bot==="axum"?"Axum AI":"PrecisionEdge"} bot started ✓`);
-    addLog("info","Fetching live candles from Capital.com...");
+    addLog("info",`Fetching live candles for ${pairLabel}...`);
     try{
-      const r=await fetch(`${BASE_URL}/api/v1/prices/GOLD?resolution=MINUTE&max=50`,{headers:capHeaders(v.apikey)});
+      // FIX: use active epic (not hardcoded GOLD) + fetch 100 candles for more reliable indicators
+      const r=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE&max=100`,{headers:capHeaders(v.apikey)});
       if(!r.ok) throw new Error("Candle fetch failed: "+r.status);
       const d=await r.json();
-      const closes=extractCloses(d.prices);
+      // FIX: use full candle data (high/low/close) for real ATR
+      const candles=extractCandles(d.prices);
+      const {closes,highs,lows}=candles;
       if(closes.length<14) throw new Error("Not enough candle data (got "+closes.length+")");
 
       const rsi=calcRSI(closes).toFixed(1);
       const ema9=calcEMA(closes,9).toFixed(2);
       const ema20=calcEMA(closes,20).toFixed(2);
-      const atr=calcATR(closes).toFixed(2);
+      // FIX: real ATR using highs/lows/closes
+      const atr=calcATR(highs,lows,closes).toFixed(2);
       const lastClose=closes[closes.length-1];
       const closeVsEma=lastClose>parseFloat(ema9)?"Above":"Below";
       const trend=parseFloat(ema9)>parseFloat(ema20)?"UP":"DOWN";
@@ -1037,7 +1131,7 @@ function TerminalFull(){
       const sentiment=rsiN>55?"Bullish":rsiN<45?"Bearish":"Neutral";
       const signalStr=rsiN>60&&closeVsEma==="Above"?"BUY SIGNAL":rsiN<40&&closeVsEma==="Below"?"SELL SIGNAL":"MONITORING";
       const sDir=signalStr==="BUY SIGNAL"?1:signalStr==="SELL SIGNAL"?-1:0;
-      const equity=parseFloat((account.equity||"$10").replace("$",""))||10;
+      const equity=parseFloat((account.equity||"$10").replace(/[$+−]/g,""))||10;
       const dynamicLot=Math.max(0.01,(equity*(parseFloat(v.risk||2)/100)/100)).toFixed(2);
 
       if(bot==="axum"){
@@ -1045,6 +1139,7 @@ function TerminalFull(){
           lot:dynamicLot,sentiment,entry:signalStr==="MONITORING"?"Waiting":signalStr,
           grid:"Layer 0",stackRoom:`${v.maxLayers||8} slots free`,dayDD:"0.00%"}));
       } else {
+        // FIX: peFast/peSlow labelled correctly in state (was showing ATR for Fast EMA before)
         setInds(i=>({...i,peFast:ema9,peSlow:ema20,peAtr:atr,peTrend:trend,
           pePullback:closeVsEma==="Below"&&trend==="UP"?"Yes":"No",
           peEngulf:"Watching",peSession:"Active",peReason:`RSI ${rsi} · EMA9 ${ema9} · ATR ${atr}`}));
@@ -1052,24 +1147,30 @@ function TerminalFull(){
       setSignal(signalStr); setSignalDir(sDir);
       setRunning(true);
       addLog("trade",`Indicators loaded — RSI: ${rsi} · EMA9: ${ema9} · Trend: ${trend}`);
-      addLog("info","Monitoring XAU/USD every 60s...");
+      addLog("info",`Monitoring ${pairLabel} every 30s...`);
 
-      // Store poll in ref (not window) — reliable cleanup on stop/disconnect/unmount
       if(botPollRef.current) clearInterval(botPollRef.current);
+      // FIX: poll every 30s (was 60s) for faster signal updates
       botPollRef.current=setInterval(async()=>{
         try{
-          const pr=await fetch(`${BASE_URL}/api/v1/prices/GOLD?resolution=MINUTE&max=50`,{headers:capHeaders(v.apikey)});
+          const pr=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE&max=100`,{headers:capHeaders(v.apikey)});
+          if(pr.status===401){await silentReconnect();return;}
           if(!pr.ok) return;
           const pd=await pr.json();
-          const pc=extractCloses(pd.prices);
-          if(pc.length<14) return;
-          const nr=calcRSI(pc).toFixed(1),ne=calcEMA(pc,9).toFixed(2),ne20=calcEMA(pc,20).toFixed(2);
-          const nc=pc[pc.length-1],nVsE=nc>parseFloat(ne)?"Above":"Below";
+          const pc=extractCandles(pd.prices);
+          if(pc.closes.length<14) return;
+          const nr=calcRSI(pc.closes).toFixed(1);
+          const ne=calcEMA(pc.closes,9).toFixed(2);
+          const ne20=calcEMA(pc.closes,20).toFixed(2);
+          const natr=calcATR(pc.highs,pc.lows,pc.closes).toFixed(2);
+          const nc=pc.closes[pc.closes.length-1],nVsE=nc>parseFloat(ne)?"Above":"Below";
           const nSent=parseFloat(nr)>55?"Bullish":parseFloat(nr)<45?"Bearish":"Neutral";
+          const nSig=parseFloat(nr)>60&&nVsE==="Above"?"BUY SIGNAL":parseFloat(nr)<40&&nVsE==="Below"?"SELL SIGNAL":"MONITORING";
+          setSignal(nSig); setSignalDir(nSig==="BUY SIGNAL"?1:nSig==="SELL SIGNAL"?-1:0);
           if(bot==="axum") setInds(i=>({...i,rsi:nr,ema9:ne,closeEma:nVsE,sentiment:nSent,bid:priceRef.current?.toString()||ne}));
-          else setInds(i=>({...i,peFast:ne,peSlow:ne20,peTrend:parseFloat(ne)>parseFloat(ne20)?"UP":"DOWN"}));
+          else setInds(i=>({...i,peFast:ne,peSlow:ne20,peAtr:natr,peTrend:parseFloat(ne)>parseFloat(ne20)?"UP":"DOWN",peReason:`RSI ${nr} · EMA9 ${ne} · ATR ${natr}`}));
         }catch{}
-      },60000);
+      },30000);
 
     }catch(e){
       addLog("warn","Data fetch failed: "+e.message+" — using last known price.");
@@ -1099,6 +1200,7 @@ function TerminalFull(){
   useEffect(()=>()=>{
     if(tickRef.current)clearInterval(tickRef.current);
     if(botPollRef.current)clearInterval(botPollRef.current);
+    if(accountPollRef.current)clearInterval(accountPollRef.current);
   },[]);
 
   const TABS=[
@@ -1114,7 +1216,7 @@ function TerminalFull(){
       {/* Terminal header */}
       <div style={{padding:"12px 16px 10px",background:G.bgDeep,borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div>
-          <div style={{fontSize:8,color:TC,letterSpacing:3}}>EDGE TERMINAL · XAU/USD</div>
+          <div style={{fontSize:8,color:TC,letterSpacing:3}}>EDGE TERMINAL · {activePairLabel()}</div>
           <div style={{fontSize:15,fontWeight:700,color:G.text,letterSpacing:1,fontFamily:"'Playfair Display',serif"}}>EdgeTerminal</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -1151,7 +1253,7 @@ function TerminalFull(){
             {/* Price */}
             <div style={{background:`linear-gradient(135deg,${G.card},rgba(167,139,250,0.04))`,border:`1px solid ${TC}33`,borderRadius:G.rs,padding:16,marginBottom:11,textAlign:"center",position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",top:-20,right:-20,width:80,height:80,borderRadius:"50%",background:`rgba(167,139,250,0.05)`,pointerEvents:"none"}}/>
-              <div style={{fontSize:8,letterSpacing:3,color:G.textSub,marginBottom:6}}>XAU / USD · DEMO</div>
+              <div style={{fontSize:8,letterSpacing:3,color:G.textSub,marginBottom:6}}>{activePairLabel()} · DEMO</div>
               <div style={{fontSize:40,fontWeight:900,color:price?(priceDir>0?G.green:priceDir<0?G.red:G.text):G.textDim,lineHeight:1,transition:"color 0.3s"}}>
                 {price||"——.——"}
               </div>
@@ -1179,6 +1281,16 @@ function TerminalFull(){
                 DISCONNECT
               </button>
             )}
+
+            {/* Pair selector */}
+            <TLabel>Select Pair</TLabel>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:11}}>
+              {PAIRS.map((p,i)=>(
+                <button key={p.epic} onClick={()=>{if(running){addLog("warn","Stop the bot before switching pairs.");return;}setPair(i);}} style={{padding:"9px 4px",background:pair===i?`${TC}18`:"none",border:`1px solid ${pair===i?TC:G.border}`,borderRadius:G.rs,color:pair===i?TC:G.textSub,fontSize:10,fontWeight:pair===i?700:400,cursor:"pointer",fontFamily:M,letterSpacing:0.5,transition:"all 0.2s"}}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
 
             {/* Bot selector */}
             <TLabel>Select Bot</TLabel>
@@ -1290,7 +1402,7 @@ function TerminalFull(){
             ):(
               <TCard>
                 <TLabel>PrecisionEdge — Indicators</TLabel>
-                <IndRow label="Fast EMA (20)" val={inds.peAtr}/>
+                <IndRow label="Fast EMA (9)" val={inds.peFast}/>
                 <IndRow label="Slow EMA (50)" val={inds.peSlow}/>
                 <IndRow label="ATR (14)" val={inds.peAtr}/>
                 <IndRow label="Trend" val={inds.peTrend} dir={inds.peTrend==="UP"?"buy":inds.peTrend==="DOWN"?"sell":""}/>
