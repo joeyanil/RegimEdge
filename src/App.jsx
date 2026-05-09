@@ -837,11 +837,16 @@ function TerminalLocked({user}){
 
 // ── PAIR CONFIG ────────────────────────────────────────────────────────────────
 // Maps display label → Capital.com epic name for markets + prices endpoints
+// alwaysOpen: true = 24/7 (crypto), false = closed weekends + market hours
 const PAIRS=[
-  {label:"XAU/USD",epic:"GOLD"},
-  {label:"BTC/USD",epic:"BITCOIN"},
-  {label:"EUR/USD",epic:"EURUSD"},
+  {label:"XAU/USD",epic:"GOLD",   alwaysOpen:false},
+  {label:"BTC/USD",epic:"BTCUSD", alwaysOpen:true},
+  {label:"EUR/USD",epic:"EURUSD", alwaysOpen:false},
+  {label:"GBP/USD",epic:"GBPUSD", alwaysOpen:false},
 ];
+
+// Returns true if it's the weekend (Sat/Sun UTC)
+function isWeekend(){const d=new Date().getUTCDay();return d===0||d===6;}
 
 // ── INDICATOR UTILITIES (defined outside component — not recreated on every render) ──
 function calcRSI(data,period=14){
@@ -961,11 +966,16 @@ function TerminalFull(){
     "Content-Type": "application/json",
   });
 
+  const[cfgSaved,setCfgSaved]=useState(false); // visual save feedback
+
   // save config — reads from uncontrolled refs so no focus lost on mobile
   const saveConfig=()=>{
     const c=getCfgValues();
     try{localStorage.setItem("juno_cfg",JSON.stringify(c));}catch{}
-    setCfg(c); addLog("info","Configuration saved ✓");
+    setCfg(c);
+    setCfgSaved(true);
+    addLog("info","Configuration saved ✓");
+    setTimeout(()=>setCfgSaved(false),2500);
   };
 
   // FIX: silent auto-reconnect — tries to re-auth before giving up
@@ -1002,7 +1012,7 @@ function TerminalFull(){
       addLog("info",`Session tokens captured — CST: ${cst?"✓":"missing"}, SecToken: ${secToken?"✓":"missing"}`);
       setConnected(true); addLog("trade","Connected ✓ — Capital.com Demo active");
       startPriceFeed(v.apikey);
-      await fetchAccount(v.apikey);
+      await fetchAccount(v.apikey,{logIt:true});
       startAccountPoll(v.apikey); // FIX: keep account refreshing
     }catch(e){
       addLog("err","Connection failed: "+e.message); setConnected(false);
@@ -1045,7 +1055,7 @@ function TerminalFull(){
 
   // FIX: Correct account field mapping — Capital.com returns balance/equity inside accounts[].balance.balance etc.
   // or as top-level fields depending on endpoint. We try both shapes.
-  const fetchAccount=async(apiKey)=>{
+  const fetchAccount=async(apiKey,options={})=>{
     try{
       const r=await fetch(`${BASE_URL}/api/v1/accounts`,{headers:capHeaders(apiKey)});
       if(r.status===401){await silentReconnect();return;}
@@ -1068,7 +1078,8 @@ function TerminalFull(){
           pnl:(pnlV>=0?"+$":"−$")+Math.abs(pnlV).toFixed(2),
           dd:"—"
         });
-        addLog("info",`Account loaded — Balance: $${balV.toFixed(2)}`);
+        // only log on first load (called directly from connect), not on poll refreshes
+        if(options?.logIt) addLog("info",`Account loaded — Balance: $${balV.toFixed(2)}`);
       }
     }catch(e){ addLog("warn","Account error: "+e.message); }
   };
@@ -1173,10 +1184,17 @@ function TerminalFull(){
       },30000);
 
     }catch(e){
-      addLog("warn","Data fetch failed: "+e.message+" — using last known price.");
-      setInds(i=>({...i,bid:priceRef.current?.toString()||"—",sentiment:"Waiting",entry:"No data",grid:"—"}));
-      setSignal("MONITORING"); setSignalDir(0);
-      setRunning(true);
+      const is404=e.message.includes("404");
+      if(is404){
+        addLog("err",`Candle fetch failed (404) — epic "${activeEpic()}" not found on Capital.com demo. Check pair availability.`);
+        setSignal("NO SIGNAL"); setSignalDir(0);
+        setRunning(false);
+      } else {
+        addLog("warn","Data fetch failed: "+e.message+" — using last known price.");
+        setInds(i=>({...i,bid:priceRef.current?.toString()||"—",sentiment:"Waiting",entry:"No data",grid:"—"}));
+        setSignal("MONITORING"); setSignalDir(0);
+        setRunning(true);
+      }
     }finally{
       setBotLoading(false);
     }
@@ -1284,13 +1302,32 @@ function TerminalFull(){
 
             {/* Pair selector */}
             <TLabel>Select Pair</TLabel>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:11}}>
-              {PAIRS.map((p,i)=>(
-                <button key={p.epic} onClick={()=>{if(running){addLog("warn","Stop the bot before switching pairs.");return;}setPair(i);}} style={{padding:"9px 4px",background:pair===i?`${TC}18`:"none",border:`1px solid ${pair===i?TC:G.border}`,borderRadius:G.rs,color:pair===i?TC:G.textSub,fontSize:10,fontWeight:pair===i?700:400,cursor:"pointer",fontFamily:M,letterSpacing:0.5,transition:"all 0.2s"}}>
-                  {p.label}
-                </button>
-              ))}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
+              {PAIRS.map((p,i)=>{
+                const weekend=isWeekend()&&!p.alwaysOpen;
+                return(
+                  <button key={p.epic} onClick={()=>{
+                    if(running){stopBot();addLog("info","Bot auto-stopped — pair changed.");}
+                    setPair(i);
+                    setPrice(null); setPriceDir(0); // clear stale price immediately
+                    // restart price feed on new epic if connected
+                    if(connected&&getCfgValues().apikey){
+                      if(tickRef.current){clearInterval(tickRef.current);tickRef.current=null;}
+                      startPriceFeed(getCfgValues().apikey);
+                    }
+                  }} style={{padding:"8px 2px",background:pair===i?`${TC}18`:"none",border:`1px solid ${pair===i?TC:weekend?G.red+"44":G.border}`,borderRadius:G.rs,color:pair===i?TC:weekend?G.textDim:G.textSub,fontSize:9,fontWeight:pair===i?700:400,cursor:"pointer",fontFamily:M,letterSpacing:0.3,transition:"all 0.2s",position:"relative"}}>
+                    {p.label}
+                    {weekend&&<div style={{fontSize:6,color:G.red,marginTop:2,letterSpacing:0.3}}>CLOSED</div>}
+                    {p.alwaysOpen&&<div style={{fontSize:6,color:G.green,marginTop:2,letterSpacing:0.3}}>24/7</div>}
+                  </button>
+                );
+              })}
             </div>
+            {isWeekend()&&!PAIRS[pair]?.alwaysOpen&&(
+              <div style={{background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.rs,padding:"9px 12px",marginBottom:10,fontSize:10,color:G.red,lineHeight:1.6}}>
+                ⚠ Market closed — weekend. {PAIRS[pair]?.label} trades Mon–Fri. Switch to BTC/USD for 24/7 trading.
+              </div>
+            )}
 
             {/* Bot selector */}
             <TLabel>Select Bot</TLabel>
@@ -1497,9 +1534,10 @@ function TerminalFull(){
               ))}
             </TCard>
 
-            <button onClick={saveConfig} style={{width:"100%",padding:14,background:`linear-gradient(135deg,${G.gold},#c8861a)`,border:"none",borderRadius:G.rs,color:"#000",fontSize:11,fontWeight:700,letterSpacing:2,cursor:"pointer",fontFamily:M,marginBottom:14}}>
-              SAVE CONFIGURATION
+            <button onClick={saveConfig} style={{width:"100%",padding:14,background:cfgSaved?`linear-gradient(135deg,${G.green},#16a34a)`:`linear-gradient(135deg,${G.gold},#c8861a)`,border:"none",borderRadius:G.rs,color:"#000",fontSize:11,fontWeight:700,letterSpacing:2,cursor:"pointer",fontFamily:M,marginBottom:6,transition:"background 0.3s"}}>
+              {cfgSaved?"✓  SAVED!":"SAVE CONFIGURATION"}
             </button>
+            {cfgSaved&&<div style={{fontSize:10,color:G.green,textAlign:"center",marginBottom:10,letterSpacing:1}}>Settings saved to device storage</div>}
 
             {/* MT5 desktop */}
             <TCard style={{background:G.surface}}>
