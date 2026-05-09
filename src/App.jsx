@@ -885,8 +885,7 @@ function TerminalFull(){
   const[inds,setInds]=useState({rsi:"—",ema9:"—",closeEma:"—",bid:"—",buyStack:0,sellStack:0,lastBuy:"—",lastSell:"—",lot:"—",sentiment:"—",entry:"—",grid:"—",stackRoom:"—",dayDD:"—",
     peFast:"—",peSlow:"—",peAtr:"—",peTrend:"—",pePullback:"—",peEngulf:"—",peSession:"—",peReason:"—"});
   // config — uncontrolled refs to prevent keyboard dismissal on re-render (mobile fix)
-  const cfgInit=useRef(()=>{ try{return JSON.parse(localStorage.getItem("juno_cfg")||"{}");}catch{return {};}})();
-  const[cfg,setCfg]=useState(cfgInit);
+  const[cfg,setCfg]=useState(()=>{ try{return JSON.parse(localStorage.getItem("juno_cfg")||"{}");}catch{return {};} });
   const cfgEmailRef=useRef(null);
   const cfgApiKeyRef=useRef(null);
   const cfgPasswordRef=useRef(null);
@@ -1761,18 +1760,13 @@ function AuthModal({onAuth,onClose}){
   );
 }
 
-// ── ADMIN PANEL REMOVED ───────────────────────────────────────────────────────
-// All content management is now done directly in Supabase Table Editor.
-// See ADMIN_GUIDE below for instructions.
-// The hidden "Admin Panel" menu entry still exists but now opens the Supabase dashboard.
-
+// ── ADMIN LOGIN GATE ─────────────────────────────────────────────────────────
 function AdminLogin({onSuccess,onClose}){
   const[pass,setPass]=useState(""); const[err,setErr]=useState(false);
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:250,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)"}}>
-      <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:26,width:"100%",maxWidth:320}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.gold,marginBottom:6}}>Admin Access</div>
-        <div style={{fontSize:12,color:G.textSub,marginBottom:18,lineHeight:1.6}}>Content is now managed via Supabase. Enter the admin password to open the dashboard.</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:250,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)"}}>
+      <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:26,width:"100%",maxWidth:300}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.gold,marginBottom:18}}>Admin Access</div>
         <FI value={pass} onChange={v=>{setPass(v);setErr(false);}} placeholder="Password" type="password" style={{marginBottom:err?8:14}}/>
         {err&&<div style={{color:G.red,fontSize:12,marginBottom:12}}>Incorrect password.</div>}
         <div style={{display:"flex",gap:9}}>
@@ -1784,13 +1778,145 @@ function AdminLogin({onSuccess,onClose}){
   );
 }
 
-// Admin "panel" now just opens Supabase Table Editor in a new tab
+// ── ADMIN PANEL PAGE ──────────────────────────────────────────────────────────
 function AdminPanel({st,update,addItem,removeItem,onClose}){
-  useEffect(()=>{
-    window.open("https://supabase.com/dashboard/project/gongzbdpfbxkaypfwkht/editor","_blank");
-    onClose();
-  },[]);
-  return null;
+  const[tab,setTab]=useState("bias");
+  const[wb,setWb]=useState(st.weeklyBias);
+  const[db,setDb]=useState(st.dailyBias);
+  const[nfp,setNfp]=useState(st.nfpSignal);
+  const[fomc,setFomc]=useState(st.fomcSignal);
+  const[nn,setNn]=useState({headline:"",take:"",tag:"Gold"});
+  const[no,setNo]=useState({text:"",type:"announcement"});
+  const[aw,setAw]=useState({week:"",bias:"Bullish",result:"green",note:""});
+  const imgRef=useRef();
+  const TABS=["bias","events","news","notices","archive"];
+
+  const DB=({val,onChange})=>(
+    <div style={{display:"flex",gap:7,marginBottom:14}}>
+      {["Bullish","Bearish","Neutral"].map(d=>(
+        <button key={d} onClick={()=>onChange(d)} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${val===d?(d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold):G.border}`,background:val===d?(d==="Bullish"?G.greenBg:d==="Bearish"?G.redBg:G.goldBg):"none",color:val===d?(d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold):G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{d}</button>
+      ))}
+    </div>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:G.bgDeep,paddingBottom:40}}>
+      {/* Header */}
+      <div style={{padding:"14px 20px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:G.bgDeep,zIndex:10}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,color:G.gold}}>Admin · RegimeEdge</div>
+        <button onClick={onClose} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:8,color:G.textSub,cursor:"pointer",fontSize:13,padding:"5px 12px",fontFamily:"inherit",fontWeight:700}}>← Close</button>
+      </div>
+      {/* Tabs */}
+      <div style={{display:"flex",overflowX:"auto",borderBottom:`1px solid ${G.border}`,padding:"0 14px"}}>
+        {TABS.map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:`2px solid ${tab===t?G.gold:"transparent"}`,color:tab===t?G.gold:G.textSub,fontSize:11,fontWeight:700,padding:"11px 12px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",textTransform:"capitalize"}}>{t}</button>)}
+      </div>
+      <div style={{padding:18}}>
+
+        {tab==="bias"&&<>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Weekly Bias</div>
+          <DB val={wb.direction} onChange={d=>setWb(b=>({...b,direction:d,dayLabel:`${d} Week`}))}/>
+          <FTA value={wb.body} onChange={v=>setWb(b=>({...b,body:v}))} placeholder="Weekly analysis..." rows={4}/>
+          <div style={{height:10}}/>
+          <FI value={wb.updatedAt} onChange={v=>setWb(b=>({...b,updatedAt:v}))} placeholder="Updated label e.g. Monday, May 5" style={{marginBottom:9}}/>
+          <FI value={wb.updatedNote} onChange={v=>setWb(b=>({...b,updatedNote:v}))} placeholder="Wednesday update note (optional)" style={{marginBottom:11}}/>
+          <button onClick={()=>imgRef.current.click()} style={{width:"100%",padding:12,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:wb.image?G.green:G.textSub,fontSize:13,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>{wb.image?"✓ Chart uploaded":"📷 Upload TradingView chart"}</button>
+          <input ref={imgRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setWb(b=>({...b,image:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
+          {wb.image&&<button onClick={()=>setWb(b=>({...b,image:null}))} style={{background:"none",border:"none",color:G.red,fontSize:12,cursor:"pointer",marginBottom:10,fontFamily:"inherit"}}>Remove image</button>}
+          <Btn onClick={()=>{update("weeklyBias",{...wb,postedAt:new Date().toISOString()});alert("Weekly bias saved!");}} style={{width:"100%"}}>Save Weekly Bias</Btn>
+          <Div/>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Daily Bias</div>
+          <DB val={db.direction} onChange={d=>setDb(b=>({...b,direction:d,dayLabel:`${d} Day`}))}/>
+          <FTA value={db.body} onChange={v=>setDb(b=>({...b,body:v}))} placeholder="Daily note..." rows={3}/>
+          <div style={{height:10}}/>
+          <FI value={db.updatedAt} onChange={v=>setDb(b=>({...b,updatedAt:v}))} placeholder="Updated at e.g. Today, 08:00 AM" style={{marginBottom:11}}/>
+          <Btn onClick={()=>{update("dailyBias",{...db,postedAt:new Date().toISOString()});alert("Daily bias saved!");}} style={{width:"100%"}}>Save Daily Bias</Btn>
+        </>}
+
+        {tab==="events"&&<>
+          {[["NFP Signal",nfp,setNfp,"nfpSignal"],["FOMC Signal",fomc,setFomc,"fomcSignal"]].map(([label,sig,setSig,key])=>(
+            <div key={key}>
+              <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>{label}</div>
+              <div style={{display:"flex",gap:7,marginBottom:11}}>
+                {["Bullish Gold","Bearish Gold","Neutral"].map(p=>(
+                  <button key={p} onClick={()=>setSig(s=>({...s,prediction:p}))} style={{flex:1,padding:8,borderRadius:8,border:`1px solid ${sig.prediction===p?G.gold:G.border}`,background:sig.prediction===p?G.goldBg:"none",color:sig.prediction===p?G.gold:G.textSub,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
+                ))}
+              </div>
+              <FTA value={sig.body} onChange={v=>setSig(s=>({...s,body:v}))} placeholder="Signal analysis..." rows={3}/>
+              <div style={{height:9}}/>
+              <FI value={sig.countdownTo} onChange={v=>setSig(s=>({...s,countdownTo:v}))} placeholder="ISO date e.g. 2026-06-05T12:30:00Z" style={{marginBottom:9}}/>
+              <FI value={sig.eventDate} onChange={v=>setSig(s=>({...s,eventDate:v}))} placeholder="Event date e.g. 2026-06-05 (for auto-expiry)" style={{marginBottom:9}}/>
+              <FI value={sig.posted} onChange={v=>setSig(s=>({...s,posted:v}))} placeholder="Post label e.g. Posted tonight before release" style={{marginBottom:9}}/>
+              <FI value={sig.result} onChange={v=>setSig(s=>({...s,result:v}))} placeholder="Post-event result (fill after release)" style={{marginBottom:11}}/>
+              <div style={{display:"flex",gap:9,marginBottom:22}}>
+                <Btn onClick={()=>{update(key,{...sig,active:true,postedAt:new Date().toISOString()});setSig(s=>({...s,active:true}));alert("Signal activated!");}} style={{flex:1}}>Activate</Btn>
+                <Btn variant="danger" onClick={()=>{update(key,{...sig,active:false});setSig(s=>({...s,active:false}));alert("Deactivated.");}} style={{flex:1}}>Deactivate</Btn>
+              </div>
+              <Div/>
+            </div>
+          ))}
+        </>}
+
+        {tab==="news"&&<>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Post News</div>
+          <FI value={nn.headline} onChange={v=>setNn(n=>({...n,headline:v}))} placeholder="News headline" style={{marginBottom:9}}/>
+          <FTA value={nn.take} onChange={v=>setNn(n=>({...n,take:v}))} placeholder="RegimeEdge take..." rows={2}/>
+          <div style={{height:9}}/>
+          <select value={nn.tag} onChange={e=>setNn(n=>({...n,tag:e.target.value}))} style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:11,color:G.text,fontSize:13,outline:"none",marginBottom:11}}>
+            {["Gold","USD","FOMC","NFP","Risk","Macro"].map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+          <Btn onClick={()=>{if(!nn.headline)return;addItem("news",{...nn,id:Date.now(),time:"Just now"});setNn({headline:"",take:"",tag:"Gold"});alert("News posted!");}} style={{width:"100%",marginBottom:22}}>Post News</Btn>
+          {st.news.map(n=>(
+            <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:12,color:G.text,flex:1,marginRight:9,lineHeight:1.5}}>{n.headline}</div>
+              <Btn variant="danger" onClick={()=>removeItem("news",n.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
+            </div>
+          ))}
+        </>}
+
+        {tab==="notices"&&<>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Post Notice</div>
+          <FTA value={no.text} onChange={v=>setNo(n=>({...n,text:v}))} placeholder="Notice text..." rows={3}/>
+          <div style={{height:9}}/>
+          <select value={no.type} onChange={e=>setNo(n=>({...n,type:e.target.value}))} style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:11,color:G.text,fontSize:13,outline:"none",marginBottom:11}}>
+            {["announcement","exchange","promo"].map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+          <Btn onClick={()=>{if(!no.text)return;addItem("notices",{...no,id:Date.now(),time:"Just now"});setNo({text:"",type:"announcement"});alert("Notice posted!");}} style={{width:"100%",marginBottom:22}}>Post Notice</Btn>
+          {st.notices.map(n=>(
+            <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:12,color:G.text,flex:1,marginRight:9}}>{n.text}</div>
+              <Btn variant="danger" onClick={()=>removeItem("notices",n.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
+            </div>
+          ))}
+        </>}
+
+        {tab==="archive"&&<>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Add Week</div>
+          <FI value={aw.week} onChange={v=>setAw(a=>({...a,week:v}))} placeholder="Week range e.g. May 5 – May 9" style={{marginBottom:9}}/>
+          <div style={{display:"flex",gap:7,marginBottom:9}}>
+            {["Bullish","Bearish","Neutral"].map(d=>(
+              <button key={d} onClick={()=>setAw(a=>({...a,bias:d}))} style={{flex:1,padding:8,borderRadius:8,border:`1px solid ${aw.bias===d?G.gold:G.border}`,background:aw.bias===d?G.goldBg:"none",color:aw.bias===d?G.gold:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>{d}</button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:9,marginBottom:9}}>
+            {["green","red"].map(r=>(
+              <button key={r} onClick={()=>setAw(a=>({...a,result:r}))} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${aw.result===r?(r==="green"?G.green:G.red):G.border}`,background:aw.result===r?(r==="green"?G.greenBg:G.redBg):"none",color:aw.result===r?(r==="green"?G.green:G.red):G.textSub,fontSize:13,cursor:"pointer"}}>{r==="green"?"🟢 Green":"🔴 Red"}</button>
+            ))}
+          </div>
+          <FI value={aw.note} onChange={v=>setAw(a=>({...a,note:v}))} placeholder="Result note" style={{marginBottom:11}}/>
+          <Btn onClick={()=>{if(!aw.week)return;addItem("archiveWeeks",{...aw,id:Date.now()});setAw({week:"",bias:"Bullish",result:"green",note:""});alert("Week added!");}} style={{width:"100%"}}>Add to Archive</Btn>
+          <Div/>
+          <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>Archive ({st.archiveWeeks.length} weeks)</div>
+          {st.archiveWeeks.map(w=>(
+            <div key={w.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:12,color:G.text,flex:1,marginRight:9}}>{w.week} · {w.bias}</div>
+              <Btn variant="danger" onClick={()=>removeItem("archiveWeeks",w.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
+            </div>
+          ))}
+        </>}
+
+      </div>
+    </div>
+  );
 }
 
 // ── SOCIAL ICONS ──────────────────────────────────────────────────────────────
@@ -2365,44 +2491,49 @@ export default function App(){
       </div>
 
       {/* Email Verification Banner */}
-      {user&&!user.emailConfirmed&&(
+      {user&&!user.emailConfirmed&&!showAdmin&&(
         <div style={{background:"rgba(212,175,55,0.1)",borderBottom:`1px solid ${G.gold}33`,padding:"10px 18px",display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:14}}>📧</span>
           <div style={{flex:1,fontSize:12,color:G.gold,lineHeight:1.5}}>Verify your email to unlock all features.</div>
         </div>
       )}
 
-      {/* Page */}
-      <div style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
-        {pages[page]||pages.home}
+      {/* Page — hidden while admin panel is open */}
+      {showAdmin?(
+        <AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={()=>setShowAdmin(false)}/>
+      ):(
+        <div style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
+          {pages[page]||pages.home}
 
-        {/* Footer */}
-        <div style={{padding:"26px 22px 18px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:G.gold,marginBottom:5,textAlign:"center"}}>RegimeEdge</div>
-          <div style={{fontSize:12,color:G.textDim,marginBottom:16,textAlign:"center"}}>Macro intelligence. Not signals — reasoning.</div>
-          <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
-            <SocialLink href="https://t.me/RegimeEdge" label="Telegram" color="#229ED9" icon="✈"/>
-            <SocialLink href="https://www.youtube.com/@RegimeEdge" label="YouTube" color="#FF0000" icon="▶"/>
-          </div>
-          <div style={{fontSize:10,color:G.textDim,textAlign:"center"}}>
-            © 2025 RegimeEdge · A platform by <span style={{color:G.gold,fontWeight:700}}>J</span> · All rights reserved
+          {/* Footer */}
+          <div style={{padding:"26px 22px 18px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:G.gold,marginBottom:5,textAlign:"center"}}>RegimeEdge</div>
+            <div style={{fontSize:12,color:G.textDim,marginBottom:16,textAlign:"center"}}>Macro intelligence. Not signals — reasoning.</div>
+            <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+              <SocialLink href="https://t.me/RegimeEdge" label="Telegram" color="#229ED9" icon="✈"/>
+              <SocialLink href="https://www.youtube.com/@RegimeEdge" label="YouTube" color="#FF0000" icon="▶"/>
+            </div>
+            <div style={{fontSize:10,color:G.textDim,textAlign:"center"}}>
+              © 2025 RegimeEdge · A platform by <span style={{color:G.gold,fontWeight:700}}>J</span> · All rights reserved
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Bottom Nav */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(17,19,21,0.97)",backdropFilter:"blur(14px)",borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-around",padding:"9px 0 max(14px,env(safe-area-inset-bottom))",zIndex:98}}>
-        {BNAV.map(item=>(
-          <button key={item.id} onClick={()=>setPage(item.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"3px 8px",minWidth:0}}>
-            <span style={{fontSize:17,color:page===item.id?G.gold:G.textDim,transition:"color 0.2s"}}>{item.icon}</span>
-            <span style={{fontSize:9,color:page===item.id?G.gold:G.textDim,letterSpacing:0.5,transition:"color 0.2s",whiteSpace:"nowrap"}}>{item.label}</span>
-          </button>
-        ))}
-      </div>
+      {/* Bottom Nav — hidden in admin */}
+      {!showAdmin&&(
+        <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(17,19,21,0.97)",backdropFilter:"blur(14px)",borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-around",padding:"9px 0 max(14px,env(safe-area-inset-bottom))",zIndex:98}}>
+          {BNAV.map(item=>(
+            <button key={item.id} onClick={()=>setPage(item.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"3px 8px",minWidth:0}}>
+              <span style={{fontSize:17,color:page===item.id?G.gold:G.textDim,transition:"color 0.2s"}}>{item.icon}</span>
+              <span style={{fontSize:9,color:page===item.id?G.gold:G.textDim,letterSpacing:0.5,transition:"color 0.2s",whiteSpace:"nowrap"}}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {showAuth&&<AuthModal onAuth={handleAuth} onClose={()=>setShowAuth(false)}/>}
       {showAdminLogin&&<AdminLogin onSuccess={()=>{setShowAdminLogin(false);setShowAdmin(true);}} onClose={()=>setShowAdminLogin(false)}/>}
-      {showAdmin&&<AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={()=>setShowAdmin(false)}/>}
     </div>
   );
 }
