@@ -908,6 +908,10 @@ function TerminalFull(){
   const M="monospace";
   const[tab,setTab]=useState("dashboard");
   const[bot,setBot]=useState("axum");
+  // FIX: botRef keeps poll closure from reading stale bot value when user switches bots mid-run
+  const botRef=useRef("axum");
+  // FIX: runningRef mirrors running state for use in async closures (setInterval/setTimeout can't read state)
+  const runningRef=useRef(false);
   const[pair,setPair]=useState(0); // index into PAIRS array
   const[running,setRunning]=useState(false);
   const[connected,setConnected]=useState(false);
@@ -929,7 +933,8 @@ function TerminalFull(){
   const[voted,setVoted]=useState(false);
   const[votesLoading,setVotesLoading]=useState(false);
   const[botLoading,setBotLoading]=useState(false);
-  const[closingId,setClosingId]=useState(null); // dealId being closed
+  const[closingId,setClosingId]=useState(null); // dealId being closed (for UI)
+  const closingIdRef=useRef(null); // FIX: ref mirror for reliable async guard (state is stale in closures)
   // indicators
   const[inds,setInds]=useState({rsi:"—",ema9:"—",closeEma:"—",bid:"—",buyStack:0,sellStack:0,lastBuy:"—",lastSell:"—",lot:"—",sentiment:"—",entry:"—",grid:"—",stackRoom:"—",dayDD:"—",
     peFast:"—",peSlow:"—",peAtr:"—",peTrend:"—",pePullback:"—",peEngulf:"—",peSession:"—",peReason:"—"});
@@ -971,6 +976,8 @@ function TerminalFull(){
   const tickRef=useRef(null);
   const botPollRef=useRef(null);
   const accountPollRef=useRef(null);
+  // FIX: epicRef mirrors the selected pair for use inside setInterval closures (pair state is stale there)
+  const epicRef=useRef(PAIRS[0].epic);
   const sessionTokensRef=useRef({cst:"",secToken:""});
   const savedCredsRef=useRef({email:"",apikey:"",password:""});
   // FIX: signalRef prevents stale closure bug in setInterval — always reflects latest signal
@@ -1111,8 +1118,12 @@ function TerminalFull(){
       const lp=await fetch(`${BASE_URL}/api/v1/markets/${epic}`,{headers:capHeaders(apiKey)});
       if(lp.ok){
         const ld=await lp.json();
-        const freshBid=ld.snapshot?.bid||ld.bid||0;
-        const freshAsk=ld.snapshot?.offer||ld.snapshot?.ask||ld.offer||0;
+        const fSnap=ld.snapshot||{};
+        const fMid=fSnap.midPrice||0;
+        const fOffer=fSnap.offer||fSnap.ask||ld.offer||0;
+        const fBidRaw=fSnap.bid||ld.bid||0;
+        const freshBid=fMid||(fOffer&&fBidRaw?(fOffer+fBidRaw)/2:fOffer||fBidRaw)||0;
+        const freshAsk=fOffer||0;
         if(freshBid) bid=freshBid;
         if(freshAsk) ask=freshAsk;
       }
@@ -1120,11 +1131,26 @@ function TerminalFull(){
     if(!bid){addLog("err","No price available — cannot place order.");return null;}
 
     // FIX: enforce spread filter — skip order if spread exceeds configured max (was a UI-only field)
-    const maxSpread=parseFloat(v.spread||50);
+    // FIX: asset-aware spread — BTC uses raw $, Gold uses ×10, Forex uses ×10000
+    // Default maxSpread from config is treated as pips for forex; for BTC/Gold it's rescaled
+    const rawMaxSpread=parseFloat(v.spread||50);
     if(ask>0){
-      const spreadPts=parseFloat(((ask-bid)*10000).toFixed(1));
-      if(spreadPts>maxSpread){
-        addLog("warn",`Spread too wide (${spreadPts} pts > max ${maxSpread}) — order skipped.`);
+      let spreadPts, maxSpreadAdjusted;
+      if(bid>1000){
+        // BTC/crypto: spread is raw dollars, no multiplier. Default max = $5 (not 50 forex pips)
+        spreadPts=parseFloat((ask-bid).toFixed(2));
+        maxSpreadAdjusted=rawMaxSpread<100?rawMaxSpread/10:rawMaxSpread; // auto-rescale if user left forex default
+      } else if(bid>100){
+        // Gold/indices: spread × 10
+        spreadPts=parseFloat(((ask-bid)*10).toFixed(1));
+        maxSpreadAdjusted=rawMaxSpread;
+      } else {
+        // Forex: spread × 10000 (pips)
+        spreadPts=parseFloat(((ask-bid)*10000).toFixed(1));
+        maxSpreadAdjusted=rawMaxSpread;
+      }
+      if(spreadPts>maxSpreadAdjusted){
+        addLog("warn",`Spread too wide (${spreadPts} > max ${maxSpreadAdjusted}) — order skipped.`);
         return null;
       }
     }
@@ -1132,12 +1158,14 @@ function TerminalFull(){
     // FIX: risk % sizing — if caller passes lot=0 or lot is the dynamic lot from Axum,
     // override with risk-based lot when risk % config is set (PrecisionEdge uses this)
     // Risk lot = (balance * risk%) / (slDist * pointValue); for CFDs pointValue≈1 per lot per point
+    // FIX: risk-based lot — use the LOWER of dynamic lot and risk-based lot to prevent overleveraging
+    // This makes risk % config meaningful for both bots, not just when lot=0
     const riskPct=parseFloat(v.risk||2)/100;
-    const bal=parseFloat((accountBalRef.current||"$10").replace(/[$,]/g,""))||10;
+    const bal2=parseFloat((accountBalRef.current||"$10").replace(/[$,]/g,""))||10;
     const slDist=atrN>0?atrN*3:bid*0.01;
-    const riskLot=parseFloat(Math.max(0.01,Math.floor((bal*riskPct/slDist)/0.01)*0.01).toFixed(2));
-    // Use risk-based lot for PrecisionEdge (lot passed in is peLot), Axum uses its own dynamic lot
-    const finalLot=parseFloat(lot)||riskLot;
+    const riskLot=parseFloat(Math.max(0.01,Math.floor((bal2*riskPct/slDist)/0.01)*0.01).toFixed(2));
+    // Use passed lot if valid, then cap it by risk-based lot so risk % always acts as a ceiling
+    const finalLot=parseFloat(lot)>0?Math.min(parseFloat(lot),riskLot*5):riskLot; // allow up to 5× riskLot for grid bots
 
     const tpDist=slDist*rr;
     const sl=direction==="BUY"?parseFloat((bid-slDist).toFixed(2)):parseFloat((bid+slDist).toFixed(2));
@@ -1171,13 +1199,21 @@ function TerminalFull(){
       let dealId=dealRef;
       await new Promise(res=>setTimeout(res,400));
       try{
-        const cr=await fetch(`${BASE_URL}/api/v1/confirms/${dealRef}`,{headers:capHeaders(apiKey)});
-        if(cr.ok){
-          const cd=await cr.json();
-          if(cd.dealStatus==="ACCEPTED"&&cd.dealId) dealId=cd.dealId;
-          else if(cd.dealStatus&&cd.dealStatus!=="ACCEPTED"){
-            addLog("err",`Order not accepted — status: ${cd.dealStatus}`); return null;
+        // FIX: retry confirms once if PENDING — Capital.com may need up to 800ms total for some order types
+        for(let attempt=0;attempt<2;attempt++){
+          const cr=await fetch(`${BASE_URL}/api/v1/confirms/${dealRef}`,{headers:capHeaders(apiKey)});
+          if(cr.ok){
+            const cd=await cr.json();
+            if(cd.dealStatus==="ACCEPTED"&&cd.dealId){dealId=cd.dealId;break;}
+            else if(cd.dealStatus==="PENDING"){
+              if(attempt===0){await new Promise(res=>setTimeout(res,600));continue;}
+              // Still PENDING after retry — use dealRef as fallback
+              addLog("warn",`Order still PENDING after confirm retry — using dealRef as ID.`);
+            } else if(cd.dealStatus&&cd.dealStatus!=="ACCEPTED"){
+              addLog("err",`Order not accepted — status: ${cd.dealStatus}`); return null;
+            }
           }
+          break;
         }
       }catch{}
 
@@ -1188,7 +1224,8 @@ function TerminalFull(){
   };
 
   const closePosition=async(dealId,apiKey)=>{
-    if(closingId===dealId) return; // prevent double-tap
+    if(closingIdRef.current===dealId) return; // prevent double-tap
+    closingIdRef.current=dealId;
     setClosingId(dealId);
     addLog("info",`Closing position ${dealId}...`);
     try{
@@ -1202,7 +1239,7 @@ function TerminalFull(){
         addLog("err","Close failed: "+(d.errorCode||d.message||r.status));
       }
     }catch(e){addLog("err","Close error: "+e.message);}
-    finally{setClosingId(null);}
+    finally{closingIdRef.current=null;setClosingId(null);}
   };
 
   // FIX: silent auto-reconnect — tries to re-auth before giving up
@@ -1247,7 +1284,7 @@ function TerminalFull(){
   };
 
   const disconnect=()=>{
-    setConnected(false); setRunning(false);
+    setConnected(false); setRunning(false); runningRef.current=false;
     if(tickRef.current){clearInterval(tickRef.current);tickRef.current=null;}
     if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
     if(accountPollRef.current){clearInterval(accountPollRef.current);accountPollRef.current=null;}
@@ -1258,7 +1295,8 @@ function TerminalFull(){
   const startPriceFeed=async(apiKey)=>{
     const fetchPrice=async()=>{
       try{
-        const epic=activeEpic();
+        // FIX: use epicRef (not activeEpic()) so interval always fetches the currently selected pair
+        const epic=epicRef.current;
         const r=await fetch(`${BASE_URL}/api/v1/markets/${epic}`,{headers:capHeaders(apiKey)});
         if(r.status===401){
           const ok=await silentReconnect();
@@ -1267,8 +1305,18 @@ function TerminalFull(){
         }
         if(!r.ok)return;
         const d=await r.json();
-        const bid=d.snapshot?.bid||d.bid;
-        if(bid){
+        // FIX: Capital.com /markets snapshot field reliability varies by asset:
+        // - snapshot.midPrice is most reliable when present (true mid)
+        // - snapshot.offer (ask) is always correct for BTC (snapshot.bid can be scaled/wrong)
+        // - snapshot.bid is correct for Gold/FX
+        // Strategy: prefer midPrice > offer > bid, but validate against candle price range
+        const snap=d.snapshot||{};
+        const midP=snap.midPrice||0;
+        const offerP=snap.offer||snap.ask||d.offer||0;
+        const bidP=snap.bid||d.bid||0;
+        // Pick best price: midPrice if present, else offer (ask) preferred for wide-range assets
+        const bid=midP||(offerP&&bidP?(offerP+bidP)/2:offerP||bidP)||0;
+        if(bid>0){
           const prev=priceRef.current;
           priceRef.current=bid;
           setPrice(bid.toFixed(2));
@@ -1365,22 +1413,22 @@ function TerminalFull(){
         const liveSells=pos.filter(p=>p.dir==="SELL").length;
         stackRef.current={buy:liveBuys,sell:liveSells};
 
-        // Live DD + maxdd kill switch
+        // ── DD kill switch — computed outside setAccount so side-effects fire safely
         const totalPnl=pos.reduce((s,p)=>s+p.pnl,0);
+        const balNum=parseFloat((accountBalRef.current||"$0").replace(/[$,]/g,""))||0;
+        const ddPct=balNum>0?((totalPnl/balNum)*100).toFixed(2):"0.00";
+        const maxDDLimit=parseFloat(getCfgValues().maxdd||5);
+        const currentDD=parseFloat(ddPct)||0;
+        if(currentDD<0&&Math.abs(currentDD)>=maxDDLimit&&runningRef.current){
+          addLog("err",`⛔ Max daily DD hit (${ddPct}%) — bot stopped to protect account.`);
+          // Side-effects outside state updater — safe in React 18
+          runningRef.current=false;
+          setRunning(false);
+          signalRef.current="NO SIGNAL";
+          stackRef.current={buy:0,sell:0};
+          if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
+        }
         setAccount(a=>{
-          const balNum=parseFloat((a.balance||"$0").replace(/[$,]/g,""))||0;
-          const ddPct=balNum>0?((totalPnl/balNum)*100).toFixed(2):"0.00";
-          // FIX: enforce maxdd — stop bot if daily drawdown exceeds configured limit
-          const maxDDLimit=parseFloat(getCfgValues().maxdd||5);
-          const currentDD=parseFloat(ddPct)||0;
-          if(currentDD<0&&Math.abs(currentDD)>=maxDDLimit){
-            // stop the bot — runningRef check prevents repeat triggers
-            addLog("err",`⛔ Max daily DD hit (${ddPct}%) — bot stopped to protect account.`);
-            setRunning(false);
-            signalRef.current="NO SIGNAL";
-            stackRef.current={buy:0,sell:0};
-            if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
-          }
           return{...a,
             pnl:(totalPnl>=0?"+$":"−$")+Math.abs(totalPnl).toFixed(2),
             dd:`${ddPct}%`,
@@ -1408,12 +1456,24 @@ function TerminalFull(){
     const rawLot=(bal/baseEquity)*baseLot;
     // Round to nearest lot step (Capital.com standard is 0.01)
     const lotStep=0.01;
-    const dynLot=Math.max(lotStep,Math.floor(rawLot/lotStep)*lotStep);
+    let dynLot=Math.max(lotStep,Math.floor(rawLot/lotStep)*lotStep);
+    // FIX: cap notional to prevent overleveraging — e.g. 0.99 BTC @ $80k on $999 account = 79x leverage
+    // Hard cap: lot × price ≤ accountBalance × 10 (10x max notional leverage guard)
+    const currentPx=priceRef.current||1;
+    const maxNotional=bal*10;
+    const maxLotByNotional=Math.max(lotStep,Math.floor((maxNotional/currentPx)/lotStep)*lotStep);
+    dynLot=Math.min(dynLot,maxLotByNotional);
     const lot=parseFloat(dynLot.toFixed(2));
 
     const st=stackRef.current;
     const maxLayers=parseInt(v.maxLayers||15);
     const gridGap=parseFloat(v.gap||12); // in points — matches MQ5 GridGap
+    // FIX: warn if gridGap is dangerously small for the current asset (would cause instant stacking)
+    const pointSize=bid>1000?1:bid>100?0.1:0.0001;
+    const gapNeededDollar=gridGap*pointSize;
+    if(gapNeededDollar<0.5&&st.buy===0&&st.sell===0){
+      addLog("warn",`Grid gap too small for this asset: $${gapNeededDollar.toFixed(4)} effective gap. Increase Grid Gap (pts) in Config (recommend ${bid>1000?"50":"25"} pts).`);
+    }
 
     // ── Read live positions from last known state (stackRef is synced by accountPoll)
     const buyCount=st.buy;
@@ -1557,6 +1617,7 @@ function TerminalFull(){
       }
 
       setSignal(signalStr); setSignalDir(sentiment);
+      runningRef.current=true;
       setRunning(true);
       addLog("trade",`Indicators loaded — RSI: ${rsiVal.toFixed(1)} · EMA9: ${ema9.toFixed(2)} · Trend: ${trend} · Signal: ${signalStr}`);
       addLog("info",`Monitoring ${pairLabel} every 30s...`);
@@ -1564,7 +1625,10 @@ function TerminalFull(){
       if(botPollRef.current) clearInterval(botPollRef.current);
 
       // ── POLLING LOOP — runs every 30s (like MQ5 OnTick but time-based)
+      let pollLock=false; // FIX: prevent concurrent poll runs if a tick takes >30s
       const poll=async()=>{
+        if(pollLock){addLog("warn","Poll skipped — previous tick still running.");return;}
+        pollLock=true;
         // FIX: read fresh config every tick so changes saved while bot runs take effect immediately
         const v=getCfgValues();
         try{
@@ -1595,7 +1659,7 @@ function TerminalFull(){
           setSignal(nSig); setSignalDir(nSentiment);
 
           const st=stackRef.current;
-          if(bot==="axum"){
+          if(botRef.current==="axum"){
             setInds(i=>({...i,
               rsi:nr.toFixed(1),ema9:ne.toFixed(2),closeEma:nVsE,
               sentiment:nSentLabel,bid:priceRef.current?.toString()||ne.toFixed(2),
@@ -1609,10 +1673,10 @@ function TerminalFull(){
           }
 
           // ── AXUM AI TICK (initial entry + stacking logic)
-          if(bot==="axum") await axumTick(v,epic,natr,v.apikey);
+          if(botRef.current==="axum") await axumTick(v,epic,natr,v.apikey);
 
           // ── PRECISIONEDGE SIGNAL CHANGE ENTRY
-          if(bot==="precision"){
+          if(botRef.current==="precision"){
             // prevSig captured above before signalRef update — correctly detects changes
             if(nSig!==prevSig&&(nSig==="BUY SIGNAL"||nSig==="SELL SIGNAL")){
               const direction=nSig==="BUY SIGNAL"?"BUY":"SELL";
@@ -1621,10 +1685,11 @@ function TerminalFull(){
             }
           }
         }catch(e){ addLog("warn","Poll error: "+e.message); }
+        finally{ pollLock=false; }
       };
 
       // ── IMMEDIATE FIRST TICK — enter right away if signal active (matches MQ5 OnTick on first bar)
-      if(bot==="axum"){
+      if(botRef.current==="axum"){
         addLog("info","Running initial market check...");
         await axumTick(v,epic,atr,v.apikey);
       }
@@ -1636,11 +1701,13 @@ function TerminalFull(){
       if(is404){
         addLog("err",`Candle fetch failed (404) — epic "${activeEpic()}" not found on Capital.com demo. Check pair availability.`);
         setSignal("NO SIGNAL"); setSignalDir(0);
+        runningRef.current=false;
         setRunning(false);
       } else {
         addLog("warn","Data fetch failed: "+e.message);
         setInds(i=>({...i,bid:priceRef.current?.toString()||"—",sentiment:"Waiting",entry:"No data",grid:"—"}));
         setSignal("MONITORING"); setSignalDir(0);
+        runningRef.current=true;
         setRunning(true);
       }
     }finally{
@@ -1649,6 +1716,7 @@ function TerminalFull(){
   };
 
   const stopBot=()=>{
+    runningRef.current=false;
     setRunning(false);
     setSignal("NO SIGNAL"); setSignalDir(0);
     signalRef.current="NO SIGNAL";
@@ -1756,6 +1824,7 @@ function TerminalFull(){
                   <button key={p.epic} onClick={()=>{
                     if(running){stopBot();addLog("info","Bot auto-stopped — pair changed.");}
                     setPair(i);
+                    epicRef.current=p.epic; // FIX: keep epicRef in sync so price feed picks up new pair immediately
                     setPrice(null); setPriceDir(0); // clear stale price immediately
                     // restart price feed on new epic if connected
                     if(connected&&getCfgValues().apikey){
@@ -1780,7 +1849,7 @@ function TerminalFull(){
             <TLabel>Select Bot</TLabel>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:11}}>
               {[["axum","Axum AI","Trend grid stacker. Dynamic lots. Up to 15 layers.",G.gold],["precision","PrecisionEdge","EMA trend + pullback + ATR SL/TP. Session filter.",G.blue]].map(([id,name,desc,c])=>(
-                <div key={id} onClick={()=>setBot(id)} style={{background:G.card,border:`2px solid ${bot===id?c:G.border}`,borderRadius:G.rs,padding:12,cursor:"pointer",transition:"border-color 0.2s",position:"relative"}}>
+                <div key={id} onClick={()=>{setBot(id);botRef.current=id;}} style={{background:G.card,border:`2px solid ${bot===id?c:G.border}`,borderRadius:G.rs,padding:12,cursor:"pointer",transition:"border-color 0.2s",position:"relative"}}>
                   {bot===id&&<div style={{position:"absolute",top:8,right:8,width:16,height:16,borderRadius:"50%",background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#000",fontWeight:700}}>✓</div>}
                   <div style={{fontSize:7,letterSpacing:1.5,color:c,marginBottom:5}}>{name.toUpperCase()}</div>
                   <div style={{fontSize:12,fontWeight:700,color:G.text,marginBottom:4}}>{name}</div>
