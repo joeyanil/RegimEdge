@@ -845,8 +845,19 @@ const PAIRS=[
   {label:"GBP/USD",epic:"GBPUSD", alwaysOpen:false},
 ];
 
-// Returns true if it's the weekend (Sat/Sun UTC)
-function isWeekend(){const d=new Date().getUTCDay();return d===0||d===6;}
+// Returns true if Forex/Gold market is closed (Fri 22:00 UTC → Sun 22:00 UTC)
+// FIX: was checking UTC day only (Sat/Sun) — wrong by ~22h on close (misses Fri night)
+// and ~22h on open (shows closed all Sunday when market opens at 22:00 Sunday UTC)
+function isWeekend(){
+  const now=new Date();
+  const day=now.getUTCDay(); // 0=Sun,1=Mon,...,5=Fri,6=Sat
+  const hour=now.getUTCHours();
+  // Closed: Friday >= 22:00 UTC through Sunday < 22:00 UTC
+  if(day===5&&hour>=22) return true;  // Friday night
+  if(day===6) return true;             // All Saturday
+  if(day===0&&hour<22) return true;   // Sunday until 22:00
+  return false;
+}
 
 // ── INDICATOR UTILITIES (defined outside component — not recreated on every render) ──
 function calcRSI(data,period=14){
@@ -928,11 +939,13 @@ function TerminalFull(){
   const cfgApiKeyRef=useRef(null);
   const cfgPasswordRef=useRef(null);
   const cfgBaseEquityRef=useRef(null);
+  const cfgBaseLotRef=useRef(null);
   const cfgMaxLayersRef=useRef(null);
   const cfgGapRef=useRef(null);
   const cfgRiskRef=useRef(null);
   const cfgMaxDDRef=useRef(null);
   const cfgSpreadRef=useRef(null);
+  const cfgProfitTargetRef=useRef(null);
   const cfgPeLotRef=useRef(null);
   const cfgPeRRRef=useRef(null);
   // helpers to read current ref values
@@ -941,11 +954,13 @@ function TerminalFull(){
     apikey:cfgApiKeyRef.current?.value||cfg.apikey||"",
     password:cfgPasswordRef.current?.value||cfg.password||"",
     baseEquity:cfgBaseEquityRef.current?.value||cfg.baseEquity||"10",
+    baseLot:cfgBaseLotRef.current?.value||cfg.baseLot||"0.01",
     maxLayers:cfgMaxLayersRef.current?.value||cfg.maxLayers||"8",
     gap:cfgGapRef.current?.value||cfg.gap||"2.5",
     risk:cfgRiskRef.current?.value||cfg.risk||"2",
     maxdd:cfgMaxDDRef.current?.value||cfg.maxdd||"5",
     spread:cfgSpreadRef.current?.value||cfg.spread||"50",
+    profitTarget:cfgProfitTargetRef.current?.value||cfg.profitTarget||"0.45",
     peLot:cfgPeLotRef.current?.value||cfg.peLot||"0.01",
     peRR:cfgPeRRRef.current?.value||cfg.peRR||"2",
   });
@@ -966,6 +981,10 @@ function TerminalFull(){
   const[lastTradeFired,setLastTradeFired]=useState(null);
   // Stack counters tracked in ref so they stay current inside polling closure
   const stackRef=useRef({buy:0,sell:0});
+  // FIX: these refs were used but never declared — caused silent crash on startBot
+  const axumIndRef=useRef({rsiN:50,closeVsEma:"—",sentiment:0});
+  const lastEntryRef=useRef({buy:0,sell:0});
+  const accountBalRef=useRef("$10");
   const BASE_URL="https://demo-api-capital.backend-capital.com";
 
   // FIX: active epic always in sync with selected pair
@@ -1080,19 +1099,51 @@ function TerminalFull(){
   // ── TRADE EXECUTION ─────────────────────────────────────────────────────────
   const placeOrder=async(direction,lot,atr,apiKey)=>{
     const epic=activeEpic();
-    const bid=priceRef.current||0;
-    if(!bid){addLog("err","No price available — cannot place order.");return;}
     const atrN=parseFloat(atr)||0;
     const v=getCfgValues();
     const rr=parseFloat(v.peRR||2);
-    // FIX: use 3× ATR (MINUTE_15 ATR is larger, gives Capital.com valid SL distance)
-    // Fallback: 1% of price if ATR is 0 or tiny
+
+    // FIX: fetch a fresh live price right before placing — priceRef can be 3s stale which causes
+    // "stoploss.minvalue" errors on fast-moving assets like BTC when SL is calculated off old price
+    let bid=priceRef.current||0;
+    let ask=0;
+    try{
+      const lp=await fetch(`${BASE_URL}/api/v1/markets/${epic}`,{headers:capHeaders(apiKey)});
+      if(lp.ok){
+        const ld=await lp.json();
+        const freshBid=ld.snapshot?.bid||ld.bid||0;
+        const freshAsk=ld.snapshot?.offer||ld.snapshot?.ask||ld.offer||0;
+        if(freshBid) bid=freshBid;
+        if(freshAsk) ask=freshAsk;
+      }
+    }catch{}
+    if(!bid){addLog("err","No price available — cannot place order.");return null;}
+
+    // FIX: enforce spread filter — skip order if spread exceeds configured max (was a UI-only field)
+    const maxSpread=parseFloat(v.spread||50);
+    if(ask>0){
+      const spreadPts=parseFloat(((ask-bid)*10000).toFixed(1));
+      if(spreadPts>maxSpread){
+        addLog("warn",`Spread too wide (${spreadPts} pts > max ${maxSpread}) — order skipped.`);
+        return null;
+      }
+    }
+
+    // FIX: risk % sizing — if caller passes lot=0 or lot is the dynamic lot from Axum,
+    // override with risk-based lot when risk % config is set (PrecisionEdge uses this)
+    // Risk lot = (balance * risk%) / (slDist * pointValue); for CFDs pointValue≈1 per lot per point
+    const riskPct=parseFloat(v.risk||2)/100;
+    const bal=parseFloat((accountBalRef.current||"$10").replace(/[$,]/g,""))||10;
     const slDist=atrN>0?atrN*3:bid*0.01;
+    const riskLot=parseFloat(Math.max(0.01,Math.floor((bal*riskPct/slDist)/0.01)*0.01).toFixed(2));
+    // Use risk-based lot for PrecisionEdge (lot passed in is peLot), Axum uses its own dynamic lot
+    const finalLot=parseFloat(lot)||riskLot;
+
     const tpDist=slDist*rr;
     const sl=direction==="BUY"?parseFloat((bid-slDist).toFixed(2)):parseFloat((bid+slDist).toFixed(2));
     const tp=direction==="BUY"?parseFloat((bid+tpDist).toFixed(2)):parseFloat((bid-tpDist).toFixed(2));
-    const body={epic,direction,size:parseFloat(lot),guaranteedStop:false,stopLevel:sl,profitLevel:tp};
-    addLog("trade",`Placing ${direction} ${lot} lots @ ${bid.toFixed(2)} | SL:${sl} TP:${tp}`);
+    const body={epic,direction,size:finalLot,guaranteedStop:false,stopLevel:sl,profitLevel:tp};
+    addLog("trade",`Placing ${direction} ${finalLot} lots @ ${bid.toFixed(2)} | SL:${sl} TP:${tp}`);
     try{
       const r=await fetch(`${BASE_URL}/api/v1/positions`,{method:"POST",headers:capHeaders(apiKey),body:JSON.stringify(body)});
       const d=await r.json();
@@ -1110,7 +1161,26 @@ function TerminalFull(){
         addLog("err","Order rejected: "+errMsg);
         return null;
       }
-      const dealId=d.dealReference||d.dealId||"unknown";
+      const dealRef=d.dealReference||"";
+      if(!dealRef){ addLog("err","No dealReference in response"); return null; }
+
+      // FIX: POST /positions returns dealReference (o_ prefix = order ref, not position id).
+      // Must confirm via GET /confirms/{dealRef} to get the real dealId for closing.
+      // FIX: wait 400ms — Capital.com processes orders asynchronously; hitting confirms immediately
+      // returns PENDING status even for valid orders, causing them to be wrongly rejected.
+      let dealId=dealRef;
+      await new Promise(res=>setTimeout(res,400));
+      try{
+        const cr=await fetch(`${BASE_URL}/api/v1/confirms/${dealRef}`,{headers:capHeaders(apiKey)});
+        if(cr.ok){
+          const cd=await cr.json();
+          if(cd.dealStatus==="ACCEPTED"&&cd.dealId) dealId=cd.dealId;
+          else if(cd.dealStatus&&cd.dealStatus!=="ACCEPTED"){
+            addLog("err",`Order not accepted — status: ${cd.dealStatus}`); return null;
+          }
+        }
+      }catch{}
+
       addLog("trade",`✓ Order placed — Deal: ${dealId}`);
       setStats(s=>({...s,trades:s.trades+1}));
       return dealId;
@@ -1229,12 +1299,17 @@ function TerminalFull(){
         const balV=Number(balNum||0);
         const eqV=Number(equity||0);
         const pnlV=Number(pnl||0);
+        // FIX: keep accountBalRef in sync so axumTick can read real balance
+        accountBalRef.current="$"+balV.toFixed(2);
         setAccount({
           balance:"$"+balV.toFixed(2),
           equity:"$"+(eqV||balV).toFixed(2),
           pnl:(pnlV>=0?"+$":"−$")+Math.abs(pnlV).toFixed(2),
           dd:"—"
         });
+        // FIX: sync stats.pnl and stats.dd from live account — were never updated, always showed $0.00/0%
+        const ddPctLive=balV>0?parseFloat(((pnlV/balV)*100).toFixed(2)):0;
+        setStats(s=>({...s,pnl:pnlV,dd:ddPctLive}));
         // only log on first load (called directly from connect), not on poll refreshes
         if(options?.logIt) addLog("info",`Account loaded — Balance: $${balV.toFixed(2)}`);
       }
@@ -1245,10 +1320,10 @@ function TerminalFull(){
   // Also handles profit-target auto-close (matches MQ5: close if profit >= ProfitTarget)
   const startAccountPoll=async(apiKey)=>{
     if(accountPollRef.current) clearInterval(accountPollRef.current);
-    const v=getCfgValues();
-    const profitTarget=parseFloat(v.profitTarget||0.45);
 
     const refresh=async()=>{
+      // FIX: read profitTarget fresh each refresh — was captured once at connect, ignored config changes
+      const profitTarget=parseFloat(getCfgValues().profitTarget||0.45);
       await fetchAccount(apiKey);
       try{
         const pr=await fetch(`${BASE_URL}/api/v1/positions`,{headers:capHeaders(apiKey)});
@@ -1290,11 +1365,22 @@ function TerminalFull(){
         const liveSells=pos.filter(p=>p.dir==="SELL").length;
         stackRef.current={buy:liveBuys,sell:liveSells};
 
-        // Live DD
+        // Live DD + maxdd kill switch
         const totalPnl=pos.reduce((s,p)=>s+p.pnl,0);
         setAccount(a=>{
           const balNum=parseFloat((a.balance||"$0").replace(/[$,]/g,""))||0;
           const ddPct=balNum>0?((totalPnl/balNum)*100).toFixed(2):"0.00";
+          // FIX: enforce maxdd — stop bot if daily drawdown exceeds configured limit
+          const maxDDLimit=parseFloat(getCfgValues().maxdd||5);
+          const currentDD=parseFloat(ddPct)||0;
+          if(currentDD<0&&Math.abs(currentDD)>=maxDDLimit){
+            // stop the bot — runningRef check prevents repeat triggers
+            addLog("err",`⛔ Max daily DD hit (${ddPct}%) — bot stopped to protect account.`);
+            setRunning(false);
+            signalRef.current="NO SIGNAL";
+            stackRef.current={buy:0,sell:0};
+            if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
+          }
           return{...a,
             pnl:(totalPnl>=0?"+$":"−$")+Math.abs(totalPnl).toFixed(2),
             dd:`${ddPct}%`,
@@ -1314,12 +1400,11 @@ function TerminalFull(){
     if(!bid) return;
 
     // ── Dynamic lot: (balance / baseEquity) * baseLotSize  — matches MQ5 GetDynamicLot()
-    const balanceStr=document.querySelector("[data-balance]")?.dataset?.balance||"0";
-    const balanceNum=parseFloat(balanceStr)||0;
+    // FIX: removed broken document.querySelector("[data-balance]") — no such element exists
+    // Read directly from accountBalRef which is kept in sync by fetchAccount
     const baseEquity=parseFloat(v.baseEquity||10);
     const baseLot=parseFloat(v.baseLot||0.01);
-    // Fallback: read from accountRef if DOM attr not ready
-    const bal=balanceNum||parseFloat((accountBalRef.current||"$10").replace(/[$,]/g,""))||10;
+    const bal=parseFloat((accountBalRef.current||"$10").replace(/[$,]/g,""))||10;
     const rawLot=(bal/baseEquity)*baseLot;
     // Round to nearest lot step (Capital.com standard is 0.01)
     const lotStep=0.01;
@@ -1344,15 +1429,18 @@ function TerminalFull(){
     const place=async(dir)=>{
       const dealId=await placeOrder(dir,lot,atr,apiKey);
       if(dealId){
+        // FIX: record fill price from priceRef at moment of confirmed trade, not the bid captured
+        // at top of axumTick (could be stale by the time placeOrder + confirms fetch completes)
+        const fillPx=priceRef.current||bid;
         const now=new Date();
         setLastTradeFired(now);
         lastTradeRef.current={time:now.getTime(),dir};
         if(dir==="BUY"){
           stackRef.current={...stackRef.current,buy:stackRef.current.buy+1};
-          lastEntryRef.current={...lastEntryRef.current,buy:bid};
+          lastEntryRef.current={...lastEntryRef.current,buy:fillPx};
         } else {
           stackRef.current={...stackRef.current,sell:stackRef.current.sell+1};
-          lastEntryRef.current={...lastEntryRef.current,sell:bid};
+          lastEntryRef.current={...lastEntryRef.current,sell:fillPx};
         }
         const st2=stackRef.current;
         const remaining=Math.max(0,maxLayers-st2.buy-st2.sell);
@@ -1360,8 +1448,8 @@ function TerminalFull(){
           buyStack:st2.buy, sellStack:st2.sell,
           grid:`Layer ${st2.buy+st2.sell}`,
           stackRoom:`${remaining} slots free`,
-          lastBuy:dir==="BUY"?bid.toFixed(2):i.lastBuy,
-          lastSell:dir==="SELL"?bid.toFixed(2):i.lastSell,
+          lastBuy:dir==="BUY"?fillPx.toFixed(2):i.lastBuy,
+          lastSell:dir==="SELL"?fillPx.toFixed(2):i.lastSell,
           entry:dir==="BUY"?"BUY SIGNAL":"SELL SIGNAL",
           lot:lot.toFixed(2),
         }));
@@ -1382,7 +1470,9 @@ function TerminalFull(){
 
     // ── BUY STACKING (matches MQ5: buyCount>0 && sellCount==0 && sentiment==1 && gap met)
     if(buyCount>0&&sellCount===0&&sentiment===1&&buyCount<maxLayers){
-      const pointSize=bid<100?0.0001:bid<1000?0.001:0.01; // auto-scale for GOLD/BTC/FX
+      // FIX: pointSize was wrong for BTC (bid>1000 gave 0.01 → gap of $0.025 for BTC, stacks instantly)
+      // Now: BTC/high-price assets use raw $ gap (pointSize=1), GOLD uses 0.1, FX uses 0.0001
+      const pointSize=bid>1000?1:bid>100?0.1:0.0001;
       const gapNeeded=gridGap*pointSize;
       if(lastBuyPx>0&&(bid-lastBuyPx)>=gapNeeded){
         addLog("trade",`Grid BUY Layer ${buyCount+1} — gap: ${(bid-lastBuyPx).toFixed(4)}`);
@@ -1393,7 +1483,7 @@ function TerminalFull(){
 
     // ── SELL STACKING (matches MQ5: sellCount>0 && buyCount==0 && sentiment==-1 && gap met)
     if(sellCount>0&&buyCount===0&&sentiment===-1&&sellCount<maxLayers){
-      const pointSize=bid<100?0.0001:bid<1000?0.001:0.01;
+      const pointSize=bid>1000?1:bid>100?0.1:0.0001;
       const gapNeeded=gridGap*pointSize;
       if(lastSellPx>0&&(lastSellPx-bid)>=gapNeeded){
         addLog("trade",`Grid SELL Layer ${sellCount+1} — gap: ${(lastSellPx-bid).toFixed(4)}`);
@@ -1413,6 +1503,9 @@ function TerminalFull(){
     const botName=bot==="axum"?"Axum AI":"PrecisionEdge";
     addLog("trade",`${botName} bot started ✓`);
     addLog("info",`Fetching live candles for ${pairLabel}...`);
+    // FIX: silently re-auth before fetching candles — Capital.com sessions expire in 10 min
+    const reauthed=await silentReconnect();
+    if(reauthed) addLog("info","Session refreshed before bot start ✓");
     // Reset all state
     stackRef.current={buy:0,sell:0};
     lastEntryRef.current={buy:0,sell:0};
@@ -1472,6 +1565,8 @@ function TerminalFull(){
 
       // ── POLLING LOOP — runs every 30s (like MQ5 OnTick but time-based)
       const poll=async()=>{
+        // FIX: read fresh config every tick so changes saved while bot runs take effect immediately
+        const v=getCfgValues();
         try{
           const pr=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE_15&max=100`,{headers:capHeaders(v.apikey)});
           if(pr.status===401){await silentReconnect();return;}
@@ -1490,6 +1585,9 @@ function TerminalFull(){
           const nSentiment=nr>55&&nVsE==="Above"?1:nr<45&&nVsE==="Below"?-1:0;
           const nSig=nSentiment===1?"BUY SIGNAL":nSentiment===-1?"SELL SIGNAL":"MONITORING";
           const nSentLabel=nSentiment===1?"Bullish":nSentiment===-1?"Bearish":"Neutral";
+
+          // FIX: capture prevSig BEFORE updating signalRef — otherwise prevSig===nSig always and PrecisionEdge never fires
+          const prevSig=signalRef.current;
 
           // Update ref so axumTick gets fresh values
           axumIndRef.current={rsiN:nr,closeVsEma:nVsE,sentiment:nSentiment};
@@ -1513,9 +1611,9 @@ function TerminalFull(){
           // ── AXUM AI TICK (initial entry + stacking logic)
           if(bot==="axum") await axumTick(v,epic,natr,v.apikey);
 
-          // ── PRECISIONEDGE SIGNAL CHANGE ENTRY (unchanged)
+          // ── PRECISIONEDGE SIGNAL CHANGE ENTRY
           if(bot==="precision"){
-            const prevSig=signalRef.current;
+            // prevSig captured above before signalRef update — correctly detects changes
             if(nSig!==prevSig&&(nSig==="BUY SIGNAL"||nSig==="SELL SIGNAL")){
               const direction=nSig==="BUY SIGNAL"?"BUY":"SELL";
               const lot2=Math.max(0.01,parseFloat(v.peLot||0.01)).toFixed(2);
@@ -1922,7 +2020,7 @@ function TerminalFull(){
 
             <TCard>
               <TLabel>Axum AI Parameters</TLabel>
-              {[["Base Equity ($)",cfgBaseEquityRef,cfg.baseEquity||"10","number"],["Max Grid Layers",cfgMaxLayersRef,cfg.maxLayers||"8","number"],["Grid Gap (pts)",cfgGapRef,cfg.gap||"2.5","number"]].map(([l,r,dv,t])=>(
+              {[["Base Equity ($)",cfgBaseEquityRef,cfg.baseEquity||"10","number"],["Base Lot Size",cfgBaseLotRef,cfg.baseLot||"0.01","number"],["Max Grid Layers",cfgMaxLayersRef,cfg.maxLayers||"8","number"],["Grid Gap (pts)",cfgGapRef,cfg.gap||"2.5","number"],["Profit Target ($)",cfgProfitTargetRef,cfg.profitTarget||"0.45","number"]].map(([l,r,dv,t])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
                   <input ref={r} defaultValue={dv} placeholder={l} type={t}
