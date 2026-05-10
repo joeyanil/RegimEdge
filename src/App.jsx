@@ -912,6 +912,10 @@ function TerminalFull(){
   const botRef=useRef("axum");
   // FIX: runningRef mirrors running state for use in async closures (setInterval/setTimeout can't read state)
   const runningRef=useRef(false);
+  // connectedRef mirrors connected state — lets auto-resume call startBot immediately after login
+  const connectedRef=useRef(false);
+  // holds {pairIdx,botType} during auto-resume so the [connected] effect can start the bot
+  const autoResumeDataRef=useRef(null);
   const[pair,setPair]=useState(0); // index into PAIRS array
   const[running,setRunning]=useState(false);
   const[connected,setConnected]=useState(false);
@@ -998,6 +1002,17 @@ function TerminalFull(){
   const activePairLabel=()=>PAIRS[pair]?.label||"XAU/USD";
 
   const addLog=(type,msg)=>setLog(l=>[{time:new Date().toLocaleTimeString(),type,msg},...l.slice(0,199)]);
+
+  // ── PERSISTENCE: save/clear bot run state for page-reload auto-resume ────────
+  const saveBotState=(isRunning,botType,pairIdx)=>{
+    try{
+      if(isRunning){
+        localStorage.setItem("juno_bot_state",JSON.stringify({running:true,bot:botType,pair:pairIdx,savedAt:Date.now()}));
+      } else {
+        localStorage.removeItem("juno_bot_state");
+      }
+    }catch{}
+  };
 
   const capHeaders=(apiKey)=>({
     "X-CAP-API-KEY": apiKey,
@@ -1128,18 +1143,35 @@ function TerminalFull(){
       bid=fallback;
     }
 
-    // Use exactly the lot passed in — no caps, no risk overrides
+    // Lot validation + Capital.com per-instrument minimums
     const rawParsed=parseFloat(lot);
-    const finalLot=isNaN(rawParsed)||rawParsed<0.01?0.01:rawParsed;
-    if(isNaN(rawParsed)||rawParsed<0.01) addLog("warn",`Lot value "${lot}" invalid — defaulting to 0.01`);
+    let finalLot=isNaN(rawParsed)||rawParsed<0.01?0.01:rawParsed;
+    if(isNaN(rawParsed)||rawParsed<0.01) addLog("warn",`Lot "${lot}" invalid — using 0.01`);
+    const epicUp=epic.toUpperCase();
+    const minLot=epicUp==="GOLD"||epicUp==="XAUUSD"?1:epicUp==="BTCUSD"?0.01:0.01;
+    if(finalLot<minLot){
+      addLog("warn",`Lot ${finalLot} below ${epicUp} minimum (${minLot}) — clamping to ${minLot}. Raise baseLot in Config.`);
+      finalLot=minLot;
+    }
 
     // Send order WITHOUT stopLevel/profitLevel — avoids all stoploss.minvalue rejections
-    // Capital.com accepts orders with no SL/TP on demo accounts
     const body={epic,direction,size:finalLot,guaranteedStop:false};
     addLog("trade",`Placing ${direction} ${finalLot} lots @ ${bid.toFixed(2)}`);
-    try{
+
+    const attemptOrder=async()=>{
       const r=await fetch(`${BASE_URL}/api/v1/positions`,{method:"POST",headers:capHeaders(apiKey),body:JSON.stringify(body)});
       const d=await r.json();
+      return {r,d};
+    };
+    try{
+      let {r,d}=await attemptOrder();
+      // Reconnect on session expiry and retry once
+      if(r.status===401){
+        addLog("warn","Session expired mid-order — reconnecting...");
+        const ok=await silentReconnect();
+        if(!ok){addLog("err","Order failed: could not refresh session.");return null;}
+        ({r,d}=await attemptOrder());
+      }
       if(!r.ok||d.errorCode){
         addLog("err","Order rejected: "+(d.errorCode||d.message||r.status));
         return null;
@@ -1177,11 +1209,29 @@ function TerminalFull(){
     setClosingId(dealId);
     addLog("info",`Closing position ${dealId}...`);
     try{
-      const r=await fetch(`${BASE_URL}/api/v1/positions/${dealId}`,{method:"DELETE",headers:capHeaders(apiKey)});
-      if(r.status===200||r.status===204){
+      // Always refresh session before closing — prevents 401 if session aged
+      await silentReconnect();
+
+      const doDelete=async()=>fetch(`${BASE_URL}/api/v1/positions/${dealId}`,{method:"DELETE",headers:capHeaders(apiKey)});
+      let r=await doDelete();
+
+      // On 401 — reconnect once and retry
+      if(r.status===401){
+        addLog("warn","Session expired — reconnecting to close position...");
+        const ok=await silentReconnect();
+        if(!ok){ addLog("err","Close failed: session could not be refreshed. Try reconnecting manually."); return; }
+        r=await doDelete();
+      }
+
+      if(r.status===200||r.status===204||r.ok){
         addLog("trade",`✓ Position ${dealId} closed`);
-        // remove from local positions immediately
         setPositions(ps=>ps.filter(p=>p.dealId!==dealId));
+        // Decrement stackRef so bot doesn't think the position is still open
+        const v=getCfgValues();
+        const allPos=await fetch(`${BASE_URL}/api/v1/positions`,{headers:capHeaders(v.apikey)}).then(r2=>r2.json()).catch(()=>({positions:[]}));
+        const liveBuys=(allPos.positions||[]).filter(p=>p.position?.direction==="BUY").length;
+        const liveSells=(allPos.positions||[]).filter(p=>p.position?.direction==="SELL").length;
+        stackRef.current={buy:liveBuys,sell:liveSells};
       } else {
         const d=await r.json().catch(()=>({}));
         addLog("err","Close failed: "+(d.errorCode||d.message||r.status));
@@ -1222,6 +1272,7 @@ function TerminalFull(){
       // FIX: save creds for auto-reconnect
       savedCredsRef.current={email:v.email,apikey:v.apikey,password:v.password};
       addLog("info",`Session tokens captured — CST: ${cst?"✓":"missing"}, SecToken: ${secToken?"✓":"missing"}`);
+      connectedRef.current=true;
       setConnected(true); addLog("trade","Connected ✓ — Capital.com Demo active");
       startPriceFeed(v.apikey);
       await fetchAccount(v.apikey,{logIt:true});
@@ -1232,7 +1283,9 @@ function TerminalFull(){
   };
 
   const disconnect=()=>{
+    connectedRef.current=false;
     setConnected(false); setRunning(false); runningRef.current=false;
+    saveBotState(false);
     if(tickRef.current){clearInterval(tickRef.current);tickRef.current=null;}
     if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
     if(accountPollRef.current){clearInterval(accountPollRef.current);accountPollRef.current=null;}
@@ -1330,7 +1383,7 @@ function TerminalFull(){
           dealId:p.position?.dealId||p.dealId||"",
           dir:p.position?.direction||"BUY",
           lot:p.position?.size||0,
-          open:p.position?.openLevel||0,
+          open:p.position?.openLevel||p.position?.level||p.position?.price||0,
           sl:p.position?.stopLevel||"—",
           tp:p.position?.profitLevel||"—",
           pnl:p.position?.upl||0,
@@ -1464,34 +1517,36 @@ function TerminalFull(){
       }
     };
 
-    // ── INITIAL ENTRY (matches MQ5: buyCount==0 && sellCount==0)
+    // ── DIRECTION RESOLVER: RSI sentiment → EMA trend → close vs EMA9 (always finds a direction)
+    const resolveDir=()=>{
+      if(sentiment===1) return "BUY";
+      if(sentiment===-1) return "SELL";
+      if(trend==="UP") return "BUY";
+      if(trend==="DOWN") return "SELL";
+      if(closeVsEma==="Above") return "BUY";
+      if(closeVsEma==="Below") return "SELL";
+      return null;
+    };
+
+    // ── TICK DIAGNOSTIC — always logged so you can audit every decision ──────────
+    addLog("info",`Tick — RSI:${rsiN.toFixed(1)} | Trend:${trend} | EMA9 ${closeVsEma} | Sentiment:${sentiment} | Buys:${buyCount} Sells:${sellCount}`);
+
+    // ── INITIAL ENTRY — always enters using best available signal ─────────────
     if(buyCount===0&&sellCount===0){
-      if(sentiment===1){
-        addLog("trade",`Initial BUY entry — RSI:${rsiN.toFixed(1)} · Sentiment: Bullish`);
-        await place("BUY");
-      } else if(sentiment===-1){
-        addLog("trade",`Initial SELL entry — RSI:${rsiN.toFixed(1)} · Sentiment: Bearish`);
-        await place("SELL");
+      const dir=resolveDir();
+      if(dir){
+        const reason=sentiment!==0?"RSI signal":trend!=="—"?`trend ${trend}`:`close ${closeVsEma} EMA9`;
+        addLog("trade",`Initial ${dir} entry — RSI:${rsiN.toFixed(1)} · ${reason}`);
+        await place(dir);
       } else {
-        // Neutral RSI (48–52) — use trend direction as tiebreaker so bot still enters
-        if(closeVsEma==="Above"&&trend==="UP"){
-          addLog("trade",`Initial BUY entry (trend) — RSI neutral ${rsiN.toFixed(1)}, close above EMA9, trend UP`);
-          await place("BUY");
-        } else if(closeVsEma==="Below"&&trend==="DOWN"){
-          addLog("trade",`Initial SELL entry (trend) — RSI neutral ${rsiN.toFixed(1)}, close below EMA9, trend DOWN`);
-          await place("SELL");
-        } else {
-          addLog("info",`Monitoring — RSI neutral ${rsiN.toFixed(1)}, no clear trend alignment`);
-        }
+        addLog("warn","No direction resolved — waiting for first candle data.");
       }
       return;
     }
 
-    // ── BUY STACKING (matches MQ5: buyCount>0 && sellCount==0 && sentiment==1 && gap met)
-    if(buyCount>0&&sellCount===0&&sentiment===1&&buyCount<maxLayers){
-      // FIX: pointSize was wrong for BTC (bid>1000 gave 0.01 → gap of $0.025 for BTC, stacks instantly)
-      // Now: BTC/high-price assets use raw $ gap (pointSize=1), GOLD uses 0.1, FX uses 0.0001
-      const pointSize=bid>1000?1:bid>100?0.1:0.0001;
+    // ── BUY STACKING — fires on RSI bullish OR neutral-trend-UP (stacking works in neutral RSI too)
+    const bullishOk=sentiment===1||(sentiment===0&&(trend==="UP"||closeVsEma==="Above"));
+    if(buyCount>0&&sellCount===0&&bullishOk&&buyCount<maxLayers){
       const gapNeeded=gridGap*pointSize;
       if(lastBuyPx>0&&(bid-lastBuyPx)>=gapNeeded){
         addLog("trade",`Grid BUY Layer ${buyCount+1} — gap: ${(bid-lastBuyPx).toFixed(4)}`);
@@ -1500,9 +1555,9 @@ function TerminalFull(){
       return;
     }
 
-    // ── SELL STACKING (matches MQ5: sellCount>0 && buyCount==0 && sentiment==-1 && gap met)
-    if(sellCount>0&&buyCount===0&&sentiment===-1&&sellCount<maxLayers){
-      const pointSize=bid>1000?1:bid>100?0.1:0.0001;
+    // ── SELL STACKING — fires on RSI bearish OR neutral-trend-DOWN
+    const bearishOk=sentiment===-1||(sentiment===0&&(trend==="DOWN"||closeVsEma==="Below"));
+    if(sellCount>0&&buyCount===0&&bearishOk&&sellCount<maxLayers){
       const gapNeeded=gridGap*pointSize;
       if(lastSellPx>0&&(lastSellPx-bid)>=gapNeeded){
         addLog("trade",`Grid SELL Layer ${sellCount+1} — gap: ${(lastSellPx-bid).toFixed(4)}`);
@@ -1513,13 +1568,13 @@ function TerminalFull(){
   };
 
   const startBot=async()=>{
-    if(!connected){addLog("err","Connect to Capital.com first.");return;}
+    if(!connectedRef.current){addLog("err","Connect to Capital.com first.");return;}
     if(running||botLoading) return;
     setBotLoading(true);
     const v=getCfgValues();
-    const epic=activeEpic();
-    const pairLabel=activePairLabel();
-    const botName=bot==="axum"?"Axum AI":"PrecisionEdge";
+    const epic=epicRef.current||activeEpic();
+    const pairLabel=PAIRS.find(p=>p.epic===epic)?.label||activePairLabel();
+    const botName=botRef.current==="axum"?"Axum AI":"PrecisionEdge";
     addLog("trade",`${botName} bot started ✓`);
     addLog("info",`Fetching live candles for ${pairLabel}...`);
     // FIX: silently re-auth before fetching candles — Capital.com sessions expire in 10 min
@@ -1560,7 +1615,7 @@ function TerminalFull(){
       const maxLayers=parseInt(v.maxLayers||15);
       const dynLot=Math.max(0.01,Math.floor(((parseFloat(accountBalRef.current?.replace(/[$,]/g,"")||10)/parseFloat(v.baseEquity||10))*parseFloat(v.baseLot||0.01))/0.01)*0.01).toFixed(2);
 
-      if(bot==="axum"){
+      if(botRef.current==="axum"){
         setInds(i=>({...i,
           rsi:rsiVal.toFixed(1),ema9:ema9.toFixed(2),closeEma:closeVsEma,
           bid:priceRef.current?.toString()||ema9.toFixed(2),
@@ -1578,6 +1633,7 @@ function TerminalFull(){
       setSignal(signalStr); setSignalDir(sentiment);
       runningRef.current=true;
       setRunning(true);
+      saveBotState(true,botRef.current,pair);
       addLog("trade",`Indicators loaded — RSI: ${rsiVal.toFixed(1)} · EMA9: ${ema9.toFixed(2)} · Trend: ${trend} · Signal: ${signalStr}`);
       addLog("info",`Monitoring ${pairLabel} every 30s...`);
 
@@ -1634,23 +1690,49 @@ function TerminalFull(){
           // ── AXUM AI TICK (initial entry + stacking logic)
           if(botRef.current==="axum") await axumTick(v,epic,natr,v.apikey);
 
-          // ── PRECISIONEDGE SIGNAL CHANGE ENTRY
+          // ── PRECISIONEDGE ENTRY — enters on signal active + no existing position in that direction
           if(botRef.current==="precision"){
-            // prevSig captured above before signalRef update — correctly detects changes
-            if(nSig!==prevSig&&(nSig==="BUY SIGNAL"||nSig==="SELL SIGNAL")){
-              const direction=nSig==="BUY SIGNAL"?"BUY":"SELL";
-              const lot2=Math.max(0.01,parseFloat(v.peLot||0.01)).toFixed(2);
-              await placeOrder(direction,lot2,natr,v.apikey);
+            const hasSignal=nSig==="BUY SIGNAL"||nSig==="SELL SIGNAL";
+            if(hasSignal){
+              const dir=nSig==="BUY SIGNAL"?"BUY":"SELL";
+              // Don't re-enter the same direction if we already have a position in it
+              const alreadyHasPos=dir==="BUY"?stackRef.current.buy>0:stackRef.current.sell>0;
+              if(!alreadyHasPos){
+                const lot2=Math.max(0.01,parseFloat(v.peLot||0.01)).toFixed(2);
+                const reason=nSig!==prevSig?"Signal changed":"No position — re-entering signal";
+                addLog("trade",`PrecisionEdge ${dir} — ${reason} · RSI:${nr.toFixed(1)}`);
+                const dealId2=await placeOrder(dir,lot2,natr,v.apikey);
+                if(dealId2){
+                  if(dir==="BUY") stackRef.current={...stackRef.current,buy:stackRef.current.buy+1};
+                  else stackRef.current={...stackRef.current,sell:stackRef.current.sell+1};
+                }
+              }
             }
           }
         }catch(e){ addLog("warn","Poll error: "+e.message); }
         finally{ pollLock=false; }
       };
 
-      // ── IMMEDIATE FIRST TICK — enter right away if signal active (matches MQ5 OnTick on first bar)
+      // ── IMMEDIATE FIRST TICK — both bots enter right away without waiting 30s ─────
       if(botRef.current==="axum"){
         addLog("info","Running initial market check...");
         await axumTick(v,epic,atr,v.apikey);
+      }
+      // PrecisionEdge: enter immediately on current signal (no need to wait for a signal change)
+      if(botRef.current==="precision"){
+        const initSig=signalRef.current;
+        if(initSig==="BUY SIGNAL"||initSig==="SELL SIGNAL"){
+          const initDir=initSig==="BUY SIGNAL"?"BUY":"SELL";
+          const lot2=Math.max(0.01,parseFloat(v.peLot||0.01)).toFixed(2);
+          addLog("trade",`PrecisionEdge initial ${initDir} — RSI:${rsiVal.toFixed(1)} · Signal: ${initSig}`);
+          const dealId2=await placeOrder(initDir,lot2,atr,v.apikey);
+          if(dealId2){
+            if(initDir==="BUY") stackRef.current={...stackRef.current,buy:1};
+            else stackRef.current={...stackRef.current,sell:1};
+          }
+        } else {
+          addLog("info",`PrecisionEdge monitoring — RSI ${rsiVal.toFixed(1)}, waiting for BUY or SELL signal`);
+        }
       }
 
       botPollRef.current=setInterval(poll,30000);
@@ -1676,6 +1758,7 @@ function TerminalFull(){
 
   const stopBot=()=>{
     runningRef.current=false;
+    saveBotState(false);
     setRunning(false);
     setSignal("NO SIGNAL"); setSignalDir(0);
     signalRef.current="NO SIGNAL";
@@ -1694,6 +1777,57 @@ function TerminalFull(){
     if(botPollRef.current)clearInterval(botPollRef.current);
     if(accountPollRef.current)clearInterval(accountPollRef.current);
   },[]);
+  // ── AUTO-RESUME: on page reload, reconnect and restart bot if it was running ──
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const saved=JSON.parse(localStorage.getItem("juno_bot_state")||"{}");
+        if(!saved.running) return;
+        // Only auto-resume within 2 hours of last save
+        if(Date.now()-saved.savedAt>7200000){ localStorage.removeItem("juno_bot_state"); return; }
+        const creds=JSON.parse(localStorage.getItem("juno_cfg")||"{}");
+        if(!creds.email||!creds.apikey||!creds.password) return;
+
+        const pairIdx=typeof saved.pair==="number"?saved.pair:0;
+        const botType=saved.bot||"axum";
+
+        // Set refs immediately so startBot uses correct values
+        botRef.current=botType;
+        epicRef.current=PAIRS[pairIdx]?.epic||"GOLD";
+        autoResumeDataRef.current={pairIdx,botType};
+        setBot(botType);
+        setPair(pairIdx);
+
+        addLog("info","⟳ Previous session detected — auto-reconnecting...");
+        setConnecting(true);
+        const r=await fetch(`${BASE_URL}/api/v1/session`,{method:"POST",
+          headers:{"X-CAP-API-KEY":creds.apikey,"Content-Type":"application/json"},
+          body:JSON.stringify({identifier:creds.email,password:creds.password})});
+        if(!r.ok){ addLog("warn","Auto-resume: login failed. Connect manually."); setConnecting(false); return; }
+        const cst=r.headers.get("CST")||"";
+        const secToken=r.headers.get("X-SECURITY-TOKEN")||"";
+        sessionTokensRef.current={cst,secToken};
+        savedCredsRef.current={email:creds.email,apikey:creds.apikey,password:creds.password};
+        connectedRef.current=true;
+        setConnected(true);
+        setConnecting(false);
+        startPriceFeed(creds.apikey);
+        await fetchAccount(creds.apikey,{logIt:true});
+        startAccountPoll(creds.apikey);
+        addLog("info","Auto-resume: connected ✓ — starting bot...");
+      }catch(e){ addLog("warn","Auto-resume error: "+e.message); setConnecting(false); }
+    })();
+  },[]);
+
+  // When connected flips true AND auto-resume is pending → start the bot
+  useEffect(()=>{
+    if(!connected||!autoResumeDataRef.current) return;
+    autoResumeDataRef.current=null;
+    // Give price feed 800ms to receive first tick before startBot reads priceRef
+    const t=setTimeout(()=>startBot(),800);
+    return()=>clearTimeout(t);
+  },[connected]);
+
 
   const TABS=[
     {id:"dashboard",icon:"◈",label:"DASH"},
