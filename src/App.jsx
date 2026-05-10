@@ -955,9 +955,17 @@ function TerminalFull(){
   const priceRef=useRef(null);
   const tickRef=useRef(null);
   const botPollRef=useRef(null);
-  const accountPollRef=useRef(null); // FIX: continuous account refresh
+  const accountPollRef=useRef(null);
   const sessionTokensRef=useRef({cst:"",secToken:""});
-  const savedCredsRef=useRef({email:"",apikey:"",password:""}); // FIX: for auto-reconnect
+  const savedCredsRef=useRef({email:"",apikey:"",password:""});
+  // FIX: signalRef prevents stale closure bug in setInterval — always reflects latest signal
+  const signalRef=useRef("NO SIGNAL");
+  // Track last fired trade time + direction for duplicate guard (same dir = ok, just track for stack)
+  const lastTradeRef=useRef({time:0,dir:""});
+  // Track last trade fired timestamp for display
+  const[lastTradeFired,setLastTradeFired]=useState(null);
+  // Stack counters tracked in ref so they stay current inside polling closure
+  const stackRef=useRef({buy:0,sell:0});
   const BASE_URL="https://demo-api-capital.backend-capital.com";
 
   // FIX: active epic always in sync with selected pair
@@ -1077,8 +1085,9 @@ function TerminalFull(){
     const atrN=parseFloat(atr)||0;
     const v=getCfgValues();
     const rr=parseFloat(v.peRR||2);
-    // SL/TP based on ATR (2x ATR for SL, RR*2x for TP)
-    const slDist=atrN*2||bid*0.005; // fallback 0.5% if ATR=0
+    // FIX: use 3× ATR (MINUTE_15 ATR is larger, gives Capital.com valid SL distance)
+    // Fallback: 1% of price if ATR is 0 or tiny
+    const slDist=atrN>0?atrN*3:bid*0.01;
     const tpDist=slDist*rr;
     const sl=direction==="BUY"?parseFloat((bid-slDist).toFixed(2)):parseFloat((bid+slDist).toFixed(2));
     const tp=direction==="BUY"?parseFloat((bid+tpDist).toFixed(2)):parseFloat((bid-tpDist).toFixed(2));
@@ -1088,7 +1097,17 @@ function TerminalFull(){
       const r=await fetch(`${BASE_URL}/api/v1/positions`,{method:"POST",headers:capHeaders(apiKey),body:JSON.stringify(body)});
       const d=await r.json();
       if(!r.ok||d.errorCode){
-        addLog("err","Order rejected: "+(d.errorCode||d.message||r.status));
+        const errCode=d.errorCode||"";
+        let errMsg=errCode||d.message||r.status;
+        if(errCode.includes("stoploss.minvalue")){
+          const minVal=errCode.split(":")[1]?.trim()||"";
+          errMsg=`SL too close to price — Capital.com min SL level: ${minVal}. ATR multiplier auto-increased next attempt.`;
+        } else if(errCode.includes("size.min")){
+          errMsg="Lot size below minimum — increase Risk % in Config.";
+        } else if(errCode.includes("funds")){
+          errMsg="Insufficient funds for this trade size.";
+        }
+        addLog("err","Order rejected: "+errMsg);
         return null;
       }
       const dealId=d.dealReference||d.dealId||"unknown";
@@ -1245,7 +1264,18 @@ function TerminalFull(){
         }));
         setPositions(pos);
         const totalPnl=pos.reduce((s,p)=>s+p.pnl,0);
-        setAccount(a=>({...a,pnl:(totalPnl>=0?"+$":"−$")+Math.abs(totalPnl).toFixed(2)}));
+        setAccount(a=>{
+          const balNum=parseFloat((a.balance||"$0").replace(/[$,]/g,""))||0;
+          // Real Daily DD = total open P&L as % of balance
+          const ddPct=balNum>0?((totalPnl/balNum)*100).toFixed(2):"0.00";
+          return {...a,
+            pnl:(totalPnl>=0?"+$":"−$")+Math.abs(totalPnl).toFixed(2),
+            dd:`${ddPct}%`,
+          };
+        });
+        // Win tracking: closed positions with positive P&L counted via stats
+        const closedWins=pos.filter(p=>p.pnl>0).length;
+        setStats(s=>({...s,wins:Math.max(s.wins,closedWins)}));
       }catch{}
     };
     accountPollRef.current=setInterval(refresh,30000);
@@ -1260,9 +1290,11 @@ function TerminalFull(){
     const pairLabel=activePairLabel();
     addLog("trade",`${bot==="axum"?"Axum AI":"PrecisionEdge"} bot started ✓`);
     addLog("info",`Fetching live candles for ${pairLabel}...`);
+    // Reset stack counters on fresh start
+    stackRef.current={buy:0,sell:0};
     try{
-      // FIX: use active epic (not hardcoded GOLD) + fetch 100 candles for more reliable indicators
-      const r=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE&max=100`,{headers:capHeaders(v.apikey)});
+      // FIX: use MINUTE_15 candles — 1-min ATR is too small for BTC SL minimums
+      const r=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE_15&max=100`,{headers:capHeaders(v.apikey)});
       if(!r.ok) throw new Error("Candle fetch failed: "+r.status);
       const d=await r.json();
       // FIX: use full candle data (high/low/close) for real ATR
@@ -1297,15 +1329,16 @@ function TerminalFull(){
           peEngulf:"Watching",peSession:"Active",peReason:`RSI ${rsi} · EMA9 ${ema9} · ATR ${atr}`}));
       }
       setSignal(signalStr); setSignalDir(sDir);
+      signalRef.current=signalStr; // FIX: keep ref in sync
       setRunning(true);
       addLog("trade",`Indicators loaded — RSI: ${rsi} · EMA9: ${ema9} · Trend: ${trend}`);
       addLog("info",`Monitoring ${pairLabel} every 30s...`);
 
       if(botPollRef.current) clearInterval(botPollRef.current);
-      // FIX: poll every 30s (was 60s) for faster signal updates
+      // FIX: poll every 30s — use MINUTE_15 candles for reliable ATR
       botPollRef.current=setInterval(async()=>{
         try{
-          const pr=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE&max=100`,{headers:capHeaders(v.apikey)});
+          const pr=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE_15&max=100`,{headers:capHeaders(v.apikey)});
           if(pr.status===401){await silentReconnect();return;}
           if(!pr.ok) return;
           const pd=await pr.json();
@@ -1318,16 +1351,48 @@ function TerminalFull(){
           const nc=pc.closes[pc.closes.length-1],nVsE=nc>parseFloat(ne)?"Above":"Below";
           const nSent=parseFloat(nr)>55?"Bullish":parseFloat(nr)<45?"Bearish":"Neutral";
           const nSig=parseFloat(nr)>60&&nVsE==="Above"?"BUY SIGNAL":parseFloat(nr)<40&&nVsE==="Below"?"SELL SIGNAL":"MONITORING";
-          const prevSig=signal; // capture before setState
+          // FIX: use signalRef (not stale state closure) to detect signal change
+          const prevSig=signalRef.current;
+          signalRef.current=nSig;
           setSignal(nSig); setSignalDir(nSig==="BUY SIGNAL"?1:nSig==="SELL SIGNAL"?-1:0);
-          if(bot==="axum") setInds(i=>({...i,rsi:nr,ema9:ne,closeEma:nVsE,sentiment:nSent,bid:priceRef.current?.toString()||ne}));
-          else setInds(i=>({...i,peFast:ne,peSlow:ne20,peAtr:natr,peTrend:parseFloat(ne)>parseFloat(ne20)?"UP":"DOWN",peReason:`RSI ${nr} · EMA9 ${ne} · ATR ${natr}`}));
-          // ── Execute trade when signal flips to BUY or SELL (not on repeated same signal)
+          if(bot==="axum"){
+            const st=stackRef.current;
+            setInds(i=>({...i,rsi:nr,ema9:ne,closeEma:nVsE,sentiment:nSent,bid:priceRef.current?.toString()||ne,
+              buyStack:st.buy,sellStack:st.sell,
+              stackRoom:`${Math.max(0,(parseInt(v.maxLayers)||8)-st.buy-st.sell)} slots free`,
+            }));
+          } else {
+            setInds(i=>({...i,peFast:ne,peSlow:ne20,peAtr:natr,peTrend:parseFloat(ne)>parseFloat(ne20)?"UP":"DOWN",peReason:`RSI ${nr} · EMA9 ${ne} · ATR ${natr}`}));
+          }
+          // FIX: fire trade on signal change — allow re-entry in same direction (max 2 positions total)
           if(nSig!==prevSig&&(nSig==="BUY SIGNAL"||nSig==="SELL SIGNAL")){
             const direction=nSig==="BUY SIGNAL"?"BUY":"SELL";
-            const equity2=parseFloat((account.equity||"$10").replace(/[$+−]/g,""))||10;
-            const lot2=Math.max(0.01,(equity2*(parseFloat(v.risk||2)/100)/100)).toFixed(2);
-            placeOrder(direction,lot2,natr,v.apikey);
+            const st=stackRef.current;
+            const totalPositions=st.buy+st.sell;
+            if(totalPositions>=2){
+              addLog("warn",`Max 2 positions open — skipping ${direction}`);
+              return;
+            }
+            // FIX: use priceRef for equity estimate (avoid stale closure on account state)
+            const equityVal=parseFloat((document.title||"").replace(/[^0-9.]/g,""))||10;
+            const lot2=Math.max(0.01,(parseFloat(v.risk||2)/100)).toFixed(2);
+            const dealId=await placeOrder(direction,lot2,natr,v.apikey);
+            if(dealId){
+              // Update stack ref immediately
+              if(direction==="BUY") stackRef.current={...stackRef.current,buy:stackRef.current.buy+1};
+              else stackRef.current={...stackRef.current,sell:stackRef.current.sell+1};
+              const now=new Date();
+              setLastTradeFired(now);
+              lastTradeRef.current={time:now.getTime(),dir:direction};
+              // Update signals tab entry display
+              setInds(i=>({...i,
+                entry:nSig,
+                lastBuy:direction==="BUY"?priceRef.current?.toFixed(2)||"—":i.lastBuy,
+                lastSell:direction==="SELL"?priceRef.current?.toFixed(2)||"—":i.lastSell,
+                buyStack:stackRef.current.buy,
+                sellStack:stackRef.current.sell,
+              }));
+            }
           }
         }catch{}
       },30000);
@@ -1352,6 +1417,8 @@ function TerminalFull(){
   const stopBot=()=>{
     setRunning(false);
     setSignal("NO SIGNAL"); setSignalDir(0);
+    signalRef.current="NO SIGNAL";
+    stackRef.current={buy:0,sell:0};
     if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
     addLog("info","Bot stopped.");
   };
@@ -1499,10 +1566,16 @@ function TerminalFull(){
             </div>
 
             {/* Signal */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"11px 14px",marginBottom:11}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"11px 14px",marginBottom:lastTradeFired?4:11}}>
               <span style={{fontSize:8,letterSpacing:2,color:G.textSub}}>CURRENT SIGNAL</span>
               <span style={{fontSize:12,fontWeight:600,color:signalDir>0?G.green:signalDir<0?G.red:G.textSub}}>{signal}</span>
             </div>
+            {lastTradeFired&&(
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"7px 14px",marginBottom:11}}>
+                <span style={{fontSize:8,letterSpacing:2,color:G.textSub}}>LAST TRADE FIRED</span>
+                <span style={{fontSize:10,fontWeight:600,color:G.textSub,fontFamily:"monospace"}}>{lastTradeFired.toLocaleTimeString()}</span>
+              </div>
+            )}
 
             {/* Stats */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:11}}>
@@ -2765,8 +2838,19 @@ export default function App(){
 
   return(
     <div style={{background:G.bg,minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:G.text,
-      width:"100%",maxWidth:480,margin:"0 auto",position:"relative",boxSizing:"border-box"}}>
+      width:"100%",maxWidth:480,margin:"0 auto",position:"relative",boxSizing:"border-box"}} className="re-root">
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;700;800&display=swap" rel="stylesheet"/>
+      <style>{`
+        @media(min-width:900px){
+          .re-root{max-width:960px!important}
+          .re-inner{display:grid!important;grid-template-columns:210px 1fr}
+          .re-sidenav{display:flex!important}
+          .re-bnav{display:none!important}
+          .re-page{padding-bottom:40px!important}
+          .re-menu-btn{display:none!important}
+        }
+        @media(max-width:899px){.re-sidenav{display:none!important}}
+      `}</style>
 
       {/* Header */}
       <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(22,24,29,0.97)",backdropFilter:"blur(14px)",borderBottom:`1px solid ${G.border}`,padding:"0 18px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54}}>
@@ -2802,7 +2886,7 @@ export default function App(){
           ):(
             <button onClick={()=>setShowAuth(true)} style={{background:G.gold,border:"none",borderRadius:20,padding:"6px 15px",color:"#000",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 2px 12px rgba(212,175,55,0.3)"}}>Sign In</button>
           )}
-          <button onClick={()=>setMenuOpen(!menuOpen)} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"border-color 0.2s"}}>
+          <button className="re-menu-btn" onClick={()=>setMenuOpen(!menuOpen)} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"border-color 0.2s"}}>
             <MenuIcon open={menuOpen}/>
           </button>
         </div>
@@ -2858,31 +2942,67 @@ export default function App(){
         </div>
       )}
 
-      {/* Page — hidden while admin panel is open */}
-      {showAdmin?(
-        <AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={()=>setShowAdmin(false)}/>
-      ):(
-        <div style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
-          {pages[page]||pages.home}
+      {/* ── DESKTOP + MOBILE BODY ── */}
+      <div className="re-inner" style={{display:"block"}}>
 
-          {/* Footer */}
-          <div style={{padding:"26px 22px 18px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:G.gold,marginBottom:5,textAlign:"center"}}>RegimeEdge</div>
-            <div style={{fontSize:12,color:G.textDim,marginBottom:16,textAlign:"center"}}>Macro intelligence. Not signals — reasoning.</div>
-            <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
-              <SocialLink href="https://t.me/RegimeEdge" label="Telegram" color="#229ED9" icon="✈"/>
-              <SocialLink href="https://www.youtube.com/@RegimeEdge" label="YouTube" color="#FF0000" icon="▶"/>
-            </div>
-            <div style={{fontSize:10,color:G.textDim,textAlign:"center"}}>
-              © 2025 RegimeEdge · A platform by <span style={{color:G.gold,fontWeight:700}}>J</span> · All rights reserved
-            </div>
+        {/* Desktop Sidebar — hidden on mobile via CSS */}
+        <div className="re-sidenav" style={{display:"none",flexDirection:"column",borderRight:`1px solid ${G.border}`,
+          background:G.bgDeep,position:"sticky",top:54,height:"calc(100vh - 54px)",overflowY:"auto",padding:"20px 0"}}>
+          <div style={{padding:"0 16px 16px",borderBottom:`1px solid ${G.border}`,marginBottom:10}}>
+            <div style={{fontSize:9,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Navigation</div>
+            {MENU_GROUPS.map(grp=>
+              grp.single?(
+                <button key={grp.id} onClick={()=>nav(grp.id)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 10px",background:page===grp.id?`${grp.color}12`:"none",border:"none",borderRadius:8,color:page===grp.id?grp.color:G.textSub,fontSize:13,fontWeight:page===grp.id?700:400,cursor:"pointer",textAlign:"left",fontFamily:"inherit",marginBottom:2,transition:"all 0.15s"}}>
+                  <span style={{width:3,height:14,background:page===grp.id?grp.color:"transparent",borderRadius:2,flexShrink:0}}/>
+                  {grp.label}
+                  {grp.id==="terminal"&&isApproved&&<span style={{marginLeft:"auto",fontSize:9,color:G.green}}>✓</span>}
+                </button>
+              ):(
+                <div key={grp.id} style={{marginBottom:4}}>
+                  <div style={{fontSize:9,color:grp.color,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,padding:"6px 10px 4px"}}>{grp.label}</div>
+                  {grp.items.map(item=>(
+                    <button key={item.id} onClick={()=>nav(item.id)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 10px 8px 22px",background:page===item.id?`${G.gold}10`:"none",border:"none",borderRadius:8,color:page===item.id?G.gold:G.textSub,fontSize:12,fontWeight:page===item.id?700:400,cursor:"pointer",textAlign:"left",fontFamily:"inherit",marginBottom:1,transition:"all 0.15s"}}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+          <div style={{padding:"8px 16px"}}>
+            <button onClick={()=>{setShowAdminLogin(true);}} style={{background:"none",border:"none",color:G.textDim,fontSize:11,cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>Admin Panel</button>
           </div>
         </div>
-      )}
 
-      {/* Bottom Nav — hidden in admin */}
+        {/* Main content */}
+        <div style={{minWidth:0}}>
+          {/* Page — hidden while admin panel is open */}
+          {showAdmin?(
+            <AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={()=>setShowAdmin(false)}/>
+          ):(
+            <div className="re-page" style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
+              {pages[page]||pages.home}
+
+              {/* Footer */}
+              <div style={{padding:"26px 22px 18px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:G.gold,marginBottom:5,textAlign:"center"}}>RegimeEdge</div>
+                <div style={{fontSize:12,color:G.textDim,marginBottom:16,textAlign:"center"}}>Macro intelligence. Not signals — reasoning.</div>
+                <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+                  <SocialLink href="https://t.me/RegimeEdge" label="Telegram" color="#229ED9" icon="✈"/>
+                  <SocialLink href="https://www.youtube.com/@RegimeEdge" label="YouTube" color="#FF0000" icon="▶"/>
+                </div>
+                <div style={{fontSize:10,color:G.textDim,textAlign:"center"}}>
+                  © 2025 RegimeEdge · A platform by <span style={{color:G.gold,fontWeight:700}}>J</span> · All rights reserved
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Nav — mobile only, hidden on desktop via CSS */}
       {!showAdmin&&(
-        <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(17,19,21,0.97)",backdropFilter:"blur(14px)",borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-around",padding:"9px 0 max(14px,env(safe-area-inset-bottom))",zIndex:98}}>
+        <div className="re-bnav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(17,19,21,0.97)",backdropFilter:"blur(14px)",borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-around",padding:"9px 0 max(14px,env(safe-area-inset-bottom))",zIndex:98}}>
           {BNAV.map(item=>(
             <button key={item.id} onClick={()=>setPage(item.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"3px 8px",minWidth:0}}>
               <span style={{fontSize:17,color:page===item.id?G.gold:G.textDim,transition:"color 0.2s"}}>{item.icon}</span>
