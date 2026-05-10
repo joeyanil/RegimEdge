@@ -988,7 +988,7 @@ function TerminalFull(){
   // Stack counters tracked in ref so they stay current inside polling closure
   const stackRef=useRef({buy:0,sell:0});
   // FIX: these refs were used but never declared — caused silent crash on startBot
-  const axumIndRef=useRef({rsiN:50,closeVsEma:"—",sentiment:0});
+  const axumIndRef=useRef({rsiN:50,closeVsEma:"—",sentiment:0,trend:"—"});
   const lastEntryRef=useRef({buy:0,sell:0});
   const accountBalRef=useRef("$10");
   const BASE_URL="https://demo-api-capital.backend-capital.com";
@@ -1121,10 +1121,17 @@ function TerminalFull(){
         if(freshBid) bid=freshBid;
       }
     }catch{}
-    if(!bid){addLog("err","No price — cannot place order.");return null;}
+    if(!bid){
+      const fallback=priceRef.current||0;
+      if(!fallback){addLog("err","No price available — cannot place order.");return null;}
+      addLog("warn",`Price feed glitch — using last known price (${fallback.toFixed(2)}) as fallback.`);
+      bid=fallback;
+    }
 
     // Use exactly the lot passed in — no caps, no risk overrides
-    const finalLot=Math.max(0.01,parseFloat(lot)||0.01);
+    const rawParsed=parseFloat(lot);
+    const finalLot=isNaN(rawParsed)||rawParsed<0.01?0.01:rawParsed;
+    if(isNaN(rawParsed)||rawParsed<0.01) addLog("warn",`Lot value "${lot}" invalid — defaulting to 0.01`);
 
     // Send order WITHOUT stopLevel/profitLevel — avoids all stoploss.minvalue rejections
     // Capital.com accepts orders with no SL/TP on demo accounts
@@ -1424,7 +1431,7 @@ function TerminalFull(){
 
     // ── Sentiment: RSI 55/45 + close vs EMA9 — matches MQ5 GetMarketSentiment()
     // (indicators already calculated in the poll, passed via axumIndRef)
-    const {rsiN,closeVsEma,sentiment}=axumIndRef.current;
+    const {rsiN,closeVsEma,sentiment,trend}=axumIndRef.current;
     // sentiment: 1=bullish, -1=bearish, 0=neutral
 
     const place=async(dir)=>{
@@ -1465,6 +1472,17 @@ function TerminalFull(){
       } else if(sentiment===-1){
         addLog("trade",`Initial SELL entry — RSI:${rsiN.toFixed(1)} · Sentiment: Bearish`);
         await place("SELL");
+      } else {
+        // Neutral RSI (48–52) — use trend direction as tiebreaker so bot still enters
+        if(closeVsEma==="Above"&&trend==="UP"){
+          addLog("trade",`Initial BUY entry (trend) — RSI neutral ${rsiN.toFixed(1)}, close above EMA9, trend UP`);
+          await place("BUY");
+        } else if(closeVsEma==="Below"&&trend==="DOWN"){
+          addLog("trade",`Initial SELL entry (trend) — RSI neutral ${rsiN.toFixed(1)}, close below EMA9, trend DOWN`);
+          await place("SELL");
+        } else {
+          addLog("info",`Monitoring — RSI neutral ${rsiN.toFixed(1)}, no clear trend alignment`);
+        }
       }
       return;
     }
@@ -1510,7 +1528,7 @@ function TerminalFull(){
     // Reset all state
     stackRef.current={buy:0,sell:0};
     lastEntryRef.current={buy:0,sell:0};
-    axumIndRef.current={rsiN:50,closeVsEma:"—",sentiment:0};
+    axumIndRef.current={rsiN:50,closeVsEma:"—",sentiment:0,trend:"—"};
 
     try{
       // MINUTE_15 candles for ATR (large enough for Capital.com SL minimums)
@@ -1530,13 +1548,13 @@ function TerminalFull(){
       const closeVsEma=lastClose>ema9?"Above":"Below";
       const trend=ema9>ema20?"UP":"DOWN";
       const rsiN=rsiVal;
-      // MQ5: sentiment 1 if RSI>55 && close>EMA, -1 if RSI<45 && close<EMA
-      const sentiment=rsiN>55&&closeVsEma==="Above"?1:rsiN<45&&closeVsEma==="Below"?-1:0;
+      // MQ5: sentiment 1 if RSI>52 && close>EMA, -1 if RSI<48 && close<EMA (relaxed from 55/45)
+      const sentiment=rsiN>52&&closeVsEma==="Above"?1:rsiN<48&&closeVsEma==="Below"?-1:0;
       const signalStr=sentiment===1?"BUY SIGNAL":sentiment===-1?"SELL SIGNAL":"MONITORING";
       const sentimentLabel=sentiment===1?"Bullish":sentiment===-1?"Bearish":"Neutral";
 
       // Store live indicators in ref so axumTick can read them without stale closure
-      axumIndRef.current={rsiN,closeVsEma,sentiment};
+      axumIndRef.current={rsiN,closeVsEma,sentiment,trend:ema9>ema20?"UP":"DOWN"};
       signalRef.current=signalStr;
 
       const maxLayers=parseInt(v.maxLayers||15);
@@ -1586,8 +1604,8 @@ function TerminalFull(){
           const natr=calcATR(pc.highs,pc.lows,pc.closes).toFixed(2);
           const nc=pc.closes[pc.closes.length-1];
           const nVsE=nc>ne?"Above":"Below";
-          // ALIGNED WITH MQ5: RSI 55/45
-          const nSentiment=nr>55&&nVsE==="Above"?1:nr<45&&nVsE==="Below"?-1:0;
+          // ALIGNED WITH MQ5: RSI 52/48 (relaxed from 55/45 — 45–47 RSI was never triggering)
+          const nSentiment=nr>52&&nVsE==="Above"?1:nr<48&&nVsE==="Below"?-1:0;
           const nSig=nSentiment===1?"BUY SIGNAL":nSentiment===-1?"SELL SIGNAL":"MONITORING";
           const nSentLabel=nSentiment===1?"Bullish":nSentiment===-1?"Bearish":"Neutral";
 
@@ -1595,7 +1613,7 @@ function TerminalFull(){
           const prevSig=signalRef.current;
 
           // Update ref so axumTick gets fresh values
-          axumIndRef.current={rsiN:nr,closeVsEma:nVsE,sentiment:nSentiment};
+          axumIndRef.current={rsiN:nr,closeVsEma:nVsE,sentiment:nSentiment,trend:ne>ne20?"UP":"DOWN"};
           signalRef.current=nSig;
           setSignal(nSig); setSignalDir(nSentiment);
 
