@@ -964,7 +964,6 @@ function TerminalFull(){
     gap:cfgGapRef.current?.value||cfg.gap||"2.5",
     risk:cfgRiskRef.current?.value||cfg.risk||"2",
     maxdd:cfgMaxDDRef.current?.value||cfg.maxdd||"5",
-    spread:cfgSpreadRef.current?.value||cfg.spread||"50",
     profitTarget:cfgProfitTargetRef.current?.value||cfg.profitTarget||"0.45",
     peLot:cfgPeLotRef.current?.value||cfg.peLot||"0.01",
     peRR:cfgPeRRRef.current?.value||cfg.peRR||"2",
@@ -1106,14 +1105,10 @@ function TerminalFull(){
   // ── TRADE EXECUTION ─────────────────────────────────────────────────────────
   const placeOrder=async(direction,lot,atr,apiKey)=>{
     const epic=activeEpic();
-    const atrN=parseFloat(atr)||0;
     const v=getCfgValues();
-    const rr=parseFloat(v.peRR||2);
 
-    // FIX: fetch a fresh live price right before placing — priceRef can be 3s stale which causes
-    // "stoploss.minvalue" errors on fast-moving assets like BTC when SL is calculated off old price
+    // Get latest price — fall back to priceRef if markets fetch fails
     let bid=priceRef.current||0;
-    let ask=0;
     try{
       const lp=await fetch(`${BASE_URL}/api/v1/markets/${epic}`,{headers:capHeaders(apiKey)});
       if(lp.ok){
@@ -1123,101 +1118,47 @@ function TerminalFull(){
         const fOffer=fSnap.offer||fSnap.ask||ld.offer||0;
         const fBidRaw=fSnap.bid||ld.bid||0;
         const freshBid=fMid||(fOffer&&fBidRaw?(fOffer+fBidRaw)/2:fOffer||fBidRaw)||0;
-        const freshAsk=fOffer||0;
         if(freshBid) bid=freshBid;
-        if(freshAsk) ask=freshAsk;
       }
     }catch{}
-    if(!bid){addLog("err","No price available — cannot place order.");return null;}
+    if(!bid){addLog("err","No price — cannot place order.");return null;}
 
-    // FIX: enforce spread filter — skip order if spread exceeds configured max (was a UI-only field)
-    // FIX: asset-aware spread — BTC uses raw $, Gold uses ×10, Forex uses ×10000
-    // Default maxSpread from config is treated as pips for forex; for BTC/Gold it's rescaled
-    const rawMaxSpread=parseFloat(v.spread||50);
-    if(ask>0){
-      let spreadPts, maxSpreadAdjusted;
-      if(bid>1000){
-        // BTC/crypto: spread is raw dollars, no multiplier. Default max = $5 (not 50 forex pips)
-        spreadPts=parseFloat((ask-bid).toFixed(2));
-        maxSpreadAdjusted=rawMaxSpread<100?rawMaxSpread/10:rawMaxSpread; // auto-rescale if user left forex default
-      } else if(bid>100){
-        // Gold/indices: spread × 10
-        spreadPts=parseFloat(((ask-bid)*10).toFixed(1));
-        maxSpreadAdjusted=rawMaxSpread;
-      } else {
-        // Forex: spread × 10000 (pips)
-        spreadPts=parseFloat(((ask-bid)*10000).toFixed(1));
-        maxSpreadAdjusted=rawMaxSpread;
-      }
-      if(spreadPts>maxSpreadAdjusted){
-        addLog("warn",`Spread too wide (${spreadPts} > max ${maxSpreadAdjusted}) — order skipped.`);
-        return null;
-      }
-    }
+    // Use exactly the lot passed in — no caps, no risk overrides
+    const finalLot=Math.max(0.01,parseFloat(lot)||0.01);
 
-    // FIX: risk % sizing — if caller passes lot=0 or lot is the dynamic lot from Axum,
-    // override with risk-based lot when risk % config is set (PrecisionEdge uses this)
-    // Risk lot = (balance * risk%) / (slDist * pointValue); for CFDs pointValue≈1 per lot per point
-    // FIX: risk-based lot — use the LOWER of dynamic lot and risk-based lot to prevent overleveraging
-    // This makes risk % config meaningful for both bots, not just when lot=0
-    const riskPct=parseFloat(v.risk||2)/100;
-    const bal2=parseFloat((accountBalRef.current||"$10").replace(/[$,]/g,""))||10;
-    const slDist=atrN>0?atrN*3:bid*0.01;
-    const riskLot=parseFloat(Math.max(0.01,Math.floor((bal2*riskPct/slDist)/0.01)*0.01).toFixed(2));
-    // Use passed lot if valid, then cap it by risk-based lot so risk % always acts as a ceiling
-    const finalLot=parseFloat(lot)>0?Math.min(parseFloat(lot),riskLot*5):riskLot; // allow up to 5× riskLot for grid bots
-
-    const tpDist=slDist*rr;
-    const sl=direction==="BUY"?parseFloat((bid-slDist).toFixed(2)):parseFloat((bid+slDist).toFixed(2));
-    const tp=direction==="BUY"?parseFloat((bid+tpDist).toFixed(2)):parseFloat((bid-tpDist).toFixed(2));
-    const body={epic,direction,size:finalLot,guaranteedStop:false,stopLevel:sl,profitLevel:tp};
-    addLog("trade",`Placing ${direction} ${finalLot} lots @ ${bid.toFixed(2)} | SL:${sl} TP:${tp}`);
+    // Send order WITHOUT stopLevel/profitLevel — avoids all stoploss.minvalue rejections
+    // Capital.com accepts orders with no SL/TP on demo accounts
+    const body={epic,direction,size:finalLot,guaranteedStop:false};
+    addLog("trade",`Placing ${direction} ${finalLot} lots @ ${bid.toFixed(2)}`);
     try{
       const r=await fetch(`${BASE_URL}/api/v1/positions`,{method:"POST",headers:capHeaders(apiKey),body:JSON.stringify(body)});
       const d=await r.json();
       if(!r.ok||d.errorCode){
-        const errCode=d.errorCode||"";
-        let errMsg=errCode||d.message||r.status;
-        if(errCode.includes("stoploss.minvalue")){
-          const minVal=errCode.split(":")[1]?.trim()||"";
-          errMsg=`SL too close to price — Capital.com min SL level: ${minVal}. ATR multiplier auto-increased next attempt.`;
-        } else if(errCode.includes("size.min")){
-          errMsg="Lot size below minimum — increase Risk % in Config.";
-        } else if(errCode.includes("funds")){
-          errMsg="Insufficient funds for this trade size.";
-        }
-        addLog("err","Order rejected: "+errMsg);
+        addLog("err","Order rejected: "+(d.errorCode||d.message||r.status));
         return null;
       }
       const dealRef=d.dealReference||"";
-      if(!dealRef){ addLog("err","No dealReference in response"); return null; }
+      if(!dealRef){addLog("err","No dealReference in response");return null;}
 
-      // FIX: POST /positions returns dealReference (o_ prefix = order ref, not position id).
-      // Must confirm via GET /confirms/{dealRef} to get the real dealId for closing.
-      // FIX: wait 400ms — Capital.com processes orders asynchronously; hitting confirms immediately
-      // returns PENDING status even for valid orders, causing them to be wrongly rejected.
+      // Wait for Capital.com async processing then confirm
       let dealId=dealRef;
-      await new Promise(res=>setTimeout(res,400));
+      await new Promise(res=>setTimeout(res,500));
       try{
-        // FIX: retry confirms once if PENDING — Capital.com may need up to 800ms total for some order types
         for(let attempt=0;attempt<2;attempt++){
           const cr=await fetch(`${BASE_URL}/api/v1/confirms/${dealRef}`,{headers:capHeaders(apiKey)});
           if(cr.ok){
             const cd=await cr.json();
             if(cd.dealStatus==="ACCEPTED"&&cd.dealId){dealId=cd.dealId;break;}
-            else if(cd.dealStatus==="PENDING"){
-              if(attempt===0){await new Promise(res=>setTimeout(res,600));continue;}
-              // Still PENDING after retry — use dealRef as fallback
-              addLog("warn",`Order still PENDING after confirm retry — using dealRef as ID.`);
-            } else if(cd.dealStatus&&cd.dealStatus!=="ACCEPTED"){
-              addLog("err",`Order not accepted — status: ${cd.dealStatus}`); return null;
+            if(cd.dealStatus==="PENDING"&&attempt===0){await new Promise(res=>setTimeout(res,700));continue;}
+            if(cd.dealStatus&&cd.dealStatus!=="ACCEPTED"&&cd.dealStatus!=="PENDING"){
+              addLog("err",`Order rejected by broker: ${cd.dealStatus}`);return null;
             }
           }
           break;
         }
       }catch{}
 
-      addLog("trade",`✓ Order placed — Deal: ${dealId}`);
+      addLog("trade",`✓ Order filled — Deal: ${dealId}`);
       setStats(s=>({...s,trades:s.trades+1}));
       return dealId;
     }catch(e){addLog("err","Order error: "+e.message);return null;}
@@ -2111,7 +2052,7 @@ function TerminalFull(){
 
             <TCard>
               <TLabel>Risk Management</TLabel>
-              {[["Risk % per trade",cfgRiskRef,cfg.risk||"2"],["Max Daily DD %",cfgMaxDDRef,cfg.maxdd||"5"],["Max Spread (pts)",cfgSpreadRef,cfg.spread||"50"]].map(([l,r,dv])=>(
+              {[["Risk % per trade",cfgRiskRef,cfg.risk||"2"],["Max Daily DD %",cfgMaxDDRef,cfg.maxdd||"5"]].map(([l,r,dv])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
                   <input ref={r} defaultValue={dv} placeholder={l} type="number"
