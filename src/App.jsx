@@ -886,17 +886,19 @@ function calcATR(highs,lows,closes,period=14){
   for(let i=period;i<trs.length;i++)atr=(atr*(period-1)+trs[i])/period;
   return atr;
 }
-// FIX: extractCandles now returns highs, lows AND closes for real ATR
+// FIX: extractCandles now returns highs, lows, closes AND opens for engulfing pattern
 function extractCandles(prices){
-  const out={closes:[],highs:[],lows:[]};
+  const out={closes:[],highs:[],lows:[],opens:[]};
   (prices||[]).forEach(c=>{
+    const ob=c.openPrice?.bid||0,oa=c.openPrice?.ask||0;
     const cb=c.closePrice?.bid||0,ca=c.closePrice?.ask||0;
     const hb=c.highPrice?.bid||0,ha=c.highPrice?.ask||0;
     const lb=c.lowPrice?.bid||0,la=c.lowPrice?.ask||0;
+    const open=oa&&ob?(ob+oa)/2:ob||oa||0;
     const close=ca&&cb?(cb+ca)/2:cb||ca||0;
     const high=ha&&hb?(hb+ha)/2:hb||ha||close;
     const low=la&&lb?(lb+la)/2:lb||la||close;
-    if(close>0){out.closes.push(close);out.highs.push(high);out.lows.push(low);}
+    if(close>0){out.closes.push(close);out.highs.push(high);out.lows.push(low);out.opens.push(open||close);}
   });
   return out;
 }
@@ -962,14 +964,14 @@ function TerminalFull(){
     email:cfgEmailRef.current?.value||cfg.email||"",
     apikey:cfgApiKeyRef.current?.value||cfg.apikey||"",
     password:cfgPasswordRef.current?.value||cfg.password||"",
-    baseEquity:cfgBaseEquityRef.current?.value||cfg.baseEquity||"10",
-    baseLot:cfgBaseLotRef.current?.value||cfg.baseLot||"0.01",
-    maxLayers:cfgMaxLayersRef.current?.value||cfg.maxLayers||"8",
+    baseEquity:cfgBaseEquityRef.current?.value||cfg.baseEquity||"1000",
+    baseLot:cfgBaseLotRef.current?.value||cfg.baseLot||"0.2",
+    maxLayers:cfgMaxLayersRef.current?.value||cfg.maxLayers||"3",
     gap:cfgGapRef.current?.value||cfg.gap||"2.5",
     risk:cfgRiskRef.current?.value||cfg.risk||"2",
-    maxdd:cfgMaxDDRef.current?.value||cfg.maxdd||"5",
+    maxdd:cfgMaxDDRef.current?.value||cfg.maxdd||"500",
     profitTarget:cfgProfitTargetRef.current?.value||cfg.profitTarget||"0.45",
-    peLot:cfgPeLotRef.current?.value||cfg.peLot||"0.01",
+    peLot:cfgPeLotRef.current?.value||cfg.peLot||"0.2",
     peRR:cfgPeRRRef.current?.value||cfg.peRR||"2",
   });
   const cfgEmail=cfg.email||"";
@@ -1118,7 +1120,8 @@ function TerminalFull(){
   };
 
   // ── TRADE EXECUTION ─────────────────────────────────────────────────────────
-  const placeOrder=async(direction,lot,atr,apiKey)=>{
+  // sl and tp are optional — Axum doesn't use them, PrecisionEdge sends them (MQ5 has SL/TP)
+  const placeOrder=async(direction,lot,atr,apiKey,sl=null,tp=null)=>{
     const epic=activeEpic();
     const v=getCfgValues();
 
@@ -1148,14 +1151,17 @@ function TerminalFull(){
     let finalLot=isNaN(rawParsed)||rawParsed<0.01?0.01:rawParsed;
     if(isNaN(rawParsed)||rawParsed<0.01) addLog("warn",`Lot "${lot}" invalid — using 0.01`);
     const epicUp=epic.toUpperCase();
-    const minLot=epicUp==="GOLD"||epicUp==="XAUUSD"?1:epicUp==="BTCUSD"?0.01:0.01;
+    // FIX: Capital.com demo minimum for GOLD is 0.1, NOT 1
+    const minLot=epicUp==="GOLD"||epicUp==="XAUUSD"?0.1:epicUp==="BTCUSD"?0.01:0.01;
     if(finalLot<minLot){
       addLog("warn",`Lot ${finalLot} below ${epicUp} minimum (${minLot}) — clamping to ${minLot}. Raise baseLot in Config.`);
       finalLot=minLot;
     }
 
-    // Send order WITHOUT stopLevel/profitLevel — avoids all stoploss.minvalue rejections
+    // Send order — include SL/TP when provided (PrecisionEdge uses them, Axum skips to avoid minvalue rejections)
     const body={epic,direction,size:finalLot,guaranteedStop:false};
+    if(sl!==null&&sl>0) body.stopLevel=sl;
+    if(tp!==null&&tp>0) body.profitLevel=tp;
     addLog("trade",`Placing ${direction} ${finalLot} lots @ ${bid.toFixed(2)}`);
 
     const attemptOrder=async()=>{
@@ -1204,15 +1210,22 @@ function TerminalFull(){
   };
 
   const closePosition=async(dealId,apiKey)=>{
+    if(!dealId){addLog("err","Cannot close — no deal ID. Close manually on Capital.com.");return;}
     if(closingIdRef.current===dealId) return; // prevent double-tap
     closingIdRef.current=dealId;
     setClosingId(dealId);
     addLog("info",`Closing position ${dealId}...`);
     try{
       // Always refresh session before closing — prevents 401 if session aged
+      // Use savedCredsRef directly — never depends on CONFIG tab being rendered
+      const creds=savedCredsRef.current;
+      const effectiveKey=apiKey||creds.apikey||"";
+      if(!effectiveKey){addLog("err","Close failed: no API key. Reconnect first.");return;}
+
+      // Refresh session first
       await silentReconnect();
 
-      const doDelete=async()=>fetch(`${BASE_URL}/api/v1/positions/${dealId}`,{method:"DELETE",headers:capHeaders(apiKey)});
+      const doDelete=async()=>fetch(`${BASE_URL}/api/v1/positions/${dealId}`,{method:"DELETE",headers:capHeaders(effectiveKey)});
       let r=await doDelete();
 
       // On 401 — reconnect once and retry
@@ -1226,9 +1239,8 @@ function TerminalFull(){
       if(r.status===200||r.status===204||r.ok){
         addLog("trade",`✓ Position ${dealId} closed`);
         setPositions(ps=>ps.filter(p=>p.dealId!==dealId));
-        // Decrement stackRef so bot doesn't think the position is still open
-        const v=getCfgValues();
-        const allPos=await fetch(`${BASE_URL}/api/v1/positions`,{headers:capHeaders(v.apikey)}).then(r2=>r2.json()).catch(()=>({positions:[]}));
+        // Sync stackRef with real server position count
+        const allPos=await fetch(`${BASE_URL}/api/v1/positions`,{headers:capHeaders(effectiveKey)}).then(r2=>r2.json()).catch(()=>({positions:[]}));
         const liveBuys=(allPos.positions||[]).filter(p=>p.position?.direction==="BUY").length;
         const liveSells=(allPos.positions||[]).filter(p=>p.position?.direction==="SELL").length;
         stackRef.current={buy:liveBuys,sell:liveSells};
@@ -1380,15 +1392,17 @@ function TerminalFull(){
         if(!pr.ok) return;
         const pd=await pr.json();
         const pos=(pd.positions||[]).map(p=>({
-          dealId:p.position?.dealId||p.dealId||"",
+          // FIX: Capital.com sometimes returns dealId as dealReference — try all field paths
+          dealId:p.position?.dealId||p.position?.dealReference||p.dealId||p.dealReference||"",
           dir:p.position?.direction||"BUY",
           lot:p.position?.size||0,
           open:p.position?.openLevel||p.position?.level||p.position?.price||0,
           sl:p.position?.stopLevel||"—",
           tp:p.position?.profitLevel||"—",
           pnl:p.position?.upl||0,
-          epic:p.market?.epic||activeEpic(),
-          pair:p.market?.instrumentName||activePairLabel(),
+          // Always use the position's own market data for pair label — don't use activePairLabel()
+          epic:p.market?.epic||"",
+          pair:p.market?.instrumentName||p.market?.epic||"Position",
         }));
         setPositions(pos);
 
@@ -1468,13 +1482,16 @@ function TerminalFull(){
 
     const st=stackRef.current;
     const maxLayers=parseInt(v.maxLayers||15);
-    const gridGap=parseFloat(v.gap||12); // in points — matches MQ5 GridGap
-    // FIX: warn if gridGap is dangerously small for the current asset (would cause instant stacking)
-    const pointSize=bid>1000?1:bid>100?0.1:0.0001;
-    const gapNeededDollar=gridGap*pointSize;
-    if(gapNeededDollar<0.5&&st.buy===0&&st.sell===0){
-      addLog("warn",`Grid gap too small for this asset: $${gapNeededDollar.toFixed(4)} effective gap. Increase Grid Gap (pts) in Config (recommend ${bid>1000?"50":"25"} pts).`);
+    const configuredGap=parseFloat(v.gap||12); // in points — matches MQ5 GridGap
+    // FIX: auto-derive minimum safe gap from ATR so it never stacks instantly on Gold/BTC
+    // Gold ATR ~$10–25, BTC ATR ~$300–1000. Min gap = 0.5 × ATR to ensure meaningful spacing.
+    const atrNum=parseFloat(atr)||1;
+    const minSafeGap=atrNum*0.5;
+    const gridGap=Math.max(configuredGap,minSafeGap);
+    if(gridGap>configuredGap&&st.buy===0&&st.sell===0){
+      addLog("warn",`Grid gap ${configuredGap} too small for current ATR (${atrNum.toFixed(2)}) — using ATR-based gap: ${gridGap.toFixed(2)}`);
     }
+    const pointSize=1; // All prices are in price units directly (not points)
 
     // ── Read live positions from last known state (stackRef is synced by accountPoll)
     const buyCount=st.buy;
@@ -1547,7 +1564,7 @@ function TerminalFull(){
     // ── BUY STACKING — fires on RSI bullish OR neutral-trend-UP (stacking works in neutral RSI too)
     const bullishOk=sentiment===1||(sentiment===0&&(trend==="UP"||closeVsEma==="Above"));
     if(buyCount>0&&sellCount===0&&bullishOk&&buyCount<maxLayers){
-      const gapNeeded=gridGap*pointSize;
+      const gapNeeded=gridGap; // gridGap is already in price units
       if(lastBuyPx>0&&(bid-lastBuyPx)>=gapNeeded){
         addLog("trade",`Grid BUY Layer ${buyCount+1} — gap: ${(bid-lastBuyPx).toFixed(4)}`);
         await place("BUY");
@@ -1558,7 +1575,7 @@ function TerminalFull(){
     // ── SELL STACKING — fires on RSI bearish OR neutral-trend-DOWN
     const bearishOk=sentiment===-1||(sentiment===0&&(trend==="DOWN"||closeVsEma==="Below"));
     if(sellCount>0&&buyCount===0&&bearishOk&&sellCount<maxLayers){
-      const gapNeeded=gridGap*pointSize;
+      const gapNeeded=gridGap; // gridGap is already in price units
       if(lastSellPx>0&&(lastSellPx-bid)>=gapNeeded){
         addLog("trade",`Grid SELL Layer ${sellCount+1} — gap: ${(lastSellPx-bid).toFixed(4)}`);
         await place("SELL");
@@ -1585,28 +1602,60 @@ function TerminalFull(){
     lastEntryRef.current={buy:0,sell:0};
     axumIndRef.current={rsiN:50,closeVsEma:"—",sentiment:0,trend:"—"};
 
+    // ── MQ5-EXACT PRECISIONEDGE PARAMETERS (hardcoded, matches EA exactly) ─────
+    const PE_FAST_EMA   = 20;    // FastEMA = 20 (MQ5 input)
+    const PE_SLOW_EMA   = 50;    // SlowEMA = 50 (MQ5 input)
+    const PE_ATR_MULT   = 1.5;   // ATR_Multiplier = 1.5 (MQ5 input)
+    const PE_RR         = 2.0;   // RiskReward = 2.0 (MQ5 input)
+    const PE_LOT        = 0.10;  // FixedLotSize = 0.10 (MQ5 input)
+    const PE_START_HOUR = 8;     // TradeStartHour = 8 (MQ5 input)
+    const PE_END_HOUR   = 17;    // TradeEndHour = 17 (MQ5 input)
+
     try{
-      // MINUTE_15 candles for ATR (large enough for Capital.com SL minimums)
-      const r=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE_15&max=100`,{headers:capHeaders(v.apikey)});
+      // MINUTE_5 candles for PrecisionEdge (matches MQ5 PERIOD_M5), MINUTE_15 for Axum
+      const resolution=botRef.current==="precision"?"MINUTE_5":"MINUTE_15";
+      const r=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=${resolution}&max=100`,{headers:capHeaders(v.apikey)});
       if(!r.ok) throw new Error("Candle fetch failed: "+r.status);
       const d=await r.json();
       const candles=extractCandles(d.prices);
-      const {closes,highs,lows}=candles;
-      if(closes.length<14) throw new Error("Not enough candle data (got "+closes.length+")");
+      const {closes,highs,lows,opens}=candles;
+      if(closes.length<55) throw new Error("Not enough candle data (need 55+, got "+closes.length+")");
 
+      // ── Common indicators
       const rsiVal=calcRSI(closes);
+      const atrVal=calcATR(highs,lows,closes);
+      const atr=atrVal.toFixed(2);
+      const lastClose=closes[closes.length-1];
+
+      // ── Axum indicators (EMA9/20 + RSI sentiment)
       const ema9=calcEMA(closes,9);
       const ema20=calcEMA(closes,20);
-      const atr=calcATR(highs,lows,closes).toFixed(2);
-      const lastClose=closes[closes.length-1];
-      // ALIGNED WITH MQ5: RSI 55/45 thresholds, close vs EMA9
       const closeVsEma=lastClose>ema9?"Above":"Below";
       const trend=ema9>ema20?"UP":"DOWN";
       const rsiN=rsiVal;
-      // MQ5: sentiment 1 if RSI>52 && close>EMA, -1 if RSI<48 && close<EMA (relaxed from 55/45)
       const sentiment=rsiN>52&&closeVsEma==="Above"?1:rsiN<48&&closeVsEma==="Below"?-1:0;
       const signalStr=sentiment===1?"BUY SIGNAL":sentiment===-1?"SELL SIGNAL":"MONITORING";
       const sentimentLabel=sentiment===1?"Bullish":sentiment===-1?"Bearish":"Neutral";
+
+      // ── PrecisionEdge indicators (EMA20/50, pullback zone, engulfing — MQ5 exact)
+      const peEma20=calcEMA(closes,PE_FAST_EMA);
+      const peEma50=calcEMA(closes,PE_SLOW_EMA);
+      const bid=priceRef.current||lastClose;
+      const peUptrend=peEma20>peEma50;
+      const peDowntrend=peEma20<peEma50;
+      // MQ5: pullbackUp = uptrend && bid<=fastEMA && bid>=slowEMA
+      const pePullbackUp=peUptrend&&bid<=peEma20&&bid>=peEma50;
+      // MQ5: pullbackDown = downtrend && bid>=fastEMA && bid<=slowEMA
+      const pePullbackDown=peDowntrend&&bid>=peEma20&&bid<=peEma50;
+      // MQ5 engulfing uses last 2 closed candles (index 0=current forming, 1=last closed, 2=prev closed)
+      // In array: [n-1]=last closed (candle index 1 in MQ5), [n-2]=prev closed (index 2 in MQ5)
+      const n=closes.length;
+      const o0=opens[n-1],c0=closes[n-1]; // last closed candle
+      const o1=opens[n-2],c1=closes[n-2]; // prev closed candle
+      // MQ5: bullishEngulf = close0>open0 && close1<open1 && close0>open1 && open0<close1
+      const peBullishEngulf=(c0>o0)&&(c1<o1)&&(c0>o1)&&(o0<c1);
+      // MQ5: bearishEngulf = close0<open0 && close1>open1 && close0<open1 && open0>close1
+      const peBearishEngulf=(c0<o0)&&(c1>o1)&&(c0<o1)&&(o0>c1);
 
       // Store live indicators in ref so axumTick can read them without stale closure
       axumIndRef.current={rsiN,closeVsEma,sentiment,trend:ema9>ema20?"UP":"DOWN"};
@@ -1618,24 +1667,36 @@ function TerminalFull(){
       if(botRef.current==="axum"){
         setInds(i=>({...i,
           rsi:rsiVal.toFixed(1),ema9:ema9.toFixed(2),closeEma:closeVsEma,
-          bid:priceRef.current?.toString()||ema9.toFixed(2),
+          bid:bid.toString(),
           buyStack:0,sellStack:0,lastBuy:"—",lastSell:"—",
           lot:dynLot,sentiment:sentimentLabel,
           entry:signalStr==="MONITORING"?"Waiting":signalStr,
           grid:"Layer 0",stackRoom:`${maxLayers} slots free`,dayDD:"0.00%",
         }));
       } else {
-        setInds(i=>({...i,peFast:ema9.toFixed(2),peSlow:ema20.toFixed(2),peAtr:atr,peTrend:trend,
-          pePullback:closeVsEma==="Below"&&trend==="UP"?"Yes":"No",
-          peEngulf:"Watching",peSession:"Active",peReason:`RSI ${rsiVal.toFixed(1)} · EMA9 ${ema9.toFixed(2)} · ATR ${atr}`}));
+        // FIX: show correct EMA 20/50 (not 9/20), and real engulf/pullback status
+        const peHour=new Date().getUTCHours();
+        const peSessionActive=peHour>=PE_START_HOUR&&peHour<PE_END_HOUR;
+        setInds(i=>({...i,
+          peFast:peEma20.toFixed(2),peSlow:peEma50.toFixed(2),peAtr:atr,
+          peTrend:peUptrend?"UP":"DOWN",
+          pePullback:(pePullbackUp||pePullbackDown)?"Yes":"No",
+          peEngulf:peBullishEngulf?"Bullish ✓":peBearishEngulf?"Bearish ✓":"None",
+          peSession:peSessionActive?"Active (UTC "+peHour+":xx)":"Closed (8–17 UTC)",
+          peReason:`EMA20:${peEma20.toFixed(2)} EMA50:${peEma50.toFixed(2)} ATR:${atr}`}));
       }
 
       setSignal(signalStr); setSignalDir(sentiment);
       runningRef.current=true;
       setRunning(true);
       saveBotState(true,botRef.current,pair);
-      addLog("trade",`Indicators loaded — RSI: ${rsiVal.toFixed(1)} · EMA9: ${ema9.toFixed(2)} · Trend: ${trend} · Signal: ${signalStr}`);
-      addLog("info",`Monitoring ${pairLabel} every 30s...`);
+      if(botRef.current==="precision"){
+        addLog("trade",`PrecisionEdge loaded — EMA20:${peEma20.toFixed(2)} EMA50:${peEma50.toFixed(2)} ATR:${atr} Trend:${peUptrend?"UP":"DOWN"}`);
+        addLog("info",`Monitoring ${pairLabel} every 30s (session: 08:00–17:00 UTC)...`);
+      } else {
+        addLog("trade",`Axum loaded — RSI:${rsiVal.toFixed(1)} EMA9:${ema9.toFixed(2)} Trend:${trend} Signal:${signalStr}`);
+        addLog("info",`Monitoring ${pairLabel} every 30s...`);
+      }
 
       if(botPollRef.current) clearInterval(botPollRef.current);
 
@@ -1646,29 +1707,48 @@ function TerminalFull(){
         pollLock=true;
         // FIX: read fresh config every tick so changes saved while bot runs take effect immediately
         const v=getCfgValues();
+        // FIX: use savedCredsRef for apiKey — doesn't require CONFIG tab to be rendered
+        const pollKey=savedCredsRef.current.apikey||v.apikey;
         try{
-          const pr=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=MINUTE_15&max=100`,{headers:capHeaders(v.apikey)});
+          const resolution2=botRef.current==="precision"?"MINUTE_5":"MINUTE_15";
+          const pr=await fetch(`${BASE_URL}/api/v1/prices/${epic}?resolution=${resolution2}&max=100`,{headers:capHeaders(pollKey)});
           if(pr.status===401){await silentReconnect();return;}
           if(!pr.ok) return;
           const pd=await pr.json();
           const pc=extractCandles(pd.prices);
-          if(pc.closes.length<14) return;
+          if(pc.closes.length<55) return;
 
+          // ── Common
           const nr=calcRSI(pc.closes);
+          const natrVal=calcATR(pc.highs,pc.lows,pc.closes);
+          const natr=natrVal.toFixed(2);
+          const nc=pc.closes[pc.closes.length-1];
+          const nbid=priceRef.current||nc;
+
+          // ── Axum indicators
           const ne=calcEMA(pc.closes,9);
           const ne20=calcEMA(pc.closes,20);
-          const natr=calcATR(pc.highs,pc.lows,pc.closes).toFixed(2);
-          const nc=pc.closes[pc.closes.length-1];
           const nVsE=nc>ne?"Above":"Below";
-          // ALIGNED WITH MQ5: RSI 52/48 (relaxed from 55/45 — 45–47 RSI was never triggering)
           const nSentiment=nr>52&&nVsE==="Above"?1:nr<48&&nVsE==="Below"?-1:0;
           const nSig=nSentiment===1?"BUY SIGNAL":nSentiment===-1?"SELL SIGNAL":"MONITORING";
           const nSentLabel=nSentiment===1?"Bullish":nSentiment===-1?"Bearish":"Neutral";
 
-          // FIX: capture prevSig BEFORE updating signalRef — otherwise prevSig===nSig always and PrecisionEdge never fires
+          // ── PrecisionEdge indicators (MQ5 exact)
+          const nPeEma20=calcEMA(pc.closes,PE_FAST_EMA);
+          const nPeEma50=calcEMA(pc.closes,PE_SLOW_EMA);
+          const nPeUptrend=nPeEma20>nPeEma50;
+          const nPeDowntrend=nPeEma20<nPeEma50;
+          const nPePullbackUp=nPeUptrend&&nbid<=nPeEma20&&nbid>=nPeEma50;
+          const nPePullbackDown=nPeDowntrend&&nbid>=nPeEma20&&nbid<=nPeEma50;
+          const nn=pc.closes.length;
+          const no0=pc.opens[nn-1],nc0=pc.closes[nn-1];
+          const no1=pc.opens[nn-2],nc1=pc.closes[nn-2];
+          const nPeBullEngulf=(nc0>no0)&&(nc1<no1)&&(nc0>no1)&&(no0<nc1);
+          const nPeBearEngulf=(nc0<no0)&&(nc1>no1)&&(nc0<no1)&&(no0>nc1);
+
+          // FIX: capture prevSig BEFORE updating signalRef
           const prevSig=signalRef.current;
 
-          // Update ref so axumTick gets fresh values
           axumIndRef.current={rsiN:nr,closeVsEma:nVsE,sentiment:nSentiment,trend:ne>ne20?"UP":"DOWN"};
           signalRef.current=nSig;
           setSignal(nSig); setSignalDir(nSentiment);
@@ -1677,62 +1757,79 @@ function TerminalFull(){
           if(botRef.current==="axum"){
             setInds(i=>({...i,
               rsi:nr.toFixed(1),ema9:ne.toFixed(2),closeEma:nVsE,
-              sentiment:nSentLabel,bid:priceRef.current?.toString()||ne.toFixed(2),
+              sentiment:nSentLabel,bid:nbid.toString(),
               buyStack:st.buy,sellStack:st.sell,
               grid:`Layer ${st.buy+st.sell}`,
               stackRoom:`${Math.max(0,(parseInt(v.maxLayers)||15)-st.buy-st.sell)} slots free`,
             }));
           } else {
-            setInds(i=>({...i,peFast:ne.toFixed(2),peSlow:ne20.toFixed(2),peAtr:natr,
-              peTrend:ne>ne20?"UP":"DOWN",peReason:`RSI ${nr.toFixed(1)} · EMA9 ${ne.toFixed(2)} · ATR ${natr}`}));
+            // FIX: correct EMA labels + real engulf status
+            const peHourNow=new Date().getUTCHours();
+            const peSessionNow=peHourNow>=PE_START_HOUR&&peHourNow<PE_END_HOUR;
+            setInds(i=>({...i,
+              peFast:nPeEma20.toFixed(2),peSlow:nPeEma50.toFixed(2),peAtr:natr,
+              peTrend:nPeUptrend?"UP":"DOWN",
+              pePullback:(nPePullbackUp||nPePullbackDown)?"Yes":"No",
+              peEngulf:nPeBullEngulf?"Bullish ✓":nPeBearEngulf?"Bearish ✓":"None",
+              peSession:peSessionNow?"Active":"Closed (8–17 UTC)",
+              peReason:`EMA20:${nPeEma20.toFixed(2)} EMA50:${nPeEma50.toFixed(2)} ATR:${natr}`}));
           }
 
           // ── AXUM AI TICK (initial entry + stacking logic)
-          if(botRef.current==="axum") await axumTick(v,epic,natr,v.apikey);
+          if(botRef.current==="axum") await axumTick(v,epic,natr,pollKey);
 
-          // ── PRECISIONEDGE ENTRY — enters on signal active + no existing position in that direction
+          // ── PRECISIONEDGE — MQ5-EXACT ENTRY LOGIC ─────────────────────────────
           if(botRef.current==="precision"){
-            const hasSignal=nSig==="BUY SIGNAL"||nSig==="SELL SIGNAL";
-            if(hasSignal){
-              const dir=nSig==="BUY SIGNAL"?"BUY":"SELL";
-              // Don't re-enter the same direction if we already have a position in it
-              const alreadyHasPos=dir==="BUY"?stackRef.current.buy>0:stackRef.current.sell>0;
-              if(!alreadyHasPos){
-                const lot2=Math.max(0.01,parseFloat(v.peLot||0.01)).toFixed(2);
-                const reason=nSig!==prevSig?"Signal changed":"No position — re-entering signal";
-                addLog("trade",`PrecisionEdge ${dir} — ${reason} · RSI:${nr.toFixed(1)}`);
-                const dealId2=await placeOrder(dir,lot2,natr,v.apikey);
-                if(dealId2){
-                  if(dir==="BUY") stackRef.current={...stackRef.current,buy:stackRef.current.buy+1};
-                  else stackRef.current={...stackRef.current,sell:stackRef.current.sell+1};
-                }
-              }
+            // MQ5: check session hours (UTC) — TradeStartHour=8, TradeEndHour=17
+            const utcHour=new Date().getUTCHours();
+            if(utcHour<PE_START_HOUR||utcHour>=PE_END_HOUR){
+              addLog("info",`PrecisionEdge: outside session (UTC ${utcHour}:xx, trading 08–17). Waiting.`);
+              return;
+            }
+            // MQ5: only one position at a time (PositionsTotal() > 0 → return)
+            const totalPositions=stackRef.current.buy+stackRef.current.sell;
+            if(totalPositions>0){
+              addLog("info",`PrecisionEdge: position open — waiting for close before re-entry (${totalPositions} open)`);
+              return;
+            }
+            // MQ5: pullbackUp && bullishEngulf → BUY
+            if(nPePullbackUp&&nPeBullEngulf){
+              // MQ5: sl = ask − (atr × ATR_Multiplier), tp = sl_distance × RR
+              const ask=nbid;
+              const slDist=natrVal*PE_ATR_MULT;
+              const sl=parseFloat((ask-slDist).toFixed(5));
+              const tp=parseFloat((ask+slDist*PE_RR).toFixed(5));
+              addLog("trade",`PrecisionEdge BUY — Pullback+Engulf ✓ | SL:${sl.toFixed(2)} TP:${tp.toFixed(2)} ATR:${natr}`);
+              const dealId2=await placeOrder("BUY",PE_LOT,natr,pollKey,sl,tp);
+              if(dealId2) stackRef.current={...stackRef.current,buy:stackRef.current.buy+1};
+            }
+            // MQ5: pullbackDown && bearishEngulf → SELL
+            else if(nPePullbackDown&&nPeBearEngulf){
+              const sellBid=nbid;
+              const slDist=natrVal*PE_ATR_MULT;
+              const sl=parseFloat((sellBid+slDist).toFixed(5));
+              const tp=parseFloat((sellBid-slDist*PE_RR).toFixed(5));
+              addLog("trade",`PrecisionEdge SELL — Pullback+Engulf ✓ | SL:${sl.toFixed(2)} TP:${tp.toFixed(2)} ATR:${natr}`);
+              const dealId2=await placeOrder("SELL",PE_LOT,natr,pollKey,sl,tp);
+              if(dealId2) stackRef.current={...stackRef.current,sell:stackRef.current.sell+1};
+            } else {
+              // Log which conditions are met/missing each tick
+              const pullMsg=nPePullbackUp?"PullbackUp✓":nPePullbackDown?"PullbackDown✓":"Pullback✗";
+              const engulfMsg=nPeBullEngulf?"BullEngulf✓":nPeBearEngulf?"BearEngulf✓":"Engulf✗";
+              addLog("info",`PrecisionEdge waiting: ${pullMsg} ${engulfMsg} | EMA20:${nPeEma20.toFixed(2)} EMA50:${nPeEma50.toFixed(2)} Bid:${nbid.toFixed(2)}`);
             }
           }
         }catch(e){ addLog("warn","Poll error: "+e.message); }
         finally{ pollLock=false; }
       };
 
-      // ── IMMEDIATE FIRST TICK — both bots enter right away without waiting 30s ─────
+      // ── IMMEDIATE FIRST TICK — both bots evaluate right away without waiting 30s
       if(botRef.current==="axum"){
         addLog("info","Running initial market check...");
         await axumTick(v,epic,atr,v.apikey);
       }
-      // PrecisionEdge: enter immediately on current signal (no need to wait for a signal change)
       if(botRef.current==="precision"){
-        const initSig=signalRef.current;
-        if(initSig==="BUY SIGNAL"||initSig==="SELL SIGNAL"){
-          const initDir=initSig==="BUY SIGNAL"?"BUY":"SELL";
-          const lot2=Math.max(0.01,parseFloat(v.peLot||0.01)).toFixed(2);
-          addLog("trade",`PrecisionEdge initial ${initDir} — RSI:${rsiVal.toFixed(1)} · Signal: ${initSig}`);
-          const dealId2=await placeOrder(initDir,lot2,atr,v.apikey);
-          if(dealId2){
-            if(initDir==="BUY") stackRef.current={...stackRef.current,buy:1};
-            else stackRef.current={...stackRef.current,sell:1};
-          }
-        } else {
-          addLog("info",`PrecisionEdge monitoring — RSI ${rsiVal.toFixed(1)}, waiting for BUY or SELL signal`);
-        }
+        addLog("info","PrecisionEdge: waiting for pullback+engulf condition (MQ5 logic). First check in 30s...");
       }
 
       botPollRef.current=setInterval(poll,30000);
@@ -1762,9 +1859,10 @@ function TerminalFull(){
     setRunning(false);
     setSignal("NO SIGNAL"); setSignalDir(0);
     signalRef.current="NO SIGNAL";
-    stackRef.current={buy:0,sell:0};
+    // FIX: do NOT reset stackRef to 0 here — live positions still exist on Capital.com
+    // accountPoll will sync stackRef with real broker position count on next tick
     if(botPollRef.current){clearInterval(botPollRef.current);botPollRef.current=null;}
-    addLog("info","Bot stopped.");
+    addLog("info","Bot stopped. Live positions are NOT closed — manage them in TRADES tab or Capital.com.");
   };
 
   useEffect(()=>{
@@ -2056,7 +2154,9 @@ function TerminalFull(){
               </TCard>
             ):positions.map((p,i)=>{
               const isClosing=closingId===p.dealId;
-              const v=getCfgValues();
+              // FIX: NEVER call getCfgValues() in render — refs are null until CONFIG tab renders
+              // Always use savedCredsRef which is populated on connect/auto-resume
+              const apiKeyForClose=savedCredsRef.current.apikey||cfg.apikey||"";
               return(
                 <TCard key={p.dealId||i} style={{borderColor:p.dir==="BUY"?G.green+"33":G.red+"33"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -2077,7 +2177,7 @@ function TerminalFull(){
                     ))}
                   </div>
                   <button
-                    onClick={()=>closePosition(p.dealId,v.apikey)}
+                    onClick={()=>closePosition(p.dealId,apiKeyForClose)}
                     disabled={isClosing||!p.dealId}
                     style={{width:"100%",padding:"10px",background:isClosing?"none":G.redBg,border:`1px solid ${G.red}${isClosing?"22":"66"}`,borderRadius:G.rs,color:isClosing?G.textDim:G.red,fontSize:10,fontWeight:700,letterSpacing:1,cursor:isClosing?"wait":"pointer",fontFamily:M,transition:"all 0.2s"}}>
                     {isClosing?"CLOSING...":"✕  CLOSE POSITION"}
@@ -2118,14 +2218,14 @@ function TerminalFull(){
             ):(
               <TCard>
                 <TLabel>PrecisionEdge — Indicators</TLabel>
-                <IndRow label="Fast EMA (9)" val={inds.peFast}/>
+                <IndRow label="Fast EMA (20)" val={inds.peFast}/>
                 <IndRow label="Slow EMA (50)" val={inds.peSlow}/>
                 <IndRow label="ATR (14)" val={inds.peAtr}/>
                 <IndRow label="Trend" val={inds.peTrend} dir={inds.peTrend==="UP"?"buy":inds.peTrend==="DOWN"?"sell":""}/>
                 <IndRow label="Pullback Zone" val={inds.pePullback}/>
-                <IndRow label="Engulfing" val={inds.peEngulf}/>
-                <IndRow label="Session" val={inds.peSession}/>
-                <IndRow label="Reason" val={inds.peReason}/>
+                <IndRow label="Engulfing Candle" val={inds.peEngulf}/>
+                <IndRow label="Session (UTC)" val={inds.peSession}/>
+                <IndRow label="Last Signal" val={inds.peReason}/>
               </TCard>
             )}
           </div>
@@ -2182,7 +2282,7 @@ function TerminalFull(){
 
             <TCard>
               <TLabel>Axum AI Parameters</TLabel>
-              {[["Base Equity ($)",cfgBaseEquityRef,cfg.baseEquity||"10","number"],["Base Lot Size",cfgBaseLotRef,cfg.baseLot||"0.01","number"],["Max Grid Layers",cfgMaxLayersRef,cfg.maxLayers||"8","number"],["Grid Gap (pts)",cfgGapRef,cfg.gap||"2.5","number"],["Profit Target ($)",cfgProfitTargetRef,cfg.profitTarget||"0.45","number"]].map(([l,r,dv,t])=>(
+              {[["Base Equity ($)",cfgBaseEquityRef,cfg.baseEquity||"1000","number"],["Base Lot Size",cfgBaseLotRef,cfg.baseLot||"0.2","number"],["Max Grid Layers",cfgMaxLayersRef,cfg.maxLayers||"3","number"],["Grid Gap (pts)",cfgGapRef,cfg.gap||"2.5","number"],["Profit Target ($)",cfgProfitTargetRef,cfg.profitTarget||"0.45","number"]].map(([l,r,dv,t])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
                   <input ref={r} defaultValue={dv} placeholder={l} type={t}
@@ -2193,7 +2293,10 @@ function TerminalFull(){
 
             <TCard>
               <TLabel>PrecisionEdge Parameters</TLabel>
-              {[["Lot Size",cfgPeLotRef,cfg.peLot||"0.01","number"],["Risk/Reward Ratio",cfgPeRRRef,cfg.peRR||"2","number"]].map(([l,r,dv,t])=>(
+              <div style={{background:G.surface,border:`1px solid ${G.gold}22`,borderRadius:G.rs,padding:10,marginBottom:12,fontSize:10,color:G.textSub,lineHeight:1.7}}>
+                ℹ PrecisionEdge core parameters (EMA 20/50, ATR×1.5, RR 2.0, session 08–17 UTC) are hardcoded from the MQ5 EA. Only lot size is configurable.
+              </div>
+              {[["Lot Size",cfgPeLotRef,cfg.peLot||"0.2","number"],["Risk/Reward Ratio",cfgPeRRRef,cfg.peRR||"2","number"]].map(([l,r,dv,t])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
                   <input ref={r} defaultValue={dv} placeholder={l} type={t}
@@ -2204,7 +2307,7 @@ function TerminalFull(){
 
             <TCard>
               <TLabel>Risk Management</TLabel>
-              {[["Risk % per trade",cfgRiskRef,cfg.risk||"2"],["Max Daily DD %",cfgMaxDDRef,cfg.maxdd||"5"]].map(([l,r,dv])=>(
+              {[["Risk % per trade",cfgRiskRef,cfg.risk||"2"],["Max Daily DD %",cfgMaxDDRef,cfg.maxdd||"500"]].map(([l,r,dv])=>(
                 <div key={l} style={{marginBottom:10}}>
                   <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
                   <input ref={r} defaultValue={dv} placeholder={l} type="number"
@@ -3063,7 +3166,14 @@ export default function App(){
   const addItem=(key,item)=>update(key,[item,...st[key]]);
   const removeItem=(key,id)=>update(key,st[key].filter(i=>i.id!==id));
 
-  const[page,setPage]=useState("home");
+  // ── PAGE PERSISTENCE: restore last page from sessionStorage on reload ─────────
+  const[page,setPage]=useState(()=>{
+    try{
+      const saved=sessionStorage.getItem("re_page");
+      const valid=["home","weekly","macro","events","news","exchange","archive","terminal","strategy","profile"];
+      return (saved&&valid.includes(saved))?saved:"home";
+    }catch{return "home";}
+  });
   const[menuOpen,setMenuOpen]=useState(false);
   const[openGroup,setOpenGroup]=useState(null);
   const[showAuth,setShowAuth]=useState(false);
@@ -3201,6 +3311,8 @@ export default function App(){
     setMenuOpen(false);
     setOpenGroup(null);
     setShowProfileMenu(false);
+    // Persist so reload returns to same page
+    try{ sessionStorage.setItem("re_page",p); }catch{}
     // Push browser history so Android back button returns to previous page instead of exiting
     window.history.pushState({page:p},"",null);
   };
@@ -3208,12 +3320,13 @@ export default function App(){
   // Listen to browser back/forward button
   useEffect(()=>{
     // Set initial state
-    window.history.replaceState({page:"home"},"",null);
+    window.history.replaceState({page},"",null);
     const onPop=(e)=>{
       const p=e.state?.page||"home";
       setPage(p);
       setMenuOpen(false);
       setShowProfileMenu(false);
+      try{ sessionStorage.setItem("re_page",p); }catch{}
     };
     window.addEventListener("popstate",onPop);
     return()=>window.removeEventListener("popstate",onPop);
