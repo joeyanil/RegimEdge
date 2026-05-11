@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ExchangePage from "./ExchangePage";
 import { TerminalFull, TerminalPage } from "./TerminalFull";
 
@@ -44,6 +44,7 @@ const INIT = {
     { id:"TXN-0026", buyer:"Selam B.", seller:"Pending", amount:30, status:"Pending", time:"5h ago" },
   ],
   eaApprovedUsers:[],
+  goldPrice:{ price:"3,284.50", change:"+0.42%", dir:"up" },
 };
 
 // ── HOOKS ─────────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ const CDRow=({target,color=G.gold})=>{
 };
 
 // ── CANDLESTICK ANIMATION (FIXED) ─────────────────────────────────────────────
-function CandleAnim() {
+const CandleAnim = React.memo(function CandleAnim() {
   const ref=useRef(null); const animRef=useRef(null);
   useEffect(()=>{
     const cv=ref.current; if(!cv)return;
@@ -286,7 +287,7 @@ function CandleAnim() {
       <canvas ref={ref} style={{borderRadius:12,display:"block"}}/>
     </div>
   );
-}
+});
 
 // ── POPUP ─────────────────────────────────────────────────────────────────────
 const SLIDES=[
@@ -301,13 +302,22 @@ function PopupRotator({setPage,onClose}){
   const s=SLIDES[idx];
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:"0 16px 88px",backdropFilter:"blur(5px)"}}>
-      <div style={{background:G.card,border:`1px solid ${s.color}44`,borderRadius:22,padding:"26px 22px 22px",width:"100%",maxWidth:420,position:"relative",boxShadow:`0 24px 60px rgba(0,0,0,0.7),0 0 40px ${s.color}14`}}>
+      <style>{`
+        @keyframes slideUp{from{transform:translateY(80px);opacity:0}to{transform:translateY(0);opacity:1}}
+        @keyframes dotFill{from{width:0%}to{width:100%}}
+      `}</style>
+      <div style={{background:G.card,border:`1px solid ${s.color}44`,borderRadius:22,padding:"26px 22px 22px",width:"100%",maxWidth:420,position:"relative",boxShadow:`0 24px 60px rgba(0,0,0,0.7),0 0 40px ${s.color}14`,animation:"slideUp 0.3s ease-out"}}>
         <button onClick={onClose} style={{position:"absolute",top:16,right:18,background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:20}}>✕</button>
         <div style={{fontSize:28,marginBottom:12,color:s.color}}>{s.icon}</div>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.text,fontWeight:900,marginBottom:5}}>{s.title}</div>
         <div style={{fontSize:13,color:G.textSub,marginBottom:20}}>{s.sub}</div>
         <div style={{display:"flex",gap:5,marginBottom:20}}>
-          {SLIDES.map((_,i)=><div key={i} style={{height:3,flex:1,borderRadius:2,background:i===idx?s.color:G.border,transition:"background 0.4s"}}/>)}
+          {SLIDES.map((_,i)=>(
+            <div key={i} style={{height:3,flex:1,borderRadius:2,background:G.border,overflow:"hidden",position:"relative"}}>
+              {i===idx&&<div style={{position:"absolute",top:0,left:0,height:"100%",background:s.color,animation:"dotFill 3.5s linear",width:"100%"}}/>}
+              {i<idx&&<div style={{position:"absolute",top:0,left:0,height:"100%",background:s.color,width:"100%"}}/>}
+            </div>
+          ))}
         </div>
         <button onClick={()=>{setPage(s.page);onClose();}} style={{width:"100%",padding:14,background:G.gold,border:"none",borderRadius:G.rs,color:"#000",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>Go to {s.title} →</button>
       </div>
@@ -316,23 +326,73 @@ function PopupRotator({setPage,onClose}){
 }
 
 // ── HOME ──────────────────────────────────────────────────────────────────────
-function HomePage({st,setPage}){
+const HomePage = React.memo(function HomePage({st,setPage}){
+  const[showAllNotices,setShowAllNotices]=useState(false);
+  const[hovCard,setHovCard]=useState(null);
+  const wColor=st.weeklyBias.direction==="Bullish"?G.green:st.weeklyBias.direction==="Bearish"?G.red:G.gold;
+  const dColor=st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold;
+  const noticeTypeColor=(t)=>t==="exchange"?G.blue:t==="promo"?G.gold:G.green;
+  const visibleNotices=showAllNotices?st.notices:st.notices.slice(0,2);
+  const winRate=st.archiveWeeks.length?Math.round((st.archiveWeeks.filter(w=>w.result==="green").length/st.archiveWeeks.length)*100):0;
+
+  // Current streak
+  let streak=0;
+  for(let i=0;i<st.archiveWeeks.length;i++){
+    if(st.archiveWeeks[i].result==="green") streak++;
+    else break;
+  }
+
+  const quickNavCards=[
+    {label:"Exchange",sub:"USDT ↔ ETBirr",page:"exchange",icon:"⬡",color:"#60a5fa",status:"27+ trades · 0 scams"},
+    {label:"EdgeTerminal",sub:"Live EA trading",page:"terminal",icon:"◎",color:"#a78bfa",status:null,isTerminal:true},
+    {label:"News",sub:"Market intelligence",page:"news",icon:"📰",color:G.textSub,status:`${st.news.length} article${st.news.length===1?"":"s"}`},
+    {label:"Archive",sub:"Performance history",page:"archive",icon:"▣",color:G.textSub,status:`${winRate}% accuracy`},
+  ];
+
+  const pillars=[
+    {icon:"📊",title:"Macro Regime",desc:"Weekly + daily bias",page:"weekly"},
+    {icon:"⚡",title:"Event Signals",desc:"NFP · FOMC pre-call",page:"events"},
+    {icon:"📰",title:"Live News",desc:"Gold market intel",page:"news"},
+  ];
+
   return(
     <div>
+      <style>{`
+        @keyframes heroShimmer{0%,100%{opacity:0.5;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+        @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
+      `}</style>
+
       {/* HERO */}
       <div style={{padding:"44px 22px 36px",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,background:"radial-gradient(ellipse at 25% 50%,rgba(212,175,55,0.05) 0%,transparent 65%)",pointerEvents:"none"}}/>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+        {/* Animated shimmer background */}
+        <div style={{position:"absolute",top:"-30%",left:"-20%",width:"80%",height:"160%",
+          background:"radial-gradient(ellipse at center,rgba(212,175,55,0.07) 0%,transparent 65%)",
+          pointerEvents:"none",animation:"heroShimmer 4s ease-in-out infinite",borderRadius:"50%"}}/>
+        <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,background:"radial-gradient(ellipse at 25% 50%,rgba(212,175,55,0.04) 0%,transparent 65%)",pointerEvents:"none"}}/>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,position:"relative"}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10}}>Macro Intelligence</div>
             <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(28px,8vw,38px)",color:G.text,margin:"0 0 10px",fontWeight:900,lineHeight:1.1}}>Regime<span style={{color:G.gold}}>Edge</span></h1>
-            <p style={{color:G.textSub,fontSize:12,margin:"0 0 18px",lineHeight:1.7}}>Not signals. Reasoning. Direction. Discipline.</p>
+            <p style={{color:G.textSub,fontSize:12,margin:"0 0 12px",lineHeight:1.7}}>Not signals. Reasoning. Direction. Discipline.</p>
+
+            {/* Live gold price ticker */}
+            <div style={{display:"inline-flex",alignItems:"center",gap:8,background:G.surface,border:`1px solid ${G.gold}33`,borderRadius:20,padding:"5px 12px",marginBottom:14}}>
+              <span style={{fontFamily:"monospace",fontSize:11,color:G.textSub,fontWeight:600}}>XAU/USD</span>
+              <span style={{fontFamily:"monospace",fontSize:12,color:G.gold,fontWeight:700}}>{st.goldPrice?.price||"3,284.50"}</span>
+              <span style={{fontFamily:"monospace",fontSize:11,color:st.goldPrice?.dir==="down"?G.red:G.green,fontWeight:700}}>
+                {st.goldPrice?.dir==="down"?"▼":"▲"} {st.goldPrice?.change||"+0.42%"}
+              </span>
+            </div>
+
             <div style={{display:"flex",flexDirection:"column",gap:7}}>
-              {[["WEEK",st.weeklyBias.direction,st.weeklyBias.dayLabel],[" DAY",st.dailyBias.direction,st.dailyBias.dayLabel]].map(([l,d,v])=>(
-                <div key={l} style={{display:"flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:"9px 13px"}}>
+              {[["WEEK",st.weeklyBias.direction,st.weeklyBias.dayLabel,"weekly"],[" DAY",st.dailyBias.direction,st.dailyBias.dayLabel,"weekly"]].map(([l,d,v,pg])=>(
+                <button key={l} onClick={()=>setPage(pg)} style={{display:"flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:"9px 13px",cursor:"pointer",textAlign:"left",width:"100%",transition:"border-color 0.2s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=d==="Bullish"?G.green:G.red}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor=G.border}>
                   <div style={{fontSize:9,color:G.textSub,letterSpacing:1,flexShrink:0}}>{l}</div>
                   <div style={{fontSize:12,fontWeight:800,color:d==="Bullish"?G.green:G.red,marginLeft:"auto"}}>{v}</div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -340,46 +400,77 @@ function HomePage({st,setPage}){
         </div>
       </div>
 
-      <div style={{height:1,background:`linear-gradient(90deg,transparent,${G.border},transparent)`,margin:"0 22px"}}/>
+      {/* Section divider with logo */}
+      <div style={{display:"flex",alignItems:"center",margin:"0 22px",gap:12}}>
+        <div style={{flex:1,height:1,background:`linear-gradient(90deg,transparent,${G.border})`}}/>
+        <span style={{color:G.gold,fontSize:16,opacity:0.5}}>◈</span>
+        <div style={{flex:1,height:1,background:`linear-gradient(90deg,${G.border},transparent)`}}/>
+      </div>
 
       <div style={{padding:"28px 22px 0"}}>
-        {/* Notices */}
+        {/* Notices Feed */}
         {st.notices.length>0&&(
           <div style={{marginBottom:26}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Updates</div>
-            {st.notices.slice(0,3).map(n=>(
-              <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"11px 14px",marginBottom:7,display:"flex",gap:12,alignItems:"flex-start"}}>
-                <div style={{width:5,height:5,borderRadius:"50%",background:n.type==="exchange"?G.gold:n.type==="promo"?G.blue:G.green,marginTop:5,flexShrink:0}}/>
-                <div>
+            {visibleNotices.map(n=>(
+              <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"11px 14px",marginBottom:7,display:"flex",gap:0,alignItems:"stretch",overflow:"hidden",position:"relative"}}>
+                {/* Colored left border */}
+                <div style={{width:3,background:noticeTypeColor(n.type),borderRadius:2,flexShrink:0,marginRight:12,alignSelf:"stretch",minHeight:20}}/>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                    <span style={{fontSize:9,fontWeight:700,color:noticeTypeColor(n.type),letterSpacing:1,textTransform:"uppercase"}}>{n.type}</span>
+                    {/* NEW badge for fresh notices */}
+                    {(n.time?.includes("min ago")||n.time==="Just now"||(n.time?.includes("h ago")&&parseInt(n.time)<=2))&&(
+                      <span style={{fontSize:8,fontWeight:800,color:"#000",background:G.gold,borderRadius:4,padding:"1px 5px",letterSpacing:0.5}}>NEW</span>
+                    )}
+                  </div>
                   <div style={{fontSize:13,color:G.text,lineHeight:1.6,marginBottom:2}}>{n.text}</div>
                   <div style={{fontSize:10,color:G.textDim}}>{n.time}</div>
                 </div>
+                {/* Pulse dot */}
+                <div style={{width:7,height:7,borderRadius:"50%",background:noticeTypeColor(n.type),flexShrink:0,alignSelf:"flex-start",marginTop:4,animation:"pulseDot 2s ease-in-out infinite"}}/>
               </div>
             ))}
+            {st.notices.length>2&&(
+              <button onClick={()=>setShowAllNotices(v=>!v)} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",width:"100%",padding:"8px 0",fontFamily:"inherit",marginTop:2}}>
+                {showAllNotices?"Show less ▲":`Show all ${st.notices.length} ▼`}
+              </button>
+            )}
           </div>
         )}
 
         {/* Weekly Bias */}
-        <GlowCard color={st.weeklyBias.direction==="Bullish"?G.green:G.red} style={{marginBottom:14}}>
+        <GlowCard color={wColor} style={{marginBottom:14,position:"relative",overflow:"hidden"}}>
+          {/* Background direction glyph */}
+          <div style={{position:"absolute",top:8,right:12,fontSize:80,color:wColor,opacity:0.06,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none"}}>
+            {st.weeklyBias.direction==="Bullish"?"↑":st.weeklyBias.direction==="Bearish"?"↓":"↔"}
+          </div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Weekly Bias</div>
             <BiasTag d={st.weeklyBias.direction}/>
           </div>
-          <div style={{fontSize:22,fontWeight:900,color:st.weeklyBias.direction==="Bullish"?G.green:st.weeklyBias.direction==="Bearish"?G.red:G.gold,fontFamily:"'Playfair Display',serif",marginBottom:5}}>{st.weeklyBias.dayLabel}</div>
-          <div style={{fontSize:11,color:G.textSub,marginBottom:12}}>{st.weeklyBias.updatedAt}</div>
+          <div style={{fontSize:22,fontWeight:900,color:wColor,fontFamily:"'Playfair Display',serif",marginBottom:5}}>{st.weeklyBias.dayLabel}</div>
+          <div style={{fontSize:11,color:G.textSub,marginBottom:12,display:"flex",alignItems:"center",gap:5}}>
+            <span>🕐</span>{st.weeklyBias.updatedAt}
+          </div>
           <p style={{color:G.text,fontSize:13,lineHeight:1.85,margin:"0 0 14px"}}>{st.weeklyBias.body}</p>
           {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:10,marginBottom:14}}/>}
-          <button onClick={()=>setPage("weekly")} style={{width:"100%",padding:11,background:"none",border:`1px solid ${st.weeklyBias.direction==="Bullish"?G.green:G.red}44`,borderRadius:G.rs,color:st.weeklyBias.direction==="Bullish"?G.green:G.red,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Full Bias Analysis →</button>
+          <button onClick={()=>setPage("weekly")} style={{width:"100%",padding:11,background:"none",border:`1px solid ${wColor}44`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Full Bias Analysis →</button>
         </GlowCard>
 
         {/* Daily Bias */}
-        <GlowCard color={st.dailyBias.direction==="Bullish"?G.green:G.red} style={{marginBottom:14}}>
+        <GlowCard color={dColor} style={{marginBottom:14,position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:8,right:12,fontSize:80,color:dColor,opacity:0.06,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none"}}>
+            {st.dailyBias.direction==="Bullish"?"↑":st.dailyBias.direction==="Bearish"?"↓":"↔"}
+          </div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Daily Bias</div>
             <BiasTag d={st.dailyBias.direction}/>
           </div>
-          <div style={{fontSize:18,fontWeight:900,color:st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold,fontFamily:"'Playfair Display',serif",marginBottom:4}}>{st.dailyBias.dayLabel}</div>
-          <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>{st.dailyBias.updatedAt}</div>
+          <div style={{fontSize:18,fontWeight:900,color:dColor,fontFamily:"'Playfair Display',serif",marginBottom:4}}>{st.dailyBias.dayLabel}</div>
+          <div style={{fontSize:11,color:G.textSub,marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
+            <span>🕐</span>{st.dailyBias.updatedAt}
+          </div>
           <p style={{color:G.text,fontSize:13,lineHeight:1.8,margin:0}}>{st.dailyBias.body}</p>
         </GlowCard>
 
@@ -393,41 +484,75 @@ function HomePage({st,setPage}){
           </GlowCard>
         )}
 
-        {/* Quick Nav — 4 cards: Exchange, Terminal, News, Archive */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:34}}>
-          {[
-            {label:"Exchange",sub:"USDT ↔ ETBirr",page:"exchange",icon:"⬡",color:"#60a5fa"},
-            {label:"EdgeTerminal",sub:"Live EA trading",page:"terminal",icon:"◎",color:"#a78bfa"},
-            {label:"News",sub:"Market intelligence",page:"news",icon:"📰",color:G.textSub},
-            {label:"Archive",sub:"Performance history",page:"archive",icon:"▣",color:G.textSub},
-          ].map(({label,sub,page,icon,color})=>(
-            <button key={page} onClick={()=>setPage(page)} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"16px 14px",textAlign:"left",cursor:"pointer",transition:"all 0.2s"}}>
-              <div style={{fontSize:22,marginBottom:8,color}}>{icon}</div>
-              <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:3}}>{label}</div>
-              <div style={{fontSize:11,color:G.textSub}}>{sub}</div>
-            </button>
-          ))}
+        {/* Quick Nav — Feature Cards */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:28}}>
+          {quickNavCards.map(({label,sub,page,icon,color,status,isTerminal})=>{
+            const hov=hovCard===page;
+            const statusText=isTerminal?null:status;
+            const terminalStatus=isTerminal?(st.eaApprovedUsers?.length>0?"◎ Active":"Request access"):null;
+            return(
+              <button key={page} onClick={()=>setPage(page)}
+                onMouseEnter={()=>setHovCard(page)} onMouseLeave={()=>setHovCard(null)}
+                style={{background:G.card,border:`1px solid ${hov?color:G.border}`,borderRadius:G.r,padding:"16px 14px",textAlign:"left",cursor:"pointer",
+                  transition:"all 0.2s",borderTop:`3px solid ${color}`,
+                  transform:hov?"translateY(-2px)":"none",
+                  boxShadow:hov?`0 8px 24px ${color}22,0 0 0 1px ${color}33`:"0 2px 8px rgba(0,0,0,0.2)"}}>
+                <div style={{fontSize:22,marginBottom:8,color}}>{icon}</div>
+                <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:3}}>{label}</div>
+                <div style={{fontSize:11,color:G.textSub,marginBottom:6}}>{sub}</div>
+                {(statusText||terminalStatus)&&(
+                  <div style={{fontSize:10,color:color,fontWeight:700,letterSpacing:0.3}}>{statusText||terminalStatus}</div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* What RegimeEdge Tracks */}
+        <div style={{marginBottom:28}}>
+          <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>What RegimeEdge Tracks</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9}}>
+            {pillars.map(p=>(
+              <button key={p.page} onClick={()=>setPage(p.page)} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"14px 10px",textAlign:"center",cursor:"pointer",transition:"all 0.2s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.background=G.goldBg;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.card;}}>
+                <div style={{fontSize:20,marginBottom:7}}>{p.icon}</div>
+                <div style={{fontSize:11,fontWeight:700,color:G.text,marginBottom:4,lineHeight:1.3}}>{p.title}</div>
+                <div style={{fontSize:10,color:G.textSub,lineHeight:1.5}}>{p.desc}</div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
-}
+});
 
 // ── WEEKLY BIAS ───────────────────────────────────────────────────────────────
-function WeeklyPage({st}){
+const WeeklyPage = React.memo(function WeeklyPage({st}){
   const c=st.weeklyBias.direction==="Bullish"?G.green:st.weeklyBias.direction==="Bearish"?G.red:G.gold;
+  const[zoomedImg,setZoomedImg]=useState(false);
   return(
     <div style={{padding:"32px 22px"}}>
       <SH label="Market Analysis" title="Bias Report" sub="Posted Monday · May update Wednesday"/>
       <GlowCard color={c} style={{marginBottom:18}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <BiasTag d={st.weeklyBias.direction}/>
-          <div style={{fontSize:11,color:G.textSub}}>{st.weeklyBias.updatedAt}</div>
+          <div style={{fontSize:11,color:G.textSub,display:"flex",alignItems:"center",gap:4}}><span>🕐</span>{st.weeklyBias.updatedAt}</div>
         </div>
         <div style={{fontSize:24,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif",marginBottom:14}}>{st.weeklyBias.dayLabel}</div>
         {st.weeklyBias.updatedNote?<div style={{fontSize:12,color:G.gold,marginBottom:14,padding:"10px 14px",background:G.goldBg,borderRadius:8,borderLeft:`3px solid ${G.gold}`}}>Wednesday Update: {st.weeklyBias.updatedNote}</div>:null}
         <p style={{color:G.text,fontSize:14,lineHeight:1.9,margin:"0 0 16px"}}>{st.weeklyBias.body}</p>
-        {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:12,marginBottom:16}}/>}
+        {st.weeklyBias.image&&(
+          <>
+            <img src={st.weeklyBias.image} onClick={()=>setZoomedImg(true)} style={{width:"100%",borderRadius:12,marginBottom:16,cursor:"zoom-in",display:"block"}}/>
+            {zoomedImg&&(
+              <div onClick={()=>setZoomedImg(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <img src={st.weeklyBias.image} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>
+              </div>
+            )}
+          </>
+        )}
         <div style={{fontSize:11,color:G.textSub,paddingTop:14,borderTop:`1px solid ${G.border}`}}>Posted by RegimeEdge · {st.weeklyBias.updatedAt}</div>
       </GlowCard>
 
@@ -447,7 +572,7 @@ function WeeklyPage({st}){
       </div>
     </div>
   );
-}
+});
 
 // ── MACRO DASHBOARD ───────────────────────────────────────────────────────────
 function MacroPage({st}){
@@ -595,11 +720,27 @@ function EventsPage({st}){
 // ── NEWS ──────────────────────────────────────────────────────────────────────
 function NewsPage({st}){
   const tc={FOMC:G.blue,USD:G.gold,Gold:G.green,NFP:G.red,Risk:G.red,Macro:G.textSub};
+  const TAGS=["All","Gold","USD","FOMC","NFP","Risk","Macro"];
+  const[filterTag,setFilterTag]=useState("All");
+  const filtered=filterTag==="All"?st.news:st.news.filter(n=>n.tag===filterTag);
   return(
     <div style={{padding:"32px 22px"}}>
       <SH label="Market Intelligence" title="News"/>
-      {st.news.length===0?<div style={{textAlign:"center",padding:"60px 0",color:G.textSub}}>No news posted yet.</div>:
-      st.news.map(n=>(
+      {/* Tag filter bar */}
+      <div style={{display:"flex",gap:7,overflowX:"auto",scrollbarWidth:"none",marginBottom:20,paddingBottom:4}}>
+        <style>{`.re-tags::-webkit-scrollbar{display:none}`}</style>
+        {TAGS.map(tag=>{
+          const active=filterTag===tag;
+          const color=tc[tag]||G.gold;
+          return(
+            <button key={tag} onClick={()=>setFilterTag(tag)} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:`1px solid ${active?color:G.border}`,background:active?`${color}18`:"none",color:active?color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3}}>
+              {tag}
+            </button>
+          );
+        })}
+      </div>
+      {filtered.length===0?<div style={{textAlign:"center",padding:"60px 0",color:G.textSub}}>No news for this tag yet.</div>:
+      filtered.map(n=>(
         <GlowCard key={n.id} color={tc[n.tag]||G.textSub} style={{marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
             <Badge color={tc[n.tag]||G.textSub}>{n.tag}</Badge>
@@ -618,36 +759,62 @@ function NewsPage({st}){
 // ── EXCHANGE ──────────────────────────────────────────────────────────────────
 
 // ── ARCHIVE ───────────────────────────────────────────────────────────────────
-function ArchivePage({st}){
+const ArchivePage = React.memo(function ArchivePage({st}){
   const green=st.archiveWeeks.filter(w=>w.result==="green").length;
   const rate=st.archiveWeeks.length?Math.round((green/st.archiveWeeks.length)*100):0;
+  const[barAnimated,setBarAnimated]=useState(false);
+  useEffect(()=>{ const t=setTimeout(()=>setBarAnimated(true),100); return()=>clearTimeout(t); },[]);
+
+  // Consecutive streak from most recent
+  let streak=0;
+  for(let i=0;i<st.archiveWeeks.length;i++){
+    if(st.archiveWeeks[i].result==="green") streak++;
+    else break;
+  }
+
   return(
     <div style={{padding:"32px 22px"}}>
       <SH label="Full Transparency" title="Archive" sub="Every week on record. No edits. No hiding."/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:20}}>
-        {[["Weeks",st.archiveWeeks.length,G.gold],["Accuracy",`${rate}%`,G.green],["Green",green,G.green]].map(([l,v,c])=>(
-          <GlowCard key={l} color={c} style={{padding:14,textAlign:"center"}}>
-            <div style={{fontSize:22,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif"}}>{v}</div>
-            <div style={{fontSize:10,color:G.textSub,marginTop:4}}>{l}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:16}}>
+        {[["Weeks",st.archiveWeeks.length,G.gold],["Accuracy",`${rate}%`,G.green],["Green",green,G.green],[streak>0?`${streak}🔥`:"—","Streak",streak>0?G.gold:G.textSub]].map(([v,l,c],idx)=>(
+          <GlowCard key={idx} color={c} style={{padding:12,textAlign:"center"}}>
+            <div style={{fontSize:18,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif"}}>{v}</div>
+            <div style={{fontSize:9,color:G.textSub,marginTop:4}}>{l}</div>
           </GlowCard>
         ))}
       </div>
+
+      {/* Win Rate Bar */}
+      <div style={{marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+          <div style={{fontSize:11,color:G.textSub,fontWeight:700}}>Win Rate</div>
+          <div style={{fontSize:12,fontWeight:800,color:G.green}}>{rate}%</div>
+        </div>
+        <div style={{height:8,background:G.surface,borderRadius:8,overflow:"hidden",border:`1px solid ${G.border}`}}>
+          <div style={{height:"100%",background:`linear-gradient(90deg,${G.green},${G.green}99)`,borderRadius:8,width:barAnimated?`${rate}%`:"0%",transition:"width 1s cubic-bezier(0.4,0,0.2,1)"}}/>
+        </div>
+      </div>
+
       <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:16,marginBottom:22}}>
         <p style={{color:G.textSub,fontSize:12,lineHeight:1.8,margin:0}}>Green = correct direction. Red = wrong. Record closes end of each week. No retrospective changes.</p>
       </div>
       {st.archiveWeeks.map(w=>(
-        <div key={w.id} style={{background:G.card,border:`1px solid ${w.result==="green"?G.green+"33":G.red+"33"}`,borderRadius:G.r,padding:"16px 18px",marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
-            <span style={{fontSize:13,fontWeight:700,color:G.text}}>{w.week}</span>
-            <span style={{fontSize:18}}>{w.result==="green"?"🟢":"🔴"}</span>
+        <div key={w.id} style={{background:G.card,border:`1px solid ${w.result==="green"?G.green+"33":G.red+"33"}`,borderRadius:G.r,padding:"16px 18px",marginBottom:10,display:"flex",gap:0,overflow:"hidden"}}>
+          {/* Left stripe */}
+          <div style={{width:3,background:w.result==="green"?G.green:G.red,borderRadius:2,flexShrink:0,marginRight:14,alignSelf:"stretch",minHeight:20}}/>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
+              <span style={{fontSize:13,fontWeight:700,color:G.text}}>{w.week}</span>
+              <span style={{fontSize:18}}>{w.result==="green"?"🟢":"🔴"}</span>
+            </div>
+            <div style={{marginBottom:8}}><BiasTag d={w.bias}/></div>
+            <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.65}}>{w.note}</p>
           </div>
-          <div style={{marginBottom:8}}><BiasTag d={w.bias}/></div>
-          <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.65}}>{w.note}</p>
         </div>
       ))}
     </div>
   );
-}
+});
 
 // ── STRATEGY ──────────────────────────────────────────────────────────────────
 function StrategyPage(){
@@ -960,6 +1127,23 @@ function AdminLogin({onSuccess,onClose}){
   );
 }
 
+// ── GOLD PRICE ADMIN ─────────────────────────────────────────────────────────
+function GoldPriceAdmin({st,update}){
+  const[gp,setGp]=useState(st.goldPrice||{price:"3,284.50",change:"+0.42%",dir:"up"});
+  return(
+    <div>
+      <FI value={gp.price} onChange={v=>setGp(g=>({...g,price:v}))} placeholder="e.g. 3,284.50" style={{marginBottom:9}}/>
+      <FI value={gp.change} onChange={v=>setGp(g=>({...g,change:v}))} placeholder="e.g. +0.42%" style={{marginBottom:9}}/>
+      <div style={{display:"flex",gap:9,marginBottom:11}}>
+        {["up","down"].map(d=>(
+          <button key={d} onClick={()=>setGp(g=>({...g,dir:d}))} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${gp.dir===d?(d==="up"?G.green:G.red):G.border}`,background:gp.dir===d?(d==="up"?G.greenBg:G.redBg):"none",color:gp.dir===d?(d==="up"?G.green:G.red):G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{d==="up"?"▲ Up":"▼ Down"}</button>
+        ))}
+      </div>
+      <Btn onClick={()=>{update("goldPrice",gp);alert("Gold price saved!");}} style={{width:"100%"}}>Save Gold Price</Btn>
+    </div>
+  );
+}
+
 // ── ADMIN PANEL PAGE ──────────────────────────────────────────────────────────
 function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[tab,setTab]=useState("bias");
@@ -1012,6 +1196,9 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <div style={{height:10}}/>
           <FI value={db.updatedAt} onChange={v=>setDb(b=>({...b,updatedAt:v}))} placeholder="Updated at e.g. Today, 08:00 AM" style={{marginBottom:11}}/>
           <Btn onClick={()=>{update("dailyBias",{...db,postedAt:new Date().toISOString()});alert("Daily bias saved!");}} style={{width:"100%"}}>Save Daily Bias</Btn>
+          <Div/>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Gold Price Display</div>
+          <GoldPriceAdmin st={st} update={update}/>
         </>}
 
         {tab==="events"&&<>
@@ -1416,15 +1603,13 @@ export default function App(){
   const addItem=(key,item)=>update(key,[item,...st[key]]);
   const removeItem=(key,id)=>update(key,st[key].filter(i=>i.id!==id));
 
-  // ── PAGE PERSISTENCE: restore last page from localStorage on reload ──────────
-  // sessionStorage is wiped on reload in hosted envs (Vercel) — localStorage persists
-  const[page,setPage]=useState(()=>{
-    try{
-      const saved=localStorage.getItem("re_last_page");
-      const valid=["home","weekly","macro","events","news","exchange","archive","terminal","strategy","profile"];
-      return (saved&&valid.includes(saved))?saved:"home";
-    }catch{return "home";}
-  });
+  // ── URL HASH ROUTING ──────────────────────────────────────────────────────────
+  const VALID_PAGES=["home","weekly","macro","events","news","exchange","archive","terminal","strategy","profile"];
+  const getPageFromHash=()=>{
+    const hash=window.location.hash.replace("#","").replace("/","");
+    return VALID_PAGES.includes(hash)?hash:"home";
+  };
+  const[page,setPage]=useState(getPageFromHash);
   const[menuOpen,setMenuOpen]=useState(false);
   const[openGroup,setOpenGroup]=useState(null);
   const[showAuth,setShowAuth]=useState(false);
@@ -1434,6 +1619,7 @@ export default function App(){
   const[user,setUser]=useState(null);
   const[sessionLoading,setSessionLoading]=useState(true);
   const[isApproved,setIsApproved]=useState(false);
+  const[contentLoading,setContentLoading]=useState(true);
 
   // ── Load content from Supabase on mount
   useEffect(()=>{
@@ -1469,6 +1655,7 @@ export default function App(){
           });
         }
       }catch(e){ console.warn("Content load:",e.message); }
+      finally{ setContentLoading(false); }
     })();
   },[]);
 
@@ -1562,29 +1749,23 @@ export default function App(){
     setMenuOpen(false);
     setOpenGroup(null);
     setShowProfileMenu(false);
-    // Persist so reload returns to same page
-    try{ localStorage.setItem("re_last_page",p); }catch{}
-    // Push browser history so Android back button returns to previous page instead of exiting
-    window.history.pushState({page:p},"",null);
+    window.location.hash=p==="home"?"":"/"+p;
   };
 
-  // Listen to browser back/forward button
+  // Listen to browser back/forward (hash changes)
   useEffect(()=>{
-    // Set initial state
-    window.history.replaceState({page},"",null);
-    const onPop=(e)=>{
-      const p=e.state?.page||"home";
+    const onHash=()=>{
+      const p=getPageFromHash();
       setPage(p);
       setMenuOpen(false);
       setShowProfileMenu(false);
-      try{ localStorage.setItem("re_last_page",p); }catch{}
     };
-    window.addEventListener("popstate",onPop);
-    return()=>window.removeEventListener("popstate",onPop);
+    window.addEventListener("hashchange",onHash);
+    return()=>window.removeEventListener("hashchange",onHash);
   },[]);
 
   const pages={
-    home:<HomePage st={st} setPage={setPage}/>,
+    home:<HomePage st={st} setPage={nav}/>,
     weekly:<WeeklyPage st={st}/>,
     macro:<MacroPage st={st}/>,
     events:<EventsPage st={st}/>,
@@ -1741,7 +1922,18 @@ export default function App(){
             <AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={()=>setShowAdmin(false)}/>
           ):(
             <div className="re-page" style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
-              {pages[page]||pages.home}
+              {contentLoading&&page==="home"?(
+                <div style={{padding:"44px 22px"}}>
+                  <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+                  {[{h:120,mb:24},{h:80,mb:14},{h:80,mb:14},{h:100,mb:0}].map((s,i)=>(
+                    <div key={i} style={{height:s.h,borderRadius:G.r,marginBottom:s.mb,
+                      background:`linear-gradient(90deg,${G.surface} 25%,${G.card} 50%,${G.surface} 75%)`,
+                      backgroundSize:"200% 100%",animation:"shimmer 1.5s infinite"}}/>
+                  ))}
+                </div>
+              ):(
+                pages[page]||pages.home
+              )}
 
               {/* Footer */}
               <div style={{padding:"26px 22px 18px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
@@ -1764,7 +1956,7 @@ export default function App(){
       {!showAdmin&&(
         <div className="re-bnav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(17,19,21,0.97)",backdropFilter:"blur(14px)",borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-around",padding:"9px 0 max(14px,env(safe-area-inset-bottom))",zIndex:98}}>
           {BNAV.map(item=>(
-            <button key={item.id} onClick={()=>setPage(item.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"3px 8px",minWidth:0}}>
+            <button key={item.id} onClick={()=>nav(item.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"3px 8px",minWidth:0}}>
               <span style={{fontSize:17,color:page===item.id?G.gold:G.textDim,transition:"color 0.2s"}}>{item.icon}</span>
               <span style={{fontSize:9,color:page===item.id?G.gold:G.textDim,letterSpacing:0.5,transition:"color 0.2s",whiteSpace:"nowrap"}}>{item.label}</span>
             </button>
