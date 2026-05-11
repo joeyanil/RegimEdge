@@ -1826,7 +1826,7 @@ export default function App(){
     macro:<MacroPage st={st}/>,
     events:<EventsPage st={st}/>,
     news:<NewsPage st={st}/>,
-    exchange:<ExchangePage st={st}/>,
+    exchange:<ExchangePage st={st} user={user}/>,
     archive:<ArchivePage st={st}/>,
     terminal:<TerminalPage st={st} user={user} isApproved={isApproved}/>,
     strategy:<StrategyPage/>,
