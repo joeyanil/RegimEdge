@@ -44,7 +44,6 @@ const INIT = {
     { id:"TXN-0026", buyer:"Selam B.", seller:"Pending", amount:30, status:"Pending", time:"5h ago" },
   ],
   eaApprovedUsers:[],
-  goldPrice:{ price:"3,284.50", change:"+0.42%", dir:"up" },
 };
 
 // ── HOOKS ─────────────────────────────────────────────────────────────────────
@@ -61,7 +60,50 @@ function useCountdown(target) {
   },[target]); return t;
 }
 
-// ── SHARED UI ─────────────────────────────────────────────────────────────────
+// ── LIVE GOLD PRICE HOOK ──────────────────────────────────────────────────────
+function useLiveGoldPrice() {
+  const [gold, setGold] = useState({ price: null, change: null, pct: null, dir: "up", loading: true, error: false });
+
+  const fetch_ = async () => {
+    try {
+      // Returns array: [{ gold: 3284.50, ... }] — no API key needed, 30k req/mo free
+      const res = await fetch("https://api.metals.live/v1/spot/gold");
+      if (!res.ok) throw new Error("bad response");
+      const data = await res.json();
+      // Response shape: [{ gold: 3284.50 }] or { gold: 3284.50 }
+      const raw = Array.isArray(data) ? data[0] : data;
+      const price = raw?.gold ?? raw?.price ?? null;
+      if (!price) throw new Error("no price");
+
+      setGold(prev => {
+        const prevPrice = prev.price;
+        const change = prevPrice ? +(price - prevPrice).toFixed(2) : null;
+        const pct = prevPrice ? +((price - prevPrice) / prevPrice * 100).toFixed(2) : null;
+        const dir = change !== null ? (change >= 0 ? "up" : "down") : prev.dir;
+        return {
+          price,
+          change: change !== null ? change : prev.change,
+          pct: pct !== null ? pct : prev.pct,
+          dir,
+          loading: false,
+          error: false,
+        };
+      });
+    } catch {
+      setGold(prev => ({ ...prev, loading: false, error: true }));
+    }
+  };
+
+  useEffect(() => {
+    fetch_();
+    const id = setInterval(fetch_, 60_000); // refresh every 60s
+    return () => clearInterval(id);
+  }, []);
+
+  return gold;
+}
+
+
 const Card=({children,style={},gold,glow})=>(
   <div style={{background:G.card,border:`1px solid ${gold?G.gold+"55":G.border}`,borderRadius:G.r,padding:22,
     boxShadow:gold?`0 0 40px rgba(212,175,55,0.08),inset 0 1px 0 rgba(212,175,55,0.08)`:`0 2px 14px rgba(0,0,0,0.3)`,
@@ -329,6 +371,7 @@ function PopupRotator({setPage,onClose}){
 const HomePage = React.memo(function HomePage({st,setPage}){
   const[showAllNotices,setShowAllNotices]=useState(false);
   const[hovCard,setHovCard]=useState(null);
+  const liveGold = useLiveGoldPrice();
   const wColor=st.weeklyBias.direction==="Bullish"?G.green:st.weeklyBias.direction==="Bearish"?G.red:G.gold;
   const dColor=st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold;
   const noticeTypeColor=(t)=>t==="exchange"?G.blue:t==="promo"?G.gold:G.green;
@@ -379,10 +422,22 @@ const HomePage = React.memo(function HomePage({st,setPage}){
             {/* Live gold price ticker */}
             <div style={{display:"inline-flex",alignItems:"center",gap:8,background:G.surface,border:`1px solid ${G.gold}33`,borderRadius:20,padding:"5px 12px",marginBottom:14}}>
               <span style={{fontFamily:"monospace",fontSize:11,color:G.textSub,fontWeight:600}}>XAU/USD</span>
-              <span style={{fontFamily:"monospace",fontSize:12,color:G.gold,fontWeight:700}}>{st.goldPrice?.price||"3,284.50"}</span>
-              <span style={{fontFamily:"monospace",fontSize:11,color:st.goldPrice?.dir==="down"?G.red:G.green,fontWeight:700}}>
-                {st.goldPrice?.dir==="down"?"▼":"▲"} {st.goldPrice?.change||"+0.42%"}
-              </span>
+              {liveGold.loading?(
+                <span style={{fontFamily:"monospace",fontSize:11,color:G.textDim}}>Loading…</span>
+              ):liveGold.error?(
+                <span style={{fontFamily:"monospace",fontSize:11,color:G.textDim}}>Unavailable</span>
+              ):(
+                <>
+                  <span style={{fontFamily:"monospace",fontSize:12,color:G.gold,fontWeight:700}}>
+                    {liveGold.price?.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                  </span>
+                  <span style={{fontFamily:"monospace",fontSize:11,color:liveGold.dir==="down"?G.red:G.green,fontWeight:700}}>
+                    {liveGold.dir==="down"?"▼":"▲"}{" "}
+                    {liveGold.pct!==null?`${liveGold.pct>0?"+":""}${liveGold.pct.toFixed(2)}%`:""}
+                  </span>
+                  <span style={{fontSize:9,color:G.textDim}}>LIVE</span>
+                </>
+              )}
             </div>
 
             <div style={{display:"flex",flexDirection:"column",gap:7}}>
@@ -1127,23 +1182,6 @@ function AdminLogin({onSuccess,onClose}){
   );
 }
 
-// ── GOLD PRICE ADMIN ─────────────────────────────────────────────────────────
-function GoldPriceAdmin({st,update}){
-  const[gp,setGp]=useState(st.goldPrice||{price:"3,284.50",change:"+0.42%",dir:"up"});
-  return(
-    <div>
-      <FI value={gp.price} onChange={v=>setGp(g=>({...g,price:v}))} placeholder="e.g. 3,284.50" style={{marginBottom:9}}/>
-      <FI value={gp.change} onChange={v=>setGp(g=>({...g,change:v}))} placeholder="e.g. +0.42%" style={{marginBottom:9}}/>
-      <div style={{display:"flex",gap:9,marginBottom:11}}>
-        {["up","down"].map(d=>(
-          <button key={d} onClick={()=>setGp(g=>({...g,dir:d}))} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${gp.dir===d?(d==="up"?G.green:G.red):G.border}`,background:gp.dir===d?(d==="up"?G.greenBg:G.redBg):"none",color:gp.dir===d?(d==="up"?G.green:G.red):G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{d==="up"?"▲ Up":"▼ Down"}</button>
-        ))}
-      </div>
-      <Btn onClick={()=>{update("goldPrice",gp);alert("Gold price saved!");}} style={{width:"100%"}}>Save Gold Price</Btn>
-    </div>
-  );
-}
-
 // ── ADMIN PANEL PAGE ──────────────────────────────────────────────────────────
 function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[tab,setTab]=useState("bias");
@@ -1196,9 +1234,6 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <div style={{height:10}}/>
           <FI value={db.updatedAt} onChange={v=>setDb(b=>({...b,updatedAt:v}))} placeholder="Updated at e.g. Today, 08:00 AM" style={{marginBottom:11}}/>
           <Btn onClick={()=>{update("dailyBias",{...db,postedAt:new Date().toISOString()});alert("Daily bias saved!");}} style={{width:"100%"}}>Save Daily Bias</Btn>
-          <Div/>
-          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Gold Price Display</div>
-          <GoldPriceAdmin st={st} update={update}/>
         </>}
 
         {tab==="events"&&<>
