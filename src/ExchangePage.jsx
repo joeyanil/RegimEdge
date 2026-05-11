@@ -1,4 +1,9 @@
 import { useState, useRef } from "react";
+import {
+  SUPABASE_URL, SUPABASE_ANON_KEY,
+  p2pSelect, p2pInsert, p2pUpdate, p2pUpload, sendNotificationEmail,
+  Icon, P2P_TEXT,
+} from "./p2pHelpers";
 
 const G = {
   bg:"#16181D", bgDeep:"#111315", surface:"#1B1E24", card:"#1F2229",
