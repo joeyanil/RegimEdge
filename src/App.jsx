@@ -61,37 +61,55 @@ function useCountdown(target) {
 }
 
 // ── LIVE GOLD PRICE HOOK ──────────────────────────────────────────────────────
+// Shared state builder — used by all price sources
+function buildGoldState(prev, price) {
+  const prevPrice = prev.price;
+  const change = prevPrice ? +(price - prevPrice).toFixed(2) : null;
+  const pct = prevPrice ? +((price - prevPrice) / prevPrice * 100).toFixed(2) : null;
+  const dir = change !== null ? (change >= 0 ? "up" : "down") : prev.dir;
+  return {
+    price,
+    change: change !== null ? change : prev.change,
+    pct: pct !== null ? pct : prev.pct,
+    dir,
+    loading: false,
+    error: false,
+  };
+}
+
 function useLiveGoldPrice() {
   const [gold, setGold] = useState({ price: null, change: null, pct: null, dir: "up", loading: true, error: false });
 
   const fetch_ = async () => {
+    // ── Source 1: api.metals.live — correct endpoint is /v1/spot (returns all metals as array)
+    // The /v1/spot/gold path returns 404; must use /v1/spot and read the gold field
     try {
-      // Returns array: [{ gold: 3284.50, ... }] — no API key needed, 30k req/mo free
-      const res = await fetch("https://api.metals.live/v1/spot/gold");
-      if (!res.ok) throw new Error("bad response");
+      const res = await fetch("https://api.metals.live/v1/spot", { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) throw new Error("metals.live non-OK");
       const data = await res.json();
-      // Response shape: [{ gold: 3284.50 }] or { gold: 3284.50 }
+      // Response: [{ gold: 3284.50, silver: ..., ... }]
       const raw = Array.isArray(data) ? data[0] : data;
-      const price = raw?.gold ?? raw?.price ?? null;
-      if (!price) throw new Error("no price");
+      const price = raw?.gold ?? null;
+      if (!price) throw new Error("no gold field");
+      setGold(prev => buildGoldState(prev, price));
+      return;
+    } catch { /* fall through to next source */ }
 
-      setGold(prev => {
-        const prevPrice = prev.price;
-        const change = prevPrice ? +(price - prevPrice).toFixed(2) : null;
-        const pct = prevPrice ? +((price - prevPrice) / prevPrice * 100).toFixed(2) : null;
-        const dir = change !== null ? (change >= 0 ? "up" : "down") : prev.dir;
-        return {
-          price,
-          change: change !== null ? change : prev.change,
-          pct: pct !== null ? pct : prev.pct,
-          dir,
-          loading: false,
-          error: false,
-        };
-      });
-    } catch {
-      setGold(prev => ({ ...prev, loading: false, error: true }));
-    }
+    // ── Source 2: Swissquote public quotes — no API key, CORS-open
+    try {
+      const res = await fetch("https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD", { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) throw new Error("swissquote non-OK");
+      const data = await res.json();
+      // Response: [{ spreadProfilePrices: [{ ask, bid }], ... }]
+      const spread = data?.[0]?.spreadProfilePrices?.[0];
+      const price = spread ? +((spread.ask + spread.bid) / 2).toFixed(2) : null;
+      if (!price) throw new Error("no swissquote price");
+      setGold(prev => buildGoldState(prev, price));
+      return;
+    } catch { /* fall through */ }
+
+    // ── All sources failed
+    setGold(prev => ({ ...prev, loading: false, error: true }));
   };
 
   useEffect(() => {
