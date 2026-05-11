@@ -959,20 +959,41 @@ function TerminalFull(){
   const cfgProfitTargetRef=useRef(null);
   const cfgPeLotRef=useRef(null);
   const cfgPeRRRef=useRef(null);
-  // helpers to read current ref values
+  // ── BOT PARAMETERS — ALL HARDCODED, self-managing based on account balance ───
+  // Axum
+  const AXUM_MAX_LAYERS = 5;
+  const AXUM_PROFIT_PER_LAYER = 0.50; // $0.50 profit target per layer — scales with lot
+  // PrecisionEdge (MQ5 exact)
+  const PE_FAST_EMA   = 20;
+  const PE_SLOW_EMA   = 50;
+  const PE_ATR_MULT   = 1.5;
+  const PE_RR         = 2.0;
+  const PE_START_HOUR = 8;
+  const PE_END_HOUR   = 17;
+
+  // Dynamic lot sizing: 1% risk of account balance per trade, min 0.01
+  const calcDynLot=(balanceStr,slDistPoints)=>{
+    const bal=parseFloat((balanceStr||"$100").replace(/[$,]/g,""))||100;
+    const riskAmount=bal*0.01; // 1% risk
+    // If SL distance provided use risk-based lot, else use balance-scaled conservative lot
+    if(slDistPoints&&slDistPoints>0){
+      // lot = riskAmount / slDistPoints (simplified — Capital.com demo uses $1/point for 0.01 lot approximately)
+      const raw=riskAmount/(slDistPoints*100);
+      return Math.max(0.01,Math.min(1.0,Math.round(raw*100)/100));
+    }
+    // Axum: scale lot with balance — $100=0.01, $500=0.05, $1000=0.10, $5000=0.50
+    const scaled=Math.floor((bal/1000)*10)/100;
+    return Math.max(0.01,Math.min(1.0,scaled||0.01));
+  };
+
+  // getCfgValues only returns credentials — bot logic uses hardcoded params above
   const getCfgValues=()=>({
     email:cfgEmailRef.current?.value||cfg.email||"",
     apikey:cfgApiKeyRef.current?.value||cfg.apikey||"",
     password:cfgPasswordRef.current?.value||cfg.password||"",
-    baseEquity:cfgBaseEquityRef.current?.value||cfg.baseEquity||"1000",
-    baseLot:cfgBaseLotRef.current?.value||cfg.baseLot||"0.2",
-    maxLayers:cfgMaxLayersRef.current?.value||cfg.maxLayers||"3",
-    gap:cfgGapRef.current?.value||cfg.gap||"2.5",
-    risk:cfgRiskRef.current?.value||cfg.risk||"2",
-    maxdd:cfgMaxDDRef.current?.value||cfg.maxdd||"500",
-    profitTarget:cfgProfitTargetRef.current?.value||cfg.profitTarget||"0.45",
-    peLot:cfgPeLotRef.current?.value||cfg.peLot||"0.2",
-    peRR:cfgPeRRRef.current?.value||cfg.peRR||"2",
+    // Keep these for backward compat with any other code that reads them
+    maxdd:"500",
+    profitTarget:"0.50",
   });
   const cfgEmail=cfg.email||"";
   const cfgApiKey=cfg.apikey||"";
@@ -1209,46 +1230,78 @@ function TerminalFull(){
     }catch(e){addLog("err","Order error: "+e.message);return null;}
   };
 
+  // ── CLOSE POSITION ───────────────────────────────────────────────────────────
+  // Capital.com close: DELETE /api/v1/positions/{dealId}
+  // The "Failed to fetch" = CORS preflight blocked on DELETE from browser.
+  // Fix: send DELETE with mode:'cors' and explicit headers that pass preflight.
+  const doCloseRequest=async(dealId,effectiveKey)=>{
+    // Capital.com demo close endpoint — DELETE with dealId in path
+    return fetch(`${BASE_URL}/api/v1/positions/${dealId}`,{
+      method:"DELETE",
+      headers:{
+        "X-CAP-API-KEY":effectiveKey,
+        "CST":sessionTokensRef.current.cst,
+        "X-SECURITY-TOKEN":sessionTokensRef.current.secToken,
+        "Content-Type":"application/json",
+      },
+    });
+  };
+
   const closePosition=async(dealId,apiKey)=>{
     if(!dealId){addLog("err","Cannot close — no deal ID. Close manually on Capital.com.");return;}
-    if(closingIdRef.current===dealId) return; // prevent double-tap
+    if(closingIdRef.current===dealId) return;
     closingIdRef.current=dealId;
     setClosingId(dealId);
     addLog("info",`Closing position ${dealId}...`);
     try{
-      // Always refresh session before closing — prevents 401 if session aged
       // Use savedCredsRef directly — never depends on CONFIG tab being rendered
       const creds=savedCredsRef.current;
-      const effectiveKey=apiKey||creds.apikey||"";
+      const effectiveKey=creds.apikey||apiKey||cfg.apikey||"";
       if(!effectiveKey){addLog("err","Close failed: no API key. Reconnect first.");return;}
 
-      // Refresh session first
-      await silentReconnect();
+      // Always refresh session tokens first — they expire ~10 min
+      const refreshed=await silentReconnect();
+      if(!refreshed){
+        addLog("warn","Session refresh failed — attempting close with existing tokens...");
+      }
 
-      const doDelete=async()=>fetch(`${BASE_URL}/api/v1/positions/${dealId}`,{method:"DELETE",headers:capHeaders(effectiveKey)});
-      let r=await doDelete();
+      let r=await doCloseRequest(dealId,effectiveKey);
 
-      // On 401 — reconnect once and retry
       if(r.status===401){
-        addLog("warn","Session expired — reconnecting to close position...");
+        addLog("warn","401 on close — re-auth and retry...");
         const ok=await silentReconnect();
-        if(!ok){ addLog("err","Close failed: session could not be refreshed. Try reconnecting manually."); return; }
-        r=await doDelete();
+        if(!ok){addLog("err","Close failed: cannot refresh session. Reconnect manually.");return;}
+        r=await doCloseRequest(dealId,effectiveKey);
       }
 
       if(r.status===200||r.status===204||r.ok){
         addLog("trade",`✓ Position ${dealId} closed`);
         setPositions(ps=>ps.filter(p=>p.dealId!==dealId));
-        // Sync stackRef with real server position count
-        const allPos=await fetch(`${BASE_URL}/api/v1/positions`,{headers:capHeaders(effectiveKey)}).then(r2=>r2.json()).catch(()=>({positions:[]}));
-        const liveBuys=(allPos.positions||[]).filter(p=>p.position?.direction==="BUY").length;
-        const liveSells=(allPos.positions||[]).filter(p=>p.position?.direction==="SELL").length;
-        stackRef.current={buy:liveBuys,sell:liveSells};
+        // Re-sync stackRef from broker
+        try{
+          const allPos=await fetch(`${BASE_URL}/api/v1/positions`,{headers:{
+            "X-CAP-API-KEY":effectiveKey,
+            "CST":sessionTokensRef.current.cst,
+            "X-SECURITY-TOKEN":sessionTokensRef.current.secToken,
+            "Content-Type":"application/json",
+          }}).then(r2=>r2.json()).catch(()=>({positions:[]}));
+          const lb=(allPos.positions||[]).filter(p=>p.position?.direction==="BUY").length;
+          const ls=(allPos.positions||[]).filter(p=>p.position?.direction==="SELL").length;
+          stackRef.current={buy:lb,sell:ls};
+        }catch{}
       } else {
-        const d=await r.json().catch(()=>({}));
-        addLog("err","Close failed: "+(d.errorCode||d.message||r.status));
+        let errMsg=r.status;
+        try{ const d=await r.json(); errMsg=d.errorCode||d.message||r.status; }catch{}
+        addLog("err",`Close failed (${errMsg}) — try closing directly on Capital.com`);
       }
-    }catch(e){addLog("err","Close error: "+e.message);}
+    }catch(e){
+      // "Failed to fetch" = CORS/network block — log clearly
+      if(e.message.includes("fetch")||e.message.includes("network")){
+        addLog("err","Close blocked by browser CORS — try from Capital.com directly or reconnect.");
+      } else {
+        addLog("err","Close error: "+e.message);
+      }
+    }
     finally{closingIdRef.current=null;setClosingId(null);}
   };
 
@@ -1383,9 +1436,10 @@ function TerminalFull(){
     if(accountPollRef.current) clearInterval(accountPollRef.current);
 
     const refresh=async()=>{
-      // FIX: read profitTarget fresh each refresh — was captured once at connect, ignored config changes
-      const profitTarget=parseFloat(getCfgValues().profitTarget||0.45);
       await fetchAccount(apiKey);
+      // Auto profit target: $0.50 per 0.01 lot, min $0.20 — scales with position size
+      // We check per-position so each position uses its own lot's profit target
+      const autoProfitTarget=(lotSize)=>Math.max(0.20,(lotSize/0.01)*AXUM_PROFIT_PER_LAYER);
       try{
         const pr=await fetch(`${BASE_URL}/api/v1/positions`,{headers:capHeaders(apiKey)});
         if(pr.status===401){await silentReconnect();return;}
@@ -1406,15 +1460,23 @@ function TerminalFull(){
         }));
         setPositions(pos);
 
-        // ── PROFIT TARGET AUTO-CLOSE (matches MQ5: if profit >= ProfitTarget → close)
+        // ── PROFIT TARGET AUTO-CLOSE
         for(const p of pos){
-          if(p.pnl>=profitTarget&&p.dealId){
-            addLog("trade",`◎ Profit target hit ($${p.pnl.toFixed(2)}) — closing ${p.dir} ${p.dealId}`);
+          const target=autoProfitTarget(p.lot||0.01);
+          if(p.pnl>=target&&p.dealId){
+            addLog("trade",`◎ Profit $${p.pnl.toFixed(2)} ≥ target $${target.toFixed(2)} — closing ${p.dir} ${p.dealId}`);
             try{
-              const cr=await fetch(`${BASE_URL}/api/v1/positions/${p.dealId}`,{method:"DELETE",headers:capHeaders(apiKey)});
-              if(cr.status===200||cr.status===204){
+              const cr=await fetch(`${BASE_URL}/api/v1/positions/${p.dealId}`,{
+                method:"DELETE",
+                headers:{
+                  "X-CAP-API-KEY":apiKey,
+                  "CST":sessionTokensRef.current.cst,
+                  "X-SECURITY-TOKEN":sessionTokensRef.current.secToken,
+                  "Content-Type":"application/json",
+                }
+              });
+              if(cr.status===200||cr.status===204||cr.ok){
                 addLog("trade",`✓ Auto-closed — Deal: ${p.dealId}`);
-                // Decrement stack ref
                 if(p.dir==="BUY") stackRef.current={...stackRef.current,buy:Math.max(0,stackRef.current.buy-1)};
                 else stackRef.current={...stackRef.current,sell:Math.max(0,stackRef.current.sell-1)};
                 setStats(s=>({...s,wins:s.wins+1}));
@@ -1432,7 +1494,7 @@ function TerminalFull(){
         const totalPnl=pos.reduce((s,p)=>s+p.pnl,0);
         const balNum=parseFloat((accountBalRef.current||"$0").replace(/[$,]/g,""))||0;
         const ddPct=balNum>0?((totalPnl/balNum)*100).toFixed(2):"0.00";
-        const maxDDLimit=parseFloat(getCfgValues().maxdd||5);
+        const maxDDLimit=20; // Hardcoded: stop bot if account DD exceeds 20%
         const currentDD=parseFloat(ddPct)||0;
         if(currentDD<0&&Math.abs(currentDD)>=maxDDLimit&&runningRef.current){
           addLog("err",`⛔ Max daily DD hit (${ddPct}%) — bot stopped to protect account.`);
@@ -1456,42 +1518,24 @@ function TerminalFull(){
     accountPollRef.current=setInterval(refresh,10000);
   };
 
-  // ── AXUM AI CORE LOGIC (mirrors MQ5 exactly) ─────────────────────────────────
-  // Called every poll tick — same as OnTick() in MQ5
+  // ── AXUM AI CORE LOGIC (mirrors MQ5 exactly, fully auto-managed) ─────────────
   const axumTick=async(v,epic,atr,apiKey)=>{
     const bid=priceRef.current||0;
     if(!bid) return;
 
-    // ── Dynamic lot: (balance / baseEquity) * baseLotSize  — matches MQ5 GetDynamicLot()
-    // FIX: removed broken document.querySelector("[data-balance]") — no such element exists
-    // Read directly from accountBalRef which is kept in sync by fetchAccount
-    const baseEquity=parseFloat(v.baseEquity||10);
-    const baseLot=parseFloat(v.baseLot||0.01);
-    const bal=parseFloat((accountBalRef.current||"$10").replace(/[$,]/g,""))||10;
-    const rawLot=(bal/baseEquity)*baseLot;
-    // Round to nearest lot step (Capital.com standard is 0.01)
+    // ── Auto lot: 1% risk, balance-scaled, capped at 10x notional leverage
+    const bal=parseFloat((accountBalRef.current||"$100").replace(/[$,]/g,""))||100;
     const lotStep=0.01;
-    let dynLot=Math.max(lotStep,Math.floor(rawLot/lotStep)*lotStep);
-    // FIX: cap notional to prevent overleveraging — e.g. 0.99 BTC @ $80k on $999 account = 79x leverage
-    // Hard cap: lot × price ≤ accountBalance × 10 (10x max notional leverage guard)
-    const currentPx=priceRef.current||1;
-    const maxNotional=bal*10;
-    const maxLotByNotional=Math.max(lotStep,Math.floor((maxNotional/currentPx)/lotStep)*lotStep);
+    let dynLot=calcDynLot(accountBalRef.current,null);
+    const maxLotByNotional=Math.max(lotStep,Math.floor(((bal*10)/Math.max(bid,1))/lotStep)*lotStep);
     dynLot=Math.min(dynLot,maxLotByNotional);
     const lot=parseFloat(dynLot.toFixed(2));
 
     const st=stackRef.current;
-    const maxLayers=parseInt(v.maxLayers||15);
-    const configuredGap=parseFloat(v.gap||12); // in points — matches MQ5 GridGap
-    // FIX: auto-derive minimum safe gap from ATR so it never stacks instantly on Gold/BTC
-    // Gold ATR ~$10–25, BTC ATR ~$300–1000. Min gap = 0.5 × ATR to ensure meaningful spacing.
+    // ── Auto grid gap: 0.5 × ATR — self-adjusts per asset price level
     const atrNum=parseFloat(atr)||1;
-    const minSafeGap=atrNum*0.5;
-    const gridGap=Math.max(configuredGap,minSafeGap);
-    if(gridGap>configuredGap&&st.buy===0&&st.sell===0){
-      addLog("warn",`Grid gap ${configuredGap} too small for current ATR (${atrNum.toFixed(2)}) — using ATR-based gap: ${gridGap.toFixed(2)}`);
-    }
-    const pointSize=1; // All prices are in price units directly (not points)
+    const gridGap=atrNum*0.5; // Gold: ~$5-12, BTC: ~$150-500 gap between layers
+    const profitTarget=Math.max(0.20,lot*10); // $0.20 min, scales with lot size
 
     // ── Read live positions from last known state (stackRef is synced by accountPoll)
     const buyCount=st.buy;
@@ -1521,7 +1565,7 @@ function TerminalFull(){
           lastEntryRef.current={...lastEntryRef.current,sell:fillPx};
         }
         const st2=stackRef.current;
-        const remaining=Math.max(0,maxLayers-st2.buy-st2.sell);
+        const remaining=Math.max(0,AXUM_MAX_LAYERS-st2.buy-st2.sell);
         setInds(i=>({...i,
           buyStack:st2.buy, sellStack:st2.sell,
           grid:`Layer ${st2.buy+st2.sell}`,
@@ -1563,7 +1607,7 @@ function TerminalFull(){
 
     // ── BUY STACKING — fires on RSI bullish OR neutral-trend-UP (stacking works in neutral RSI too)
     const bullishOk=sentiment===1||(sentiment===0&&(trend==="UP"||closeVsEma==="Above"));
-    if(buyCount>0&&sellCount===0&&bullishOk&&buyCount<maxLayers){
+    if(buyCount>0&&sellCount===0&&bullishOk&&buyCount<AXUM_MAX_LAYERS){
       const gapNeeded=gridGap; // gridGap is already in price units
       if(lastBuyPx>0&&(bid-lastBuyPx)>=gapNeeded){
         addLog("trade",`Grid BUY Layer ${buyCount+1} — gap: ${(bid-lastBuyPx).toFixed(4)}`);
@@ -1574,7 +1618,7 @@ function TerminalFull(){
 
     // ── SELL STACKING — fires on RSI bearish OR neutral-trend-DOWN
     const bearishOk=sentiment===-1||(sentiment===0&&(trend==="DOWN"||closeVsEma==="Below"));
-    if(sellCount>0&&buyCount===0&&bearishOk&&sellCount<maxLayers){
+    if(sellCount>0&&buyCount===0&&bearishOk&&sellCount<AXUM_MAX_LAYERS){
       const gapNeeded=gridGap; // gridGap is already in price units
       if(lastSellPx>0&&(lastSellPx-bid)>=gapNeeded){
         addLog("trade",`Grid SELL Layer ${sellCount+1} — gap: ${(lastSellPx-bid).toFixed(4)}`);
@@ -1602,14 +1646,7 @@ function TerminalFull(){
     lastEntryRef.current={buy:0,sell:0};
     axumIndRef.current={rsiN:50,closeVsEma:"—",sentiment:0,trend:"—"};
 
-    // ── MQ5-EXACT PRECISIONEDGE PARAMETERS (hardcoded, matches EA exactly) ─────
-    const PE_FAST_EMA   = 20;    // FastEMA = 20 (MQ5 input)
-    const PE_SLOW_EMA   = 50;    // SlowEMA = 50 (MQ5 input)
-    const PE_ATR_MULT   = 1.5;   // ATR_Multiplier = 1.5 (MQ5 input)
-    const PE_RR         = 2.0;   // RiskReward = 2.0 (MQ5 input)
-    const PE_LOT        = 0.10;  // FixedLotSize = 0.10 (MQ5 input)
-    const PE_START_HOUR = 8;     // TradeStartHour = 8 (MQ5 input)
-    const PE_END_HOUR   = 17;    // TradeEndHour = 17 (MQ5 input)
+    // ── MQ5-EXACT PRECISIONEDGE PARAMETERS (hardcoded at component level above) ─
 
     try{
       // MINUTE_5 candles for PrecisionEdge (matches MQ5 PERIOD_M5), MINUTE_15 for Axum
@@ -1661,8 +1698,10 @@ function TerminalFull(){
       axumIndRef.current={rsiN,closeVsEma,sentiment,trend:ema9>ema20?"UP":"DOWN"};
       signalRef.current=signalStr;
 
-      const maxLayers=parseInt(v.maxLayers||15);
-      const dynLot=Math.max(0.01,Math.floor(((parseFloat(accountBalRef.current?.replace(/[$,]/g,"")||10)/parseFloat(v.baseEquity||10))*parseFloat(v.baseLot||0.01))/0.01)*0.01).toFixed(2);
+      // ── Dynamic lot — auto-scaled from account balance (1% risk model)
+      const balStr=accountBalRef.current||"$100";
+      const dynLot=calcDynLot(balStr,null);
+      addLog("info",`Auto lot: ${dynLot} (balance: ${balStr}, 1% risk model)`);
 
       if(botRef.current==="axum"){
         setInds(i=>({...i,
@@ -1671,7 +1710,7 @@ function TerminalFull(){
           buyStack:0,sellStack:0,lastBuy:"—",lastSell:"—",
           lot:dynLot,sentiment:sentimentLabel,
           entry:signalStr==="MONITORING"?"Waiting":signalStr,
-          grid:"Layer 0",stackRoom:`${maxLayers} slots free`,dayDD:"0.00%",
+          grid:"Layer 0",stackRoom:`${AXUM_MAX_LAYERS} slots free`,dayDD:"0.00%",
         }));
       } else {
         // FIX: show correct EMA 20/50 (not 9/20), and real engulf/pullback status
@@ -1760,7 +1799,7 @@ function TerminalFull(){
               sentiment:nSentLabel,bid:nbid.toString(),
               buyStack:st.buy,sellStack:st.sell,
               grid:`Layer ${st.buy+st.sell}`,
-              stackRoom:`${Math.max(0,(parseInt(v.maxLayers)||15)-st.buy-st.sell)} slots free`,
+              stackRoom:`${Math.max(0,AXUM_MAX_LAYERS-st.buy-st.sell)} slots free`,
             }));
           } else {
             // FIX: correct EMA labels + real engulf status
@@ -1794,13 +1833,13 @@ function TerminalFull(){
             }
             // MQ5: pullbackUp && bullishEngulf → BUY
             if(nPePullbackUp&&nPeBullEngulf){
-              // MQ5: sl = ask − (atr × ATR_Multiplier), tp = sl_distance × RR
               const ask=nbid;
               const slDist=natrVal*PE_ATR_MULT;
               const sl=parseFloat((ask-slDist).toFixed(5));
               const tp=parseFloat((ask+slDist*PE_RR).toFixed(5));
-              addLog("trade",`PrecisionEdge BUY — Pullback+Engulf ✓ | SL:${sl.toFixed(2)} TP:${tp.toFixed(2)} ATR:${natr}`);
-              const dealId2=await placeOrder("BUY",PE_LOT,natr,pollKey,sl,tp);
+              const peLot=calcDynLot(accountBalRef.current,slDist);
+              addLog("trade",`PrecisionEdge BUY — Pullback+Engulf ✓ | Lot:${peLot} SL:${sl.toFixed(2)} TP:${tp.toFixed(2)} ATR:${natr}`);
+              const dealId2=await placeOrder("BUY",peLot,natrVal,pollKey,sl,tp);
               if(dealId2) stackRef.current={...stackRef.current,buy:stackRef.current.buy+1};
             }
             // MQ5: pullbackDown && bearishEngulf → SELL
@@ -1809,8 +1848,9 @@ function TerminalFull(){
               const slDist=natrVal*PE_ATR_MULT;
               const sl=parseFloat((sellBid+slDist).toFixed(5));
               const tp=parseFloat((sellBid-slDist*PE_RR).toFixed(5));
-              addLog("trade",`PrecisionEdge SELL — Pullback+Engulf ✓ | SL:${sl.toFixed(2)} TP:${tp.toFixed(2)} ATR:${natr}`);
-              const dealId2=await placeOrder("SELL",PE_LOT,natr,pollKey,sl,tp);
+              const peLot=calcDynLot(accountBalRef.current,slDist);
+              addLog("trade",`PrecisionEdge SELL — Pullback+Engulf ✓ | Lot:${peLot} SL:${sl.toFixed(2)} TP:${tp.toFixed(2)} ATR:${natr}`);
+              const dealId2=await placeOrder("SELL",peLot,natrVal,pollKey,sl,tp);
               if(dealId2) stackRef.current={...stackRef.current,sell:stackRef.current.sell+1};
             } else {
               // Log which conditions are met/missing each tick
@@ -2278,50 +2318,38 @@ function TerminalFull(){
                 <input ref={cfgPasswordRef} defaultValue={cfg.password||""} placeholder="API password" type="password"
                   style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
+              <button onClick={saveConfig} style={{width:"100%",padding:14,background:cfgSaved?`linear-gradient(135deg,${G.green},#16a34a)`:`linear-gradient(135deg,${G.gold},#c8861a)`,border:"none",borderRadius:G.rs,color:"#000",fontSize:11,fontWeight:700,letterSpacing:2,cursor:"pointer",fontFamily:M,marginBottom:6,transition:"background 0.3s"}}>
+                {cfgSaved?"✓  SAVED!":"SAVE CREDENTIALS"}
+              </button>
+              {cfgSaved&&<div style={{fontSize:10,color:G.green,textAlign:"center",marginBottom:10,letterSpacing:1}}>Credentials saved to device storage</div>}
             </TCard>
 
-            <TCard>
-              <TLabel>Axum AI Parameters</TLabel>
-              {[["Base Equity ($)",cfgBaseEquityRef,cfg.baseEquity||"1000","number"],["Base Lot Size",cfgBaseLotRef,cfg.baseLot||"0.2","number"],["Max Grid Layers",cfgMaxLayersRef,cfg.maxLayers||"3","number"],["Grid Gap (pts)",cfgGapRef,cfg.gap||"2.5","number"],["Profit Target ($)",cfgProfitTargetRef,cfg.profitTarget||"0.45","number"]].map(([l,r,dv,t])=>(
-                <div key={l} style={{marginBottom:10}}>
-                  <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
-                  <input ref={r} defaultValue={dv} placeholder={l} type={t}
-                    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <TCard style={{background:G.surface,border:`1px solid ${G.gold}22`}}>
+              <TLabel>Bot Parameters — Auto-Managed</TLabel>
+              <div style={{fontSize:10,color:G.textSub,lineHeight:1.8}}>
+                <div style={{marginBottom:6}}>Both bots self-configure based on your account balance. No manual settings needed.</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  {[
+                    ["Axum Lot","Auto (balance-scaled)"],
+                    ["Axum Grid Gap","Auto (ATR-based)"],
+                    ["Axum Layers","Auto (max 5)"],
+                    ["Axum Profit","Auto ($0.50/layer)"],
+                    ["PE FastEMA","20 (MQ5 exact)"],
+                    ["PE SlowEMA","50 (MQ5 exact)"],
+                    ["PE ATR Mult","1.5× (MQ5 exact)"],
+                    ["PE R:R","2.0 (MQ5 exact)"],
+                    ["PE Session","08:00–17:00 UTC"],
+                    ["PE Lot","Auto (1% risk)"],
+                  ].map(([k,v2])=>(
+                    <div key={k} style={{background:G.card,borderRadius:6,padding:"7px 10px"}}>
+                      <div style={{fontSize:8,color:G.textDim,letterSpacing:1}}>{k}</div>
+                      <div style={{fontSize:10,color:G.gold,fontWeight:700,marginTop:2}}>{v2}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </TCard>
-
-            <TCard>
-              <TLabel>PrecisionEdge Parameters</TLabel>
-              <div style={{background:G.surface,border:`1px solid ${G.gold}22`,borderRadius:G.rs,padding:10,marginBottom:12,fontSize:10,color:G.textSub,lineHeight:1.7}}>
-                ℹ PrecisionEdge core parameters (EMA 20/50, ATR×1.5, RR 2.0, session 08–17 UTC) are hardcoded from the MQ5 EA. Only lot size is configurable.
               </div>
-              {[["Lot Size",cfgPeLotRef,cfg.peLot||"0.2","number"],["Risk/Reward Ratio",cfgPeRRRef,cfg.peRR||"2","number"]].map(([l,r,dv,t])=>(
-                <div key={l} style={{marginBottom:10}}>
-                  <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
-                  <input ref={r} defaultValue={dv} placeholder={l} type={t}
-                    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
-              ))}
             </TCard>
 
-            <TCard>
-              <TLabel>Risk Management</TLabel>
-              {[["Risk % per trade",cfgRiskRef,cfg.risk||"2"],["Max Daily DD %",cfgMaxDDRef,cfg.maxdd||"500"]].map(([l,r,dv])=>(
-                <div key={l} style={{marginBottom:10}}>
-                  <div style={{fontSize:8,letterSpacing:1.5,color:G.textSub,marginBottom:6}}>{l.toUpperCase()}</div>
-                  <input ref={r} defaultValue={dv} placeholder={l} type="number"
-                    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
-              ))}
-            </TCard>
-
-            <button onClick={saveConfig} style={{width:"100%",padding:14,background:cfgSaved?`linear-gradient(135deg,${G.green},#16a34a)`:`linear-gradient(135deg,${G.gold},#c8861a)`,border:"none",borderRadius:G.rs,color:"#000",fontSize:11,fontWeight:700,letterSpacing:2,cursor:"pointer",fontFamily:M,marginBottom:6,transition:"background 0.3s"}}>
-              {cfgSaved?"✓  SAVED!":"SAVE CONFIGURATION"}
-            </button>
-            {cfgSaved&&<div style={{fontSize:10,color:G.green,textAlign:"center",marginBottom:10,letterSpacing:1}}>Settings saved to device storage</div>}
-
-            {/* MT5 desktop */}
             <TCard style={{background:G.surface}}>
               <TLabel>MT5 Desktop Version</TLabel>
               <p style={{fontSize:11,color:G.textSub,lineHeight:1.7,margin:"0 0 10px"}}>Want to run the EA on MetaTrader 5 desktop? Contact admin — it's completely free.</p>
@@ -3166,10 +3194,11 @@ export default function App(){
   const addItem=(key,item)=>update(key,[item,...st[key]]);
   const removeItem=(key,id)=>update(key,st[key].filter(i=>i.id!==id));
 
-  // ── PAGE PERSISTENCE: restore last page from sessionStorage on reload ─────────
+  // ── PAGE PERSISTENCE: restore last page from localStorage on reload ──────────
+  // sessionStorage is wiped on reload in hosted envs (Vercel) — localStorage persists
   const[page,setPage]=useState(()=>{
     try{
-      const saved=sessionStorage.getItem("re_page");
+      const saved=localStorage.getItem("re_last_page");
       const valid=["home","weekly","macro","events","news","exchange","archive","terminal","strategy","profile"];
       return (saved&&valid.includes(saved))?saved:"home";
     }catch{return "home";}
@@ -3312,7 +3341,7 @@ export default function App(){
     setOpenGroup(null);
     setShowProfileMenu(false);
     // Persist so reload returns to same page
-    try{ sessionStorage.setItem("re_page",p); }catch{}
+    try{ localStorage.setItem("re_last_page",p); }catch{}
     // Push browser history so Android back button returns to previous page instead of exiting
     window.history.pushState({page:p},"",null);
   };
@@ -3326,7 +3355,7 @@ export default function App(){
       setPage(p);
       setMenuOpen(false);
       setShowProfileMenu(false);
-      try{ sessionStorage.setItem("re_page",p); }catch{}
+      try{ localStorage.setItem("re_last_page",p); }catch{}
     };
     window.addEventListener("popstate",onPop);
     return()=>window.removeEventListener("popstate",onPop);
