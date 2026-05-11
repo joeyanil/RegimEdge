@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import ExchangePage from "./ExchangePage";
 import { TerminalFull, TerminalPage } from "./TerminalFull";
+import {
+  p2pSelect, p2pInsert, p2pUpdate,
+  sendNotificationEmail,
+  Icon, P2P_TEXT,
+} from "./p2pHelpers";
 
 // ── TOKENS ────────────────────────────────────────────────────────────────────
 const G = {
