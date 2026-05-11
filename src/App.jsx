@@ -81,29 +81,27 @@ function useLiveGoldPrice() {
   const [gold, setGold] = useState({ price: null, change: null, pct: null, dir: "up", loading: true, error: false });
 
   const fetch_ = async () => {
-    // ── Source 1: api.metals.live — correct endpoint is /v1/spot (returns all metals as array)
-    // The /v1/spot/gold path returns 404; must use /v1/spot and read the gold field
+    // ── Source 1: gold-api.com — free, no key, CORS-enabled, no rate limit
+    // Confirmed live: https://gold-api.com — endpoint: GET /price/XAU → { price, symbol, ... }
     try {
-      const res = await fetch("https://api.metals.live/v1/spot", { signal: AbortSignal.timeout(5000) });
+      const res = await fetch("https://api.gold-api.com/price/XAU", { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) throw new Error("gold-api non-OK");
+      const data = await res.json();
+      const price = data?.price ?? null;
+      if (!price) throw new Error("no price field");
+      setGold(prev => buildGoldState(prev, price));
+      return;
+    } catch { /* fall through to next source */ }
+
+    // ── Source 2: api.metals.live — free, no key, CORS-open (fallback)
+    try {
+      const res = await fetch("https://api.metals.live/v1/spot", { signal: AbortSignal.timeout(6000) });
       if (!res.ok) throw new Error("metals.live non-OK");
       const data = await res.json();
       // Response: [{ gold: 3284.50, silver: ..., ... }]
       const raw = Array.isArray(data) ? data[0] : data;
       const price = raw?.gold ?? null;
       if (!price) throw new Error("no gold field");
-      setGold(prev => buildGoldState(prev, price));
-      return;
-    } catch { /* fall through to next source */ }
-
-    // ── Source 2: Swissquote public quotes — no API key, CORS-open
-    try {
-      const res = await fetch("https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD", { signal: AbortSignal.timeout(5000) });
-      if (!res.ok) throw new Error("swissquote non-OK");
-      const data = await res.json();
-      // Response: [{ spreadProfilePrices: [{ ask, bid }], ... }]
-      const spread = data?.[0]?.spreadProfilePrices?.[0];
-      const price = spread ? +((spread.ask + spread.bid) / 2).toFixed(2) : null;
-      if (!price) throw new Error("no swissquote price");
       setGold(prev => buildGoldState(prev, price));
       return;
     } catch { /* fall through */ }
