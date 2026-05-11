@@ -5,7 +5,7 @@ import {
   p2pSelect, p2pInsert, p2pUpdate,
   sendNotificationEmail,
   Icon, P2P_TEXT,
-} from "./p2pHelpers";
+} from "./p2pHelpers.jsx";
 
 // ── TOKENS ────────────────────────────────────────────────────────────────────
 const G = {

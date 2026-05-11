@@ -3,7 +3,7 @@ import {
   SUPABASE_URL, SUPABASE_ANON_KEY,
   p2pSelect, p2pInsert, p2pUpdate, p2pUpload, sendNotificationEmail,
   Icon, P2P_TEXT,
-} from "./p2pHelpers";
+} from "./p2pHelpers.jsx";
 
 // ── Design tokens (match App.jsx) ─────────────────────────────────────────────
 const G = {
