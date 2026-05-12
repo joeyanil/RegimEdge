@@ -921,6 +921,33 @@ function StrategyPage(){
 const SUPABASE_URL = "https://gongzbdpfbxkaypfwkht.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdvbmd6YmRwZmJ4a2F5cGZ3a2h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQzOTEsImV4cCI6MjA5Mzc2MDM5MX0.OReRufSVbPVSKOzXCad-qfoitnbwYe8mCNW1fIdYVdo";
 
+// ── SIGNED URL HELPER (private buckets) ──────────────────────────────────────
+// Private buckets (kyc-docs, trust-applications) require signed URLs.
+// The /public/ path returns 403 for private buckets.
+const getSignedUrl = async (bucket, path) => {
+  const token = localStorage.getItem("re_access_token") || SUPABASE_ANON_KEY;
+  // Extract just the file path from a full URL if needed
+  let filePath = path;
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const marker2 = `/storage/v1/object/${bucket}/`;
+  if (path.includes(marker)) filePath = path.split(marker)[1];
+  else if (path.includes(marker2)) filePath = path.split(marker2)[1];
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${filePath}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.signedURL ? `${SUPABASE_URL}/storage/v1${data.signedURL}` : null;
+  } catch { return null; }
+};
+
 // ── CONNECTION DIAGNOSTICS (runs once, logs to browser console) ───────────────
 (async () => {
   if (typeof window === "undefined") return;
@@ -1203,6 +1230,73 @@ function AdminLogin({onSuccess,onClose}){
   );
 }
 
+// ── SIGNED IMAGE COMPONENTS (private bucket viewer) ───────────────────────────
+// Loads a signed URL on mount, shows spinner then image + open-in-tab button.
+function SignedPhoto({rawUrl,bucket,label,height=100}){
+  const[signedUrl,setSignedUrl]=React.useState(null);
+  const[loading,setLoading]=React.useState(true);
+  const[failed,setFailed]=React.useState(false);
+  React.useEffect(()=>{
+    if(!rawUrl){setLoading(false);setFailed(true);return;}
+    getSignedUrl(bucket,rawUrl).then(url=>{
+      if(url){setSignedUrl(url);}else{setFailed(true);}
+    }).catch(()=>setFailed(true)).finally(()=>setLoading(false));
+  },[rawUrl,bucket]);
+  if(!rawUrl) return(
+    <div style={{flex:1,height,background:G.card,border:`1px solid ${G.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:G.textDim}}>{label} missing</div>
+  );
+  if(loading) return(
+    <div style={{flex:1,height,background:G.card,border:`1px solid ${G.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{width:18,height:18,border:`2px solid ${G.border}`,borderTop:`2px solid ${G.gold}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+    </div>
+  );
+  if(failed||!signedUrl) return(
+    <div style={{flex:1,background:G.card,border:`1px solid ${G.red}33`,borderRadius:8,overflow:"hidden",textDecoration:"none",display:"block"}}>
+      <div style={{height,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
+        <span style={{fontSize:20}}>🔒</span>
+        <span style={{fontSize:10,color:G.textDim,textAlign:"center",padding:"0 6px"}}>Signed URL failed</span>
+      </div>
+      <div style={{padding:"5px 8px",background:G.surface,fontSize:11,color:G.textDim,textAlign:"center"}}>{label}</div>
+    </div>
+  );
+  return(
+    <a href={signedUrl} target="_blank" rel="noreferrer" style={{flex:1,borderRadius:8,overflow:"hidden",border:`1px solid ${G.gold}44`,textDecoration:"none",display:"block"}}>
+      <img src={signedUrl} alt={label} style={{width:"100%",height,objectFit:"cover",display:"block"}}
+        onError={()=>setFailed(true)}/>
+      <div style={{padding:"5px 8px",background:G.card,fontSize:11,color:G.gold,display:"flex",justifyContent:"space-between"}}>
+        <span>{label}</span><span>↗ Open</span>
+      </div>
+    </a>
+  );
+}
+
+function KycPhotoRow({idUrl,selfieUrl}){
+  return(
+    <>
+      <div style={{fontSize:10,color:G.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"12px 0 7px"}}>ID Documents</div>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <SignedPhoto rawUrl={idUrl} bucket="kyc-docs" label="🪪 ID" height={110}/>
+        <SignedPhoto rawUrl={selfieUrl} bucket="kyc-docs" label="🤳 Selfie" height={110}/>
+      </div>
+    </>
+  );
+}
+
+function TpScreenshotRow({urls}){
+  return(
+    <>
+      <div style={{fontSize:10,color:G.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"10px 0 7px"}}>Activity Screenshots</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:10}}>
+        {urls.map((url,i)=>(
+          <div key={i} style={{width:"calc(50% - 4px)"}}>
+            <SignedPhoto rawUrl={url} bucket="trust-applications" label={`Screenshot ${i+1}`} height={90}/>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 // ── ADMIN PANEL PAGE ──────────────────────────────────────────────────────────
 function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[tab,setTab]=useState("bias");
@@ -1271,16 +1365,28 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
     setTpBusy(b=>({...b,[id]:true}));
     try{
       await p2pUpdate("trust_plus_applications",`id=eq.${id}`,{status,reviewed_at:new Date().toISOString(),...extra});
-      // If approving, also flip trust_plus=true on kyc_submissions
-      if(status==="approved"){
-        await p2pUpdate("kyc_submissions",`user_id=eq.${userId}`,{trust_plus:true,trust_plus_granted_at:new Date().toISOString()});
-      }
-      // If revoking, flip trust_plus=false
-      if(status==="revoked"){
-        await p2pUpdate("kyc_submissions",`user_id=eq.${userId}`,{trust_plus:false,trust_plus_revoked_at:new Date().toISOString()});
+      // If approving, also flip trust_plus=true on kyc_submissions.
+      // NOTE: This requires the admin RLS bypass policy. Run in Supabase SQL Editor:
+      //   create policy "admin_rw_all_kyc" on public.kyc_submissions for all using (true);
+      // Without it, this update silently affects 0 rows (RLS blocks it).
+      let kycUpdateWarning = "";
+      if(status==="approved"||status==="revoked"){
+        const trustVal = status==="approved";
+        try{
+          const updated = await p2pUpdate("kyc_submissions",`user_id=eq.${userId}`,{
+            trust_plus:trustVal,
+            ...(trustVal?{trust_plus_granted_at:new Date().toISOString()}:{trust_plus_revoked_at:new Date().toISOString()}),
+          });
+          if(!updated||updated.length===0){
+            kycUpdateWarning = "\n\n⚠️ Trust+ badge updated in applications table, but the KYC trust_plus flag could not be set (RLS policy). Run the admin bypass SQL in Supabase to fix this.";
+          }
+        }catch(kycErr){
+          kycUpdateWarning = `\n\n⚠️ Trust+ application updated, but KYC flag failed: ${kycErr.message}. Check RLS policy.`;
+        }
       }
       setTpList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setTpExpanded(null);
+      if(kycUpdateWarning) alert(`✓ Done!${kycUpdateWarning}`);
     }catch(e){alert("Error: "+e.message);}
     finally{setTpBusy(b=>({...b,[id]:false}));}
   };
@@ -1438,20 +1544,9 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                   <span style={{color:G.textSub,fontSize:11}}>{open?"▲":"▼"}</span>
                 </button>
                 {open&&<div style={{padding:"0 13px 14px",borderTop:`1px solid ${G.border}`}}>
-                  {/* Photos */}
-                  <div style={{fontSize:10,color:G.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"12px 0 7px"}}>ID Documents</div>
-                  <div style={{display:"flex",gap:8,marginBottom:12}}>
-                    {[["🪪 ID",k.id_photo_url],["🤳 Selfie",k.selfie_url]].map(([lbl,url])=>
-                      url?(
-                        <a key={lbl} href={url} target="_blank" rel="noreferrer" style={{flex:1,borderRadius:8,overflow:"hidden",border:`1px solid ${G.border}`,textDecoration:"none",display:"block"}}>
-                          <img src={url} alt={lbl} style={{width:"100%",height:100,objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-                          <div style={{padding:"5px 8px",background:G.card,fontSize:11,color:G.gold,display:"flex",justifyContent:"space-between"}}><span>{lbl}</span><span>↗ Open</span></div>
-                        </a>
-                      ):(
-                        <div key={lbl} style={{flex:1,height:70,background:G.card,border:`1px solid ${G.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:G.textDim}}>{lbl} missing</div>
-                      )
-                    )}
-                  </div>
+                  {/* Photos — signed URLs required for private bucket */}
+                  <KycPhotoRow idUrl={k.id_photo_url} selfieUrl={k.selfie_url}/>
+
                   {/* Info */}
                   {[["Name",k.full_name],["Phone",k.phone],["Telegram",k.telegram],["ID Type",k.id_type],["Submitted",k.submitted_at?new Date(k.submitted_at).toLocaleString():"—"]].map(([l,v])=>(
                     <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${G.border}22`,fontSize:12}}>
@@ -1514,18 +1609,8 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                       <span style={{color:G.textSub}}>{l}</span><span style={{color:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-all"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
                     </div>
                   ))}
-                  {/* Screenshots */}
-                  {k.screenshot_urls?.length>0&&<>
-                    <div style={{fontSize:10,color:G.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"10px 0 7px"}}>Activity Screenshots</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:10}}>
-                      {k.screenshot_urls.map((url,i)=>(
-                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{display:"block",borderRadius:7,overflow:"hidden",border:`1px solid ${G.border}`,textDecoration:"none",width:"calc(50% - 4px)"}}>
-                          <img src={url} alt={`screenshot ${i+1}`} style={{width:"100%",height:90,objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-                          <div style={{padding:"4px 7px",background:G.card,fontSize:10,color:G.gold,display:"flex",justifyContent:"space-between"}}><span>Screenshot {i+1}</span><span>↗</span></div>
-                        </a>
-                      ))}
-                    </div>
-                  </>}
+                  {/* Screenshots — signed URLs for private bucket */}
+                  {k.screenshot_urls?.length>0&&<TpScreenshotRow urls={k.screenshot_urls}/>}
                   {k.rejection_reason&&<div style={{marginTop:6,padding:"7px 10px",background:G.redBg,borderRadius:7,fontSize:12,color:G.red}}>Rejection: {k.rejection_reason}</div>}
                   {/* Actions */}
                   <div style={{marginTop:13,display:"flex",flexDirection:"column",gap:8}}>
