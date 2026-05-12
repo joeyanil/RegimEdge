@@ -1214,7 +1214,76 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[no,setNo]=useState({text:"",type:"announcement"});
   const[aw,setAw]=useState({week:"",bias:"Bullish",result:"green",note:""});
   const imgRef=useRef();
-  const TABS=["bias","events","news","notices","archive"];
+  const TABS=["bias","events","news","notices","archive","kyc","trust+"];
+
+  // ── KYC Review state
+  const[kycList,setKycList]=useState([]);
+  const[kycLoading,setKycLoading]=useState(false);
+  const[kycErr,setKycErr]=useState("");
+  const[kycFilter,setKycFilter]=useState("pending");
+  const[expanded,setExpanded]=useState(null);
+  const[rejInput,setRejInput]=useState({});
+  const[banInput,setBanInput]=useState({});
+  const[kycBusy,setKycBusy]=useState({});
+
+  const fetchKyc=async(filter)=>{
+    const f=filter!==undefined?filter:kycFilter;
+    setKycLoading(true);setKycErr("");
+    try{
+      const q=f==="all"?"?order=submitted_at.desc":`?status=eq.${f}&order=submitted_at.desc`;
+      const rows=await p2pSelect("kyc_submissions",q);
+      setKycList(rows||[]);
+    }catch(e){setKycErr(e.message||"Failed to load");}
+    finally{setKycLoading(false);}
+  };
+  useEffect(()=>{if(tab==="kyc")fetchKyc();},[tab]);
+  const kycAction=async(id,status,extra={})=>{
+    setKycBusy(b=>({...b,[id]:true}));
+    try{
+      await p2pUpdate("kyc_submissions",`id=eq.${id}`,{status,reviewed_at:new Date().toISOString(),reviewed_by:"Admin",...extra});
+      setKycList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
+      setExpanded(null);
+    }catch(e){alert("Error: "+e.message);}
+    finally{setKycBusy(b=>({...b,[id]:false}));}
+  };
+
+  // ── Trust+ Review state
+  const[tpList,setTpList]=useState([]);
+  const[tpLoading,setTpLoading]=useState(false);
+  const[tpErr,setTpErr]=useState("");
+  const[tpFilter,setTpFilter]=useState("pending");
+  const[tpExpanded,setTpExpanded]=useState(null);
+  const[tpRejInput,setTpRejInput]=useState({});
+  const[tpBusy,setTpBusy]=useState({});
+
+  const fetchTp=async(filter)=>{
+    const f=filter!==undefined?filter:tpFilter;
+    setTpLoading(true);setTpErr("");
+    try{
+      const q=f==="all"?"?order=submitted_at.desc":`?status=eq.${f}&order=submitted_at.desc`;
+      const rows=await p2pSelect("trust_plus_applications",q);
+      setTpList(rows||[]);
+    }catch(e){setTpErr(e.message||"Failed to load");}
+    finally{setTpLoading(false);}
+  };
+  useEffect(()=>{if(tab==="trust+")fetchTp();},[tab]);
+  const tpAction=async(id,userId,status,extra={})=>{
+    setTpBusy(b=>({...b,[id]:true}));
+    try{
+      await p2pUpdate("trust_plus_applications",`id=eq.${id}`,{status,reviewed_at:new Date().toISOString(),...extra});
+      // If approving, also flip trust_plus=true on kyc_submissions
+      if(status==="approved"){
+        await p2pUpdate("kyc_submissions",`user_id=eq.${userId}`,{trust_plus:true,trust_plus_granted_at:new Date().toISOString()});
+      }
+      // If revoking, flip trust_plus=false
+      if(status==="revoked"){
+        await p2pUpdate("kyc_submissions",`user_id=eq.${userId}`,{trust_plus:false,trust_plus_revoked_at:new Date().toISOString()});
+      }
+      setTpList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
+      setTpExpanded(null);
+    }catch(e){alert("Error: "+e.message);}
+    finally{setTpBusy(b=>({...b,[id]:false}));}
+  };
 
   const DB=({val,onChange})=>(
     <div style={{display:"flex",gap:7,marginBottom:14}}>
@@ -1338,6 +1407,143 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             </div>
           ))}
         </>}
+
+        {/* ── KYC REVIEW TAB ── */}
+        {tab==="kyc"&&(()=>{
+          const StatusDot=({s})=>{const c=s==="approved"?G.green:s==="rejected"?G.red:s==="banned"?"#a855f7":G.gold;return<span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:c,flexShrink:0,marginRight:6}}/>;};
+          return(<>
+            <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+              {["pending","approved","rejected","banned","all"].map(f=>(
+                <button key={f} onClick={()=>{setKycFilter(f);fetchKyc(f);}} style={{padding:"5px 13px",borderRadius:20,border:`1px solid ${kycFilter===f?G.gold:G.border}`,background:kycFilter===f?G.goldBg:"none",color:kycFilter===f?G.gold:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{f==="all"?"All":f.charAt(0).toUpperCase()+f.slice(1)}</button>
+              ))}
+              <button onClick={()=>fetchKyc()} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻</button>
+            </div>
+            {kycLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>Loading...</p>}
+            {kycErr&&<p style={{color:G.red,fontSize:12,marginBottom:10}}>{kycErr}</p>}
+            {!kycLoading&&kycList.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>No {kycFilter} submissions.</p>}
+            {kycList.map(k=>{
+              const open=expanded===k.id;const busy=kycBusy[k.id];
+              const sc=k.status==="approved"?G.green:k.status==="rejected"?G.red:k.status==="banned"?"#a855f7":G.gold;
+              return(<div key={k.id} style={{background:G.surface,border:`1px solid ${open?G.gold+"55":G.border}`,borderRadius:G.r,marginBottom:9,overflow:"hidden"}}>
+                <button onClick={()=>setExpanded(open?null:k.id)} style={{width:"100%",padding:"12px 13px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left"}}>
+                  <StatusDot s={k.status}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:G.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.full_name}</div>
+                    <div style={{fontSize:11,color:G.textSub,marginTop:1}}>{k.phone} · {k.telegram} · {k.id_type}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:10,color:sc,fontWeight:700,textTransform:"uppercase"}}>{k.status}</div>
+                    <div style={{fontSize:10,color:G.textDim}}>{k.submitted_at?new Date(k.submitted_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}):""}</div>
+                  </div>
+                  <span style={{color:G.textSub,fontSize:11}}>{open?"▲":"▼"}</span>
+                </button>
+                {open&&<div style={{padding:"0 13px 14px",borderTop:`1px solid ${G.border}`}}>
+                  {/* Photos */}
+                  <div style={{fontSize:10,color:G.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"12px 0 7px"}}>ID Documents</div>
+                  <div style={{display:"flex",gap:8,marginBottom:12}}>
+                    {[["🪪 ID",k.id_photo_url],["🤳 Selfie",k.selfie_url]].map(([lbl,url])=>
+                      url?(
+                        <a key={lbl} href={url} target="_blank" rel="noreferrer" style={{flex:1,borderRadius:8,overflow:"hidden",border:`1px solid ${G.border}`,textDecoration:"none",display:"block"}}>
+                          <img src={url} alt={lbl} style={{width:"100%",height:100,objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+                          <div style={{padding:"5px 8px",background:G.card,fontSize:11,color:G.gold,display:"flex",justifyContent:"space-between"}}><span>{lbl}</span><span>↗ Open</span></div>
+                        </a>
+                      ):(
+                        <div key={lbl} style={{flex:1,height:70,background:G.card,border:`1px solid ${G.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:G.textDim}}>{lbl} missing</div>
+                      )
+                    )}
+                  </div>
+                  {/* Info */}
+                  {[["Name",k.full_name],["Phone",k.phone],["Telegram",k.telegram],["ID Type",k.id_type],["Submitted",k.submitted_at?new Date(k.submitted_at).toLocaleString():"—"]].map(([l,v])=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${G.border}22`,fontSize:12}}>
+                      <span style={{color:G.textSub}}>{l}</span><span style={{color:G.text,fontWeight:600}}>{v||"—"}</span>
+                    </div>
+                  ))}
+                  {k.rejection_reason&&<div style={{marginTop:8,padding:"7px 10px",background:G.redBg,borderRadius:7,fontSize:12,color:G.red}}>Rejection: {k.rejection_reason}</div>}
+                  {k.ban_reason&&<div style={{marginTop:6,padding:"7px 10px",background:"rgba(168,85,247,0.08)",borderRadius:7,fontSize:12,color:"#a855f7"}}>Ban: {k.ban_reason}</div>}
+                  {/* Actions */}
+                  <div style={{marginTop:13,display:"flex",flexDirection:"column",gap:8}}>
+                    {k.status!=="approved"&&<button disabled={busy} onClick={()=>kycAction(k.id,"approved")} style={{width:"100%",padding:11,background:G.greenBg,border:`1px solid ${G.green}`,borderRadius:G.rs,color:G.green,fontSize:13,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>{busy?"Saving...":"✓ Approve — Grant Exchange Access"}</button>}
+                    {k.status==="approved"&&<div style={{padding:8,background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs,fontSize:12,color:G.green,textAlign:"center",fontWeight:700}}>✓ Already Approved</div>}
+                    {k.status!=="rejected"&&<div>
+                      <input value={rejInput[k.id]||""} onChange={e=>setRejInput(r=>({...r,[k.id]:e.target.value}))} placeholder="Rejection reason (required)..." style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"9px 11px",color:G.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:6}}/>
+                      <button disabled={busy||!rejInput[k.id]?.trim()} onClick={()=>kycAction(k.id,"rejected",{rejection_reason:rejInput[k.id]})} style={{width:"100%",padding:10,background:G.redBg,border:`1px solid ${G.red}`,borderRadius:G.rs,color:G.red,fontSize:13,fontWeight:800,cursor:(busy||!rejInput[k.id]?.trim())?"not-allowed":"pointer",fontFamily:"inherit",opacity:(busy||!rejInput[k.id]?.trim())?0.4:1}}>✕ Reject</button>
+                    </div>}
+                    {k.status!=="banned"&&<div>
+                      <input value={banInput[k.id]||""} onChange={e=>setBanInput(b=>({...b,[k.id]:e.target.value}))} placeholder="Ban reason (required)..." style={{width:"100%",background:G.card,border:`1px solid rgba(168,85,247,0.3)`,borderRadius:G.rs,padding:"9px 11px",color:G.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:6}}/>
+                      <button disabled={busy||!banInput[k.id]?.trim()} onClick={()=>kycAction(k.id,"banned",{ban_reason:banInput[k.id]})} style={{width:"100%",padding:10,background:"rgba(168,85,247,0.08)",border:"1px solid rgba(168,85,247,0.4)",borderRadius:G.rs,color:"#a855f7",fontSize:13,fontWeight:800,cursor:(busy||!banInput[k.id]?.trim())?"not-allowed":"pointer",fontFamily:"inherit",opacity:(busy||!banInput[k.id]?.trim())?0.4:1}}>🚫 Permanently Ban</button>
+                    </div>}
+                  </div>
+                </div>}
+              </div>);
+            })}
+          </>);
+        })()}
+
+        {/* ── TRUST+ REVIEW TAB ── */}
+        {tab==="trust+"&&(()=>{
+          return(<>
+            <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+              {["pending","approved","rejected","revoked","all"].map(f=>(
+                <button key={f} onClick={()=>{setTpFilter(f);fetchTp(f);}} style={{padding:"5px 13px",borderRadius:20,border:`1px solid ${tpFilter===f?G.gold:G.border}`,background:tpFilter===f?G.goldBg:"none",color:tpFilter===f?G.gold:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{f==="all"?"All":f.charAt(0).toUpperCase()+f.slice(1)}</button>
+              ))}
+              <button onClick={()=>fetchTp()} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻</button>
+            </div>
+            {tpLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>Loading...</p>}
+            {tpErr&&<p style={{color:G.red,fontSize:12,marginBottom:10}}>{tpErr}</p>}
+            {!tpLoading&&tpList.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>No {tpFilter} applications.</p>}
+            {tpList.map(k=>{
+              const open=tpExpanded===k.id;const busy=tpBusy[k.id];
+              const sc=k.status==="approved"?G.gold:k.status==="rejected"?G.red:k.status==="revoked"?"#a855f7":G.textSub;
+              return(<div key={k.id} style={{background:G.surface,border:`1px solid ${open?G.gold+"55":G.border}`,borderRadius:G.r,marginBottom:9,overflow:"hidden"}}>
+                <button onClick={()=>setTpExpanded(open?null:k.id)} style={{width:"100%",padding:"12px 13px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left"}}>
+                  <span style={{fontSize:14}}>⭐</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:G.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.username}</div>
+                    <div style={{fontSize:11,color:G.textSub,marginTop:1}}>{k.platform_name} · {k.claimed_trades} trades claimed · {k.email}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:10,color:sc,fontWeight:700,textTransform:"uppercase"}}>{k.status}</div>
+                    <div style={{fontSize:10,color:G.textDim}}>{k.submitted_at?new Date(k.submitted_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}):""}</div>
+                  </div>
+                  <span style={{color:G.textSub,fontSize:11}}>{open?"▲":"▼"}</span>
+                </button>
+                {open&&<div style={{padding:"0 13px 14px",borderTop:`1px solid ${G.border}`}}>
+                  {/* Info */}
+                  {[["Username",k.username],["Email",k.email],["Platform",k.platform_name],["Claimed Trades",k.claimed_trades],["Trades at Apply",k.completed_trades_at_apply],["Legal Name Signed",k.legal_name_signature],["Agreement",k.agreement_accepted?"Accepted":"—"],["Submitted",k.submitted_at?new Date(k.submitted_at).toLocaleString():"—"]].map(([l,v])=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${G.border}22`,fontSize:12}}>
+                      <span style={{color:G.textSub}}>{l}</span><span style={{color:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-all"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
+                    </div>
+                  ))}
+                  {/* Screenshots */}
+                  {k.screenshot_urls?.length>0&&<>
+                    <div style={{fontSize:10,color:G.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"10px 0 7px"}}>Activity Screenshots</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:10}}>
+                      {k.screenshot_urls.map((url,i)=>(
+                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{display:"block",borderRadius:7,overflow:"hidden",border:`1px solid ${G.border}`,textDecoration:"none",width:"calc(50% - 4px)"}}>
+                          <img src={url} alt={`screenshot ${i+1}`} style={{width:"100%",height:90,objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+                          <div style={{padding:"4px 7px",background:G.card,fontSize:10,color:G.gold,display:"flex",justifyContent:"space-between"}}><span>Screenshot {i+1}</span><span>↗</span></div>
+                        </a>
+                      ))}
+                    </div>
+                  </>}
+                  {k.rejection_reason&&<div style={{marginTop:6,padding:"7px 10px",background:G.redBg,borderRadius:7,fontSize:12,color:G.red}}>Rejection: {k.rejection_reason}</div>}
+                  {/* Actions */}
+                  <div style={{marginTop:13,display:"flex",flexDirection:"column",gap:8}}>
+                    {k.status!=="approved"&&<button disabled={busy} onClick={()=>tpAction(k.id,k.user_id,"approved")} style={{width:"100%",padding:11,background:G.goldBg2,border:`1px solid ${G.gold}`,borderRadius:G.rs,color:G.gold,fontSize:13,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>{busy?"Saving...":"⭐ Grant Trust+ Badge"}</button>}
+                    {k.status==="approved"&&<>
+                      <div style={{padding:8,background:G.goldBg2,border:`1px solid ${G.gold}44`,borderRadius:G.rs,fontSize:12,color:G.gold,textAlign:"center",fontWeight:700}}>⭐ Trust+ Active</div>
+                      <button disabled={busy} onClick={()=>tpAction(k.id,k.user_id,"revoked")} style={{width:"100%",padding:10,background:"rgba(168,85,247,0.08)",border:"1px solid rgba(168,85,247,0.4)",borderRadius:G.rs,color:"#a855f7",fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>🚫 Revoke Trust+</button>
+                    </>}
+                    {k.status!=="rejected"&&k.status!=="approved"&&<div>
+                      <input value={tpRejInput[k.id]||""} onChange={e=>setTpRejInput(r=>({...r,[k.id]:e.target.value}))} placeholder="Rejection reason (required)..." style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"9px 11px",color:G.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:6}}/>
+                      <button disabled={busy||!tpRejInput[k.id]?.trim()} onClick={()=>tpAction(k.id,k.user_id,"rejected",{rejection_reason:tpRejInput[k.id]})} style={{width:"100%",padding:10,background:G.redBg,border:`1px solid ${G.red}`,borderRadius:G.rs,color:G.red,fontSize:13,fontWeight:800,cursor:(busy||!tpRejInput[k.id]?.trim())?"not-allowed":"pointer",fontFamily:"inherit",opacity:(busy||!tpRejInput[k.id]?.trim())?0.4:1}}>✕ Reject Application</button>
+                    </div>}
+                  </div>
+                </div>}
+              </div>);
+            })}
+          </>);
+        })()}
 
       </div>
     </div>
@@ -1646,14 +1852,14 @@ export default function App(){
     }
     const newSt={...s,[key]:newVal};
     // Persist to Supabase app_content table (upsert by key)
-    sbDB("/app_content",{
+    sbDB("/app_content?on_conflict=key",{
       method:"POST",
       headers:{
         "Prefer":"resolution=merge-duplicates,return=minimal",
         "Content-Type":"application/json",
       },
       body:JSON.stringify({key,value:newVal,updated_at:new Date().toISOString()})
-    }).catch(e=>console.warn("Content persist failed:",e.message));
+    }).then(()=>console.log("[RE] Content saved:",key)).catch(e=>console.warn("Content persist failed:",e.message));
     return newSt;
   });
   const addItem=(key,item)=>update(key,[item,...st[key]]);
@@ -1927,7 +2133,7 @@ export default function App(){
               )}
             </div>
           ))}
-          <button onClick={()=>{setMenuOpen(false);setShowAdminLogin(true);}} style={{display:"block",width:"100%",padding:"12px 0",background:"none",border:"none",color:G.textDim,fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"inherit",marginTop:6}}>Admin Panel</button>
+          <button onClick={()=>{setMenuOpen(false);setShowAdminLogin(true);}} style={{position:"absolute",bottom:8,right:10,background:"none",border:"none",cursor:"pointer",padding:4,opacity:0.15}} title=""><span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:G.textDim}}/></button>
         </div>
       </div>
 
@@ -1967,7 +2173,7 @@ export default function App(){
             )}
           </div>
           <div style={{padding:"8px 16px"}}>
-            <button onClick={()=>{setShowAdminLogin(true);}} style={{background:"none",border:"none",color:G.textDim,fontSize:11,cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>Admin Panel</button>
+            <button onClick={()=>{setShowAdminLogin(true);}} style={{position:"absolute",bottom:10,left:8,background:"none",border:"none",cursor:"pointer",padding:4,opacity:0.12}} title=""><span style={{display:"inline-block",width:4,height:4,borderRadius:"50%",background:G.textDim}}/></button>
           </div>
         </div>
 
