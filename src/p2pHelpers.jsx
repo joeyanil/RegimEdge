@@ -256,9 +256,9 @@ const p2pInsert = async (table, body) => {
 };
 
 const p2pUpsert = async (table, body, onConflict = "user_id") => {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
     method: "POST",
-    headers: { ...authHeaders(), "Prefer": `return=representation,resolution=merge-duplicates`, "Content-Type": "application/json" },
+    headers: { ...authHeaders(), "Prefer": "return=representation,resolution=merge-duplicates" },
     body: JSON.stringify(body),
   });
   if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Failed to save"); }
@@ -277,12 +277,15 @@ const p2pUpdate = async (table, filter, body) => {
 
 const p2pUpload = async (bucket, filePath, file) => {
   const token = localStorage.getItem("re_access_token") || SUPABASE_ANON_KEY;
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${filePath}`, {
+  const mime = (file.type && file.type.length > 0) ? file.type : "image/jpeg";
+  const ext = mime.split("/")[1]?.replace("jpeg","jpg") || "jpg";
+  const cleanPath = filePath.includes(".") ? filePath : filePath + "." + ext;
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${cleanPath}`, {
     method: "POST",
     headers: {
       "apikey": SUPABASE_ANON_KEY,
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": file.type || "application/octet-stream",
+      "Authorization": "Bearer " + token,
+      "Content-Type": mime,
       "x-upsert": "true",
     },
     body: file,
@@ -290,9 +293,9 @@ const p2pUpload = async (bucket, filePath, file) => {
   if (!res.ok) {
     let msg = "Upload failed";
     try { const d = await res.json(); msg = d.message || d.error || msg; } catch {}
-    throw new Error(msg);
+    throw new Error("Storage error: " + msg);
   }
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${filePath}`;
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${cleanPath}`;
 };
 
 const sendNotificationEmail = async (template, data) => {
