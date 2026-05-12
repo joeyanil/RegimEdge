@@ -255,6 +255,16 @@ const p2pInsert = async (table, body) => {
   return res.json();
 };
 
+const p2pUpsert = async (table, body, onConflict = "user_id") => {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Prefer": `return=representation,resolution=merge-duplicates`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Failed to save"); }
+  return res.json();
+};
+
 const p2pUpdate = async (table, filter, body) => {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
     method: "PATCH",
@@ -266,13 +276,22 @@ const p2pUpdate = async (table, filter, body) => {
 };
 
 const p2pUpload = async (bucket, filePath, file) => {
-  const token = localStorage.getItem("re_access_token");
+  const token = localStorage.getItem("re_access_token") || SUPABASE_ANON_KEY;
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${filePath}`, {
     method: "POST",
-    headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` },
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": file.type || "application/octet-stream",
+      "x-upsert": "true",
+    },
     body: file,
   });
-  if (!res.ok) throw new Error("File upload failed. Check your connection and try again.");
+  if (!res.ok) {
+    let msg = "Upload failed";
+    try { const d = await res.json(); msg = d.message || d.error || msg; } catch {}
+    throw new Error(msg);
+  }
   return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${filePath}`;
 };
 
@@ -632,6 +651,7 @@ export {
   authHeaders,
   p2pSelect,
   p2pInsert,
+  p2pUpsert,
   p2pUpdate,
   p2pUpload,
   sendNotificationEmail,

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  p2pSelect, p2pInsert, p2pUpdate, p2pUpload, sendNotificationEmail,
+  p2pSelect, p2pInsert, p2pUpsert, p2pUpdate, p2pUpload, sendNotificationEmail,
   Icon, P2P_TEXT,
 } from "./p2pHelpers.jsx";
 
@@ -153,7 +153,7 @@ function KYCScreen({user,kyc,onSubmitted,lang}){
     try{
       const idUrl=await p2pUpload("kyc-docs",`${user.id}/id_${Date.now()}`,idFile);
       const selfieUrl=await p2pUpload("kyc-docs",`${user.id}/selfie_${Date.now()}`,selfieFile);
-      await p2pInsert("kyc_submissions",{user_id:user.id,full_name:form.full_name.trim(),phone:form.phone.trim(),
+      await p2pUpsert("kyc_submissions",{user_id:user.id,full_name:form.full_name.trim(),phone:form.phone.trim(),
         telegram:form.telegram.trim(),id_type:form.id_type,id_photo_url:idUrl,selfie_url:selfieUrl,status:"pending"});
       await sendNotificationEmail("kyc_submitted",{user_id:user.id,email:user.email,full_name:form.full_name,telegram:form.telegram});
       onSubmitted();
