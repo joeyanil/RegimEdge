@@ -151,7 +151,7 @@ function KYCScreen({user,kyc,onSubmitted,lang}){
   const handleSubmit=async()=>{
     setErr("");setLoading(true);
     try{
-      console.log("Uploading file:", idFile.name, idFile.type, idFile.size);
+      console.log("KYC upload — idFile:", idFile?.name, idFile?.type, idFile?.buffer?.byteLength);
       const idUrl=await p2pUpload("kyc-docs",`${user.id}/id_${Date.now()}`,idFile);
       const selfieUrl=await p2pUpload("kyc-docs",`${user.id}/selfie_${Date.now()}`,selfieFile);
       await p2pUpsert("kyc_submissions",{user_id:user.id,full_name:form.full_name.trim(),phone:form.phone.trim(),
@@ -191,8 +191,8 @@ function KYCScreen({user,kyc,onSubmitted,lang}){
             </select>
           </div>
           <Divider/>
-          <UploadBtn label={T.kyc_id_photo} uploaded={!!idFile} inputRef={idRef} onChange={e=>{const f=e.target.files[0];if(f)setIdFile(f);}} icon="idCard"/>
-          <UploadBtn label={T.kyc_selfie} uploaded={!!selfieFile} inputRef={selfieRef} onChange={e=>{const f=e.target.files[0];if(f)setSelfieFile(f);}} icon="camera"/>
+          <UploadBtn label={T.kyc_id_photo} uploaded={!!idFile} inputRef={idRef} onChange={async e=>{const f=e.target.files[0];if(f){const buf=await f.arrayBuffer();setIdFile({buffer:buf,type:f.type||"image/jpeg",name:f.name});}}} icon="idCard"/>
+          <UploadBtn label={T.kyc_selfie} uploaded={!!selfieFile} inputRef={selfieRef} onChange={async e=>{const f=e.target.files[0];if(f){const buf=await f.arrayBuffer();setSelfieFile({buffer:buf,type:f.type||"image/jpeg",name:f.name});}}} icon="camera"/>
         </div>
       </Card>
       <ErrBox msg={err}/>
@@ -434,9 +434,9 @@ function TradeRoom({trade:initialTrade,user,config,onBack,lang}){
           <div style={{fontSize:12,color:G.textSub,marginBottom:14}}>Upload screenshots of BOTH payments</div>
           <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
             <UploadBtn label="Screenshot — Seller payment" uploaded={!!proof1} inputRef={proof1Ref}
-              onChange={e=>{const f=e.target.files[0];if(f)setProof1(f);}} icon="upload"/>
+              onChange={async e=>{const f=e.target.files[0];if(f){const buf=await f.arrayBuffer();setProof1({buffer:buf,type:f.type||"image/jpeg",name:f.name});}}} icon="upload"/>
             <UploadBtn label="Screenshot — Platform fee" uploaded={!!proof2} inputRef={proof2Ref}
-              onChange={e=>{const f=e.target.files[0];if(f)setProof2(f);}} icon="upload"/>
+              onChange={async e=>{const f=e.target.files[0];if(f){const buf=await f.arrayBuffer();setProof2({buffer:buf,type:f.type||"image/jpeg",name:f.name});}}} icon="upload"/>
           </div>
           <ErrBox msg={err}/>
           <Btn onClick={markPaid} disabled={!proof1||!proof2||loading} color={G.green}>
