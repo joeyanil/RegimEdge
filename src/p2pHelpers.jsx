@@ -278,8 +278,9 @@ const p2pUpdate = async (table, filter, body) => {
 const p2pUpload = async (bucket, filePath, file) => {
   const token = localStorage.getItem("re_access_token") || SUPABASE_ANON_KEY;
   const mime = (file.type && file.type.length > 0) ? file.type : "image/jpeg";
-  const ext = mime.split("/")[1]?.replace("jpeg","jpg") || "jpg";
+  const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
   const cleanPath = filePath.includes(".") ? filePath : filePath + "." + ext;
+  const buffer = await file.arrayBuffer();
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${cleanPath}`, {
     method: "POST",
     headers: {
@@ -288,7 +289,7 @@ const p2pUpload = async (bucket, filePath, file) => {
       "Content-Type": mime,
       "x-upsert": "true",
     },
-    body: file,
+    body: buffer,
   });
   if (!res.ok) {
     let msg = "Upload failed";

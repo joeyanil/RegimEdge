@@ -151,6 +151,7 @@ function KYCScreen({user,kyc,onSubmitted,lang}){
   const handleSubmit=async()=>{
     setErr("");setLoading(true);
     try{
+      console.log("Uploading file:", idFile.name, idFile.type, idFile.size);
       const idUrl=await p2pUpload("kyc-docs",`${user.id}/id_${Date.now()}`,idFile);
       const selfieUrl=await p2pUpload("kyc-docs",`${user.id}/selfie_${Date.now()}`,selfieFile);
       await p2pUpsert("kyc_submissions",{user_id:user.id,full_name:form.full_name.trim(),phone:form.phone.trim(),
