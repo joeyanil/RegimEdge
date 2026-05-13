@@ -173,7 +173,7 @@ function KYCScreen({user,kyc,onSubmitted}){
   if(kyc?.status==="pending")return(
     <div style={{padding:"40px 22px",textAlign:"center"}}>
       <GlowCard color={G.gold}>
-        <Icon name="clock" size={44} color={G.gold} style={{margin:"0 auto 14px"}}/>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:14px}}><Icon name="clock" size={44} color={G.gold}/></div>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.gold,fontWeight:900,marginBottom:10}}>Verification Pending</div>
         <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Documents submitted. Admin will review within 24 hours. You will receive an email when approved.</p>
       </GlowCard>
@@ -182,7 +182,7 @@ function KYCScreen({user,kyc,onSubmitted}){
   if(kyc?.status==="banned")return(
     <div style={{padding:"40px 22px",textAlign:"center"}}>
       <GlowCard color={G.red}>
-        <Icon name="xCircle" size={44} color={G.red} style={{margin:"0 auto 14px"}}/>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:14px}}><Icon name="xCircle" size={44} color={G.red}/></div>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.red,fontWeight:900,marginBottom:10}}>Account Banned</div>
         <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>{kyc.ban_reason||"Permanently banned for violating exchange rules."}</p>
       </GlowCard>
@@ -784,14 +784,14 @@ function TradeRoom({trade:initialTrade,user,config,onBack}){
       {msg&&<OkBox msg={msg}/>}
       {trade.status==="payment_sent"&&isBuyer&&(
         <GlowCard color={G.blue} style={{marginBottom:12,textAlign:"center"}}>
-          <Icon name="clock" size={28} color={G.blue} style={{margin:"0 auto 8px"}}/>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:8px}}><Icon name="clock" size={28} color={G.blue}/></div>
           <div style={{color:G.blue,fontWeight:700}}>Waiting for Seller to Release</div>
           <p style={{color:G.textSub,fontSize:12,margin:"6px 0 0"}}>Usually takes a few minutes.</p>
         </GlowCard>
       )}
       {trade.status==="completed"&&(
         <GlowCard color={G.green} style={{marginBottom:12,textAlign:"center"}}>
-          <Icon name="checkCircle" size={36} color={G.green} style={{margin:"0 auto 8px"}}/>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:8px}}><Icon name="checkCircle" size={36} color={G.green}/></div>
           <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.green,fontWeight:900,marginBottom:6}}>Trade Completed</div>
           {isBuyer&&!rated&&(
             <div style={{marginTop:14}}>
@@ -859,6 +859,7 @@ function SellForm({user,kyc,config,onBack,onDone}){
   const rate=Math.round((minRate+maxRate)/2);
   const min=config?.min_usdt||5;
   const max=config?.max_usdt||500;
+  const fee=config?.platform_fee_etb||75;
   const amt=parseFloat(amount)||0;
   const totalEtb=amt&&rate?Math.round(amt*rate):0;
 
@@ -874,7 +875,7 @@ function SellForm({user,kyc,config,onBack,onDone}){
       const paymentDetails=selectedMethods.map(m=>({method:m,...methodAccounts[m]}));
       await p2pInsert("p2p_listings",{
         seller_id:user.id,seller_display_name:kyc.full_name||user.name||"Seller",
-        amount_usdt:amt,rate_etb:rate,total_etb:totalEtb,display_total_etb:totalEtb+75,
+        amount_usdt:amt,rate_etb:rate,total_etb:totalEtb,display_total_etb:totalEtb+fee,
         payment_method:selectedMethods.join(", "),
         payment_details:JSON.stringify(paymentDetails),
         seller_account:methodAccounts[selectedMethods[0]]?.account||"",
@@ -889,7 +890,7 @@ function SellForm({user,kyc,config,onBack,onDone}){
   if(done)return(
     <div style={{padding:"28px 18px",textAlign:"center"}}>
       <GlowCard color={G.green}>
-        <Icon name="checkCircle" size={44} color={G.green} style={{margin:"0 auto 12px"}}/>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12px}}><Icon name="checkCircle" size={44} color={G.green}/></div>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.green,fontWeight:900,marginBottom:10}}>Listing Live</div>
         <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,marginBottom:18}}>Your listing is now visible to buyers.</p>
         <Btn onClick={onDone} color={G.green}>Back to Exchange</Btn>
@@ -957,7 +958,7 @@ function SellForm({user,kyc,config,onBack,onDone}){
       {canSubmit&&(
         <div style={{background:G.goldBg2,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"14px 16px",marginBottom:14}}>
           <div style={{fontSize:9,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Listing Preview</div>
-          {[["You list","$"+amt+" USDT"],["Rate",rate+" ETB / USDT"],["Buyer pays",(totalEtb+75)+" ETB total"],["You receive",totalEtb+" ETB"]].map(([l,v])=>(
+          {[["You list","$"+amt+" USDT"],["Rate",rate+" ETB / USDT"],["Buyer pays",(totalEtb+fee)+" ETB total"],["You receive",totalEtb+" ETB"]].map(([l,v])=>(
             <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}>
               <span style={{color:G.textSub}}>{l}</span><span style={{color:G.text,fontWeight:700}}>{v}</span>
             </div>
@@ -991,20 +992,24 @@ function ListingsBrowser({user,kyc,config,onOpenTrade,onBack}){
     if(listing.seller_id===user.id){setErr("You cannot buy your own listing.");return;}
     setErr("");setBuying(listing.id);
     try{
-      const rows=await p2pInsert("p2p_trades",{
+      const fee=config?.platform_fee_etb||75;
+      const inserted=await p2pInsert("p2p_trades",{
         listing_id:listing.id,buyer_id:user.id,buyer_display_name:kyc.full_name||user.name||"Buyer",
         seller_id:listing.seller_id,seller_display_name:listing.seller_display_name,
         amount_usdt:listing.amount_usdt,rate_etb:listing.rate_etb,total_etb:listing.total_etb,
+        platform_fee_etb:fee,
         payment_method:listing.payment_method,seller_account:listing.seller_account,
         seller_account_name:listing.seller_account_name||"",
         network,direction:"sell_usdt",expires_at:new Date(Date.now()+3600000).toISOString(),
       });
+      const newTrade=Array.isArray(inserted)?inserted[0]:inserted;
+      if(!newTrade?.id)throw new Error("Trade creation failed — no ID returned.");
       await p2pUpdate("p2p_listings",`id=eq.${listing.id}`,{status:"taken"});
-      await p2pInsert("trade_messages",{trade_id:rows[0].id,sender_id:user.id,sender_display_name:"System",
+      await p2pInsert("trade_messages",{trade_id:newTrade.id,sender_id:user.id,sender_display_name:"System",
         message:`Trade opened. Buyer receiving via ${network}. Payment required within 1 hour.`,is_system:true});
-      await sendNotificationEmail("trade_opened",{trade_ref:rows[0].trade_ref,seller_id:listing.seller_id,buyer_id:user.id});
+      await sendNotificationEmail("trade_opened",{trade_ref:newTrade.trade_ref,seller_id:listing.seller_id,buyer_id:user.id});
       setNetworkListing(null);
-      onOpenTrade(rows[0]);
+      onOpenTrade(newTrade);
     }catch(e){setErr(e.message);}finally{setBuying(null);}
   };
 
@@ -1025,7 +1030,7 @@ function ListingsBrowser({user,kyc,config,onOpenTrade,onBack}){
         <ErrBox msg={err}/>
         {loading?<Spinner/>:listings.length===0?(
           <Card style={{textAlign:"center",padding:44}}>
-            <Icon name="list" size={36} color={G.textDim} style={{margin:"0 auto 12px"}}/>
+            <div style={{display:"flex",justifyContent:"center",marginBottom:12px}}><Icon name="list" size={36} color={G.textDim}/></div>
             <div style={{color:G.textSub,fontSize:14}}>No listings right now. Be the first to sell.</div>
           </Card>
         ):listings.map(l=>{
@@ -1123,7 +1128,7 @@ function MyTrades({user,onOpenTrade,onBack}){
       </div>
       {loading?<Spinner/>:filtered.length===0?(
         <Card style={{textAlign:"center",padding:44}}>
-          <Icon name="list" size={32} color={G.textDim} style={{margin:"0 auto 12px"}}/>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:12px}}><Icon name="list" size={32} color={G.textDim}/></div>
           <div style={{color:G.textSub,fontSize:14}}>No {tab} trades</div>
         </Card>
       ):filtered.map(t=>{
@@ -1283,7 +1288,7 @@ function NotLoggedIn(){
     <div style={{padding:"32px 18px"}}>
       <SH label="Trusted P2P" title="RegimeEdge Exchange" sub="Ethiopia's most trusted P2P USDT exchange"/>
       <GlowCard color={G.gold} style={{marginBottom:18,textAlign:"center"}}>
-        <Icon name="lock" size={44} color={G.gold} style={{margin:"0 auto 12px"}}/>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12px}}><Icon name="lock" size={44} color={G.gold}/></div>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:G.gold,fontWeight:900,marginBottom:10}}>Sign In Required</div>
         <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Sign in to access the P2P exchange and trade USDT.</p>
       </GlowCard>
@@ -1317,6 +1322,17 @@ function ExchangePage({user}){
 
   if(loading)return<Spinner/>;
   if(!user?.id)return<NotLoggedIn/>;
+
+  if(config&&config.exchange_active===false)return(
+    <div style={{padding:"40px 18px",textAlign:"center"}}>
+      <GlowCard color={G.gold}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Icon name="lock" size={44} color={G.gold}/></div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.gold,fontWeight:900,marginBottom:10}}>Exchange Offline</div>
+        <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>The P2P exchange is temporarily unavailable. Check back soon or contact admin on Telegram.</p>
+      </GlowCard>
+    </div>
+  );
+
   if(kyc?.status!=="approved")return<KYCScreen user={user} kyc={kyc} onSubmitted={()=>setKyc(p=>({...p,status:"pending"}))}/>;
 
   if(screen==="tradeRoom"&&activeTrade)return<TradeRoom trade={activeTrade} user={user} config={config} onBack={goHub}/>;
