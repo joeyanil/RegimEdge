@@ -1372,12 +1372,13 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[tpRejInput,setTpRejInput]=useState({});
   const[tpBusy,setTpBusy]=useState({});
 
-  // ── Active Trades state
+  // ── Active Trades + Disputes state ──────────────────────────────────────────
   const[tradeList,setTradeList]=useState([]);
   const[tradeLoading,setTradeLoading]=useState(false);
   const[tradeErr,setTradeErr]=useState("");
   const[tradeFilter,setTradeFilter]=useState("all");
   const[tradeExpanded,setTradeExpanded]=useState(null);
+
   const fetchTrades=async(filter)=>{
     const f=filter!==undefined?filter:tradeFilter;
     setTradeLoading(true);setTradeErr("");
@@ -1388,31 +1389,34 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
     }catch(e){setTradeErr(e.message||"Failed to load");}
     finally{setTradeLoading(false);}
   };
-  useEffect(()=>{if(tab==="trades"||tab==="disputes")fetchTrades(tab==="disputes"?"disputed":undefined);},[tab]);
+  useEffect(()=>{
+    if(tab==="trades") fetchTrades("all");
+    if(tab==="disputes") fetchTrades("disputed");
+  },[tab]);
 
-  // ── Admin trade actions
   const adminResolveTrade=async(tradeId,newStatus)=>{
     try{
       await p2pUpdate("p2p_trades",`id=eq.${tradeId}`,{
         status:newStatus,
-        ...(newStatus==="completed"?{completed_at:new Date().toISOString()}:{}),
+        ...(newStatus==="completed"?{completed_at:new Date().toISOString(),seller_confirmed_at:new Date().toISOString()}:{}),
         ...(newStatus==="cancelled"?{cancelled_by:"admin",cancellation_reason:"Resolved by admin"}:{}),
       });
-      if(newStatus==="completed"||newStatus==="cancelled"){
-        // Re-open listing if cancelled
-        const t=tradeList.find(x=>x.id===tradeId);
-        if(t&&newStatus==="cancelled"&&t.listing_id){
-          await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open"}).catch(()=>{});
-        }
-        await p2pInsert("trade_messages",{
-          trade_id:tradeId,sender_id:"00000000-0000-0000-0000-000000000000",
-          sender_display_name:"Admin",
-          message:`Admin resolved trade as ${newStatus}.`,is_system:true,
-        }).catch(()=>{});
+      const t=tradeList.find(x=>x.id===tradeId);
+      if(t&&newStatus==="cancelled"&&t.listing_id){
+        await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open"}).catch(()=>{});
       }
+      try{
+        await p2pInsert("trade_messages",{
+          trade_id:tradeId,
+          sender_id:"00000000-0000-0000-0000-000000000000",
+          sender_display_name:"Admin",
+          message:`Admin resolved trade as ${newStatus}.`,
+          is_system:true,
+        });
+      }catch{}
       setTradeList(l=>l.map(r=>r.id===tradeId?{...r,status:newStatus}:r));
       setTradeExpanded(null);
-      alert("Trade updated to: "+newStatus);
+      alert("✓ Trade updated to: "+newStatus);
     }catch(e){alert("Error: "+e.message);}
   };
 
@@ -1431,28 +1435,16 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
     setTpBusy(b=>({...b,[id]:true}));
     try{
       await p2pUpdate("trust_plus_applications",`id=eq.${id}`,{status,reviewed_at:new Date().toISOString(),...extra});
-      // If approving, also flip trust_plus=true on kyc_submissions.
-      // NOTE: This requires the admin RLS bypass policy. Run in Supabase SQL Editor:
-      //   create policy "admin_rw_all_kyc" on public.kyc_submissions for all using (true);
-      // Without it, this update silently affects 0 rows (RLS blocks it).
-      let kycUpdateWarning = "";
       if(status==="approved"||status==="revoked"){
-        const trustVal = status==="approved";
-        try{
-          const updated = await p2pUpdate("kyc_submissions",`user_id=eq.${userId}`,{
-            trust_plus:trustVal,
-            ...(trustVal?{trust_plus_granted_at:new Date().toISOString()}:{trust_plus_revoked_at:new Date().toISOString()}),
-          });
-          if(!updated||updated.length===0){
-            kycUpdateWarning = "\n\n⚠️ Trust+ badge updated in applications table, but the KYC trust_plus flag could not be set (RLS policy). Run the admin bypass SQL in Supabase to fix this.";
-          }
-        }catch(kycErr){
-          kycUpdateWarning = `\n\n⚠️ Trust+ application updated, but KYC flag failed: ${kycErr.message}. Check RLS policy.`;
-        }
+        const trustVal=status==="approved";
+        // Update kyc_submissions
+        try{ await p2pUpdate("kyc_submissions",`user_id=eq.${userId}`,{trust_plus:trustVal,...(trustVal?{trust_plus_granted_at:new Date().toISOString()}:{trust_plus_revoked_at:new Date().toISOString()})}); }catch{}
+        // Update all open listings by this seller so badge shows immediately
+        try{ await p2pUpdate("p2p_listings",`seller_id=eq.${userId}&status=eq.open`,{seller_trust_plus:trustVal}); }catch{}
       }
       setTpList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setTpExpanded(null);
-      if(kycUpdateWarning) alert(`✓ Done!${kycUpdateWarning}`);
+      alert("✓ Done!");
     }catch(e){alert("Error: "+e.message);}
     finally{setTpBusy(b=>({...b,[id]:false}));}
   };
@@ -1697,19 +1689,19 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
         })()}
 
         {/* ── ACTIVE TRADES TAB ── */}
-        {(tab==="trades")&&(()=>{
-          const SC={waiting_payment:G.gold,payment_sent:G.blue,completed:G.green,disputed:G.red,cancelled:G.textSub};
-          const SL={waiting_payment:"Waiting Payment",payment_sent:"Payment Sent",completed:"Completed",disputed:"Disputed",cancelled:"Cancelled"};
+        {tab==="trades"&&(()=>{
+          const SC={waiting_payment:G.gold,payment_sent:"#60a5fa",completed:G.green,disputed:G.red,cancelled:G.textSub};
+          const SL={waiting_payment:"Waiting",payment_sent:"Paid",completed:"Done",disputed:"Disputed",cancelled:"Cancelled"};
           return(<>
             <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
               {["all","waiting_payment","payment_sent","completed","cancelled"].map(f=>(
-                <button key={f} onClick={()=>{setTradeFilter(f);fetchTrades(f);}} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${tradeFilter===f?G.gold:G.border}`,background:tradeFilter===f?G.goldBg:"none",color:tradeFilter===f?G.gold:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{f==="all"?"All":f.replace("_"," ")}</button>
+                <button key={f} onClick={()=>{setTradeFilter(f);fetchTrades(f);}} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${tradeFilter===f?G.gold:G.border}`,background:tradeFilter===f?G.goldBg:"none",color:tradeFilter===f?G.gold:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{f==="all"?"All":f.replace(/_/g," ")}</button>
               ))}
-              <button onClick={()=>fetchTrades()} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻</button>
+              <button onClick={()=>fetchTrades(tradeFilter)} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻</button>
             </div>
-            {tradeLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>Loading...</p>}
+            {tradeLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:20}}>Loading...</p>}
             {tradeErr&&<p style={{color:G.red,fontSize:12,marginBottom:10}}>{tradeErr}</p>}
-            {!tradeLoading&&tradeList.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>No trades found.</p>}
+            {!tradeLoading&&tradeList.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:20}}>No trades found.</p>}
             {tradeList.map(t=>{
               const open=tradeExpanded===t.id;
               const sc=SC[t.status]||G.textSub;
@@ -1718,31 +1710,28 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                   <div style={{width:8,height:8,borderRadius:"50%",background:sc,flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,color:G.text,fontWeight:700,fontFamily:"monospace"}}>{t.trade_ref||t.id?.slice(0,8)}</div>
-                    <div style={{fontSize:11,color:G.textSub,marginTop:1}}>{t.buyer_display_name} → {t.seller_display_name} · {t.amount_usdt} USDT</div>
+                    <div style={{fontSize:11,color:G.textSub,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.buyer_display_name} → {t.seller_display_name} · {t.amount_usdt} USDT</div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontSize:10,color:sc,fontWeight:700,textTransform:"uppercase"}}>{SL[t.status]||t.status}</div>
+                    <div style={{fontSize:10,color:sc,fontWeight:700}}>{SL[t.status]||t.status}</div>
                     <div style={{fontSize:10,color:G.textDim}}>{t.created_at?new Date(t.created_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}):""}</div>
                   </div>
-                  <span style={{color:G.textSub,fontSize:11}}>{open?"▲":"▼"}</span>
+                  <span style={{color:G.textSub,fontSize:11,flexShrink:0}}>{open?"▲":"▼"}</span>
                 </button>
                 {open&&<div style={{padding:"0 13px 14px",borderTop:`1px solid ${G.border}`}}>
-                  {[["Reference",t.trade_ref||"—"],["Buyer",t.buyer_display_name],["Seller",t.seller_display_name],["USDT",t.amount_usdt],["Rate",`${t.rate_etb} ETB`],["Seller receives",`${t.total_etb} ETB`],["Platform fee",`${t.platform_fee_etb||75} ETB`],["Payment method",t.payment_method],["Network",t.network||"—"],["Status",t.status],["Created",t.created_at?new Date(t.created_at).toLocaleString():"—"],["Expires",t.expires_at?new Date(t.expires_at).toLocaleString():"—"],["Buyer paid at",t.buyer_paid_at?new Date(t.buyer_paid_at).toLocaleString():"—"],["Completed at",t.completed_at?new Date(t.completed_at).toLocaleString():"—"],["Cancelled by",t.cancelled_by||"—"],["Cancel reason",t.cancellation_reason||"—"]].map(([l,v])=>(
+                  {[["Reference",t.trade_ref||"—"],["Buyer",t.buyer_display_name],["Seller",t.seller_display_name],["USDT",t.amount_usdt],["Rate",`${t.rate_etb} ETB`],["Seller receives",`${t.total_etb} ETB`],["Platform fee",`${t.platform_fee_etb||75} ETB`],["Network",t.network||"—"],["Payment method",t.payment_method],["Status",t.status],["Created",t.created_at?new Date(t.created_at).toLocaleString():"—"],["Expires",t.expires_at?new Date(t.expires_at).toLocaleString():"—"],["Paid at",t.buyer_paid_at?new Date(t.buyer_paid_at).toLocaleString():"—"],["Completed at",t.completed_at?new Date(t.completed_at).toLocaleString():"—"],["Cancelled by",t.cancelled_by||"—"],["Cancel reason",t.cancellation_reason||"—"]].map(([l,v])=>(
                     <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${G.border}22`,fontSize:11}}>
-                      <span style={{color:G.textSub}}>{l}</span><span style={{color:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-all"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
+                      <span style={{color:G.textSub,flexShrink:0}}>{l}</span>
+                      <span style={{color:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-all"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
                     </div>
                   ))}
-                  {/* Payment proof links */}
                   {(t.payment_proof_url||t.payment_proof_url_2)&&(
-                    <div style={{marginTop:10,display:"flex",gap:8}}>
-                      {t.payment_proof_url&&<a href={t.payment_proof_url} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:"rgba(96,165,250,0.09)",border:`1px solid rgba(96,165,250,0.3)`,borderRadius:G.rs,color:"#60a5fa",fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Seller proof</a>}
+                    <div style={{display:"flex",gap:8,marginTop:10}}>
+                      {t.payment_proof_url&&<a href={t.payment_proof_url} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:"rgba(96,165,250,0.09)",border:"1px solid rgba(96,165,250,0.3)",borderRadius:G.rs,color:"#60a5fa",fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Seller proof</a>}
                       {t.payment_proof_url_2&&<a href={t.payment_proof_url_2} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Fee proof</a>}
                     </div>
                   )}
-                  {/* Admin TG link */}
-                  <a href={`${ADMIN_TG}?text=Trade%20${t.trade_ref||t.id?.slice(0,8)}`} target="_blank" rel="noreferrer" style={{display:"block",marginTop:10,padding:"9px 0",background:"rgba(0,136,204,0.08)",border:"1px solid rgba(0,136,204,0.3)",borderRadius:G.rs,color:"#29b6f6",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none"}}>
-                    Contact Parties on Telegram
-                  </a>
+                  <a href={`${ADMIN_TG}`} target="_blank" rel="noreferrer" style={{display:"block",marginTop:10,padding:"9px 0",background:"rgba(0,136,204,0.08)",border:"1px solid rgba(0,136,204,0.3)",borderRadius:G.rs,color:"#29b6f6",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none"}}>Contact Parties on Telegram</a>
                 </div>}
               </div>);
             })}
@@ -1751,22 +1740,22 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
 
         {/* ── DISPUTES TAB ── */}
         {tab==="disputes"&&(()=>{
-          const disputedTrades=tradeList.filter(t=>t.status==="disputed");
+          const disputed=tradeList.filter(t=>t.status==="disputed");
           return(<>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <div style={{fontSize:13,color:G.red,fontWeight:700}}>Active Disputes ({disputedTrades.length})</div>
-              <button onClick={()=>fetchTrades("disputed")} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
+              <div style={{fontSize:13,color:G.red,fontWeight:700}}>Active Disputes ({disputed.length})</div>
+              <button onClick={()=>fetchTrades("disputed")} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻</button>
             </div>
-            {tradeLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>Loading...</p>}
-            {!tradeLoading&&disputedTrades.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:24}}>No active disputes. 🎉</p>}
-            {disputedTrades.map(t=>{
+            {tradeLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:20}}>Loading...</p>}
+            {!tradeLoading&&disputed.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:24}}>No active disputes 🎉</p>}
+            {disputed.map(t=>{
               const open=tradeExpanded===t.id;
-              return(<div key={t.id} style={{background:G.surface,border:`1px solid ${open?G.red+"55":G.red+"22"}`,borderLeft:`3px solid ${G.red}`,borderRadius:G.r,marginBottom:9,overflow:"hidden"}}>
+              return(<div key={t.id} style={{background:G.surface,borderLeft:`3px solid ${G.red}`,border:`1px solid ${G.red}22`,borderRadius:G.r,marginBottom:9,overflow:"hidden"}}>
                 <button onClick={()=>setTradeExpanded(open?null:t.id)} style={{width:"100%",padding:"12px 13px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:3}}>
                       <span style={{fontSize:12,color:G.text,fontWeight:800,fontFamily:"monospace"}}>{t.trade_ref||t.id?.slice(0,8)}</span>
-                      <span style={{fontSize:10,color:G.red,fontWeight:700}}>DISPUTED</span>
+                      <span style={{fontSize:10,color:G.red,fontWeight:700,background:G.redBg,padding:"1px 7px",borderRadius:10}}>DISPUTED</span>
                     </div>
                     <div style={{fontSize:11,color:G.textSub}}>{t.buyer_display_name} ↔ {t.seller_display_name} · {t.amount_usdt} USDT</div>
                     {t.dispute_reason&&<div style={{fontSize:11,color:G.red,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.dispute_reason}</div>}
@@ -1774,16 +1763,17 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontSize:10,color:G.textDim}}>{t.disputed_at?new Date(t.disputed_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}):""}</div>
                   </div>
-                  <span style={{color:G.textSub,fontSize:11}}>{open?"▲":"▼"}</span>
+                  <span style={{color:G.textSub,fontSize:11,flexShrink:0}}>{open?"▲":"▼"}</span>
                 </button>
                 {open&&<div style={{padding:"0 13px 14px",borderTop:`1px solid ${G.border}`}}>
-                  {[["Reference",t.trade_ref||"—"],["Buyer",t.buyer_display_name],["Seller",t.seller_display_name],["USDT",t.amount_usdt],["Seller receives",`${t.total_etb} ETB`],["Platform fee",`${t.platform_fee_etb||75} ETB`],["Payment method",t.payment_method],["Dispute reason",t.dispute_reason||"—"],["Disputed at",t.disputed_at?new Date(t.disputed_at).toLocaleString():"—"]].map(([l,v])=>(
+                  {[["Reference",t.trade_ref||"—"],["Buyer",t.buyer_display_name],["Seller",t.seller_display_name],["USDT",t.amount_usdt],["Seller receives",`${t.total_etb} ETB`],["Platform fee",`${t.platform_fee_etb||75} ETB`],["Network",t.network||"—"],["Payment method",t.payment_method],["Dispute reason",t.dispute_reason||"—"],["Disputed at",t.disputed_at?new Date(t.disputed_at).toLocaleString():"—"]].map(([l,v])=>(
                     <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${G.border}22`,fontSize:11}}>
-                      <span style={{color:G.textSub}}>{l}</span><span style={{color:l==="Dispute reason"?G.red:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-word"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
+                      <span style={{color:G.textSub,flexShrink:0}}>{l}</span>
+                      <span style={{color:l==="Dispute reason"?G.red:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-word"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
                     </div>
                   ))}
                   {(t.payment_proof_url||t.payment_proof_url_2)&&(
-                    <div style={{marginTop:10,display:"flex",gap:8}}>
+                    <div style={{display:"flex",gap:8,marginTop:10}}>
                       {t.payment_proof_url&&<a href={t.payment_proof_url} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Seller proof</a>}
                       {t.payment_proof_url_2&&<a href={t.payment_proof_url_2} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Fee proof</a>}
                     </div>
@@ -1791,16 +1781,10 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                   <div style={{marginTop:14}}>
                     <div style={{fontSize:11,color:G.textSub,marginBottom:8,fontWeight:700}}>Admin Resolution</div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                      <button onClick={()=>adminResolveTrade(t.id,"completed")} style={{padding:"11px 8px",background:G.greenBg,border:`1px solid ${G.green}`,borderRadius:G.rs,color:G.green,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
-                        ✓ Mark Completed
-                      </button>
-                      <button onClick={()=>adminResolveTrade(t.id,"cancelled")} style={{padding:"11px 8px",background:G.redBg,border:`1px solid ${G.red}`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
-                        ✕ Cancel Trade
-                      </button>
+                      <button onClick={()=>adminResolveTrade(t.id,"completed")} style={{padding:"11px 8px",background:G.greenBg,border:`1px solid ${G.green}`,borderRadius:G.rs,color:G.green,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ Complete</button>
+                      <button onClick={()=>adminResolveTrade(t.id,"cancelled")} style={{padding:"11px 8px",background:G.redBg,border:`1px solid ${G.red}`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✕ Cancel</button>
                     </div>
-                    <a href={`${ADMIN_TG}?text=Dispute%3A%20Trade%20${t.trade_ref||t.id?.slice(0,8)}%20-%20Buyer%3A%20${t.buyer_display_name}%20-%20Seller%3A%20${t.seller_display_name}`} target="_blank" rel="noreferrer" style={{display:"block",padding:"10px 0",background:"rgba(0,136,204,0.08)",border:"1px solid rgba(0,136,204,0.3)",borderRadius:G.rs,color:"#29b6f6",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none"}}>
-                      Contact Both Parties on Telegram →
-                    </a>
+                    <a href={`${ADMIN_TG}?text=Dispute%3A%20${encodeURIComponent(t.trade_ref||t.id?.slice(0,8))}%20Buyer%3A%20${encodeURIComponent(t.buyer_display_name)}%20Seller%3A%20${encodeURIComponent(t.seller_display_name)}`} target="_blank" rel="noreferrer" style={{display:"block",padding:"10px 0",background:"rgba(0,136,204,0.08)",border:"1px solid rgba(0,136,204,0.3)",borderRadius:G.rs,color:"#29b6f6",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none"}}>Contact Both Parties on Telegram →</a>
                   </div>
                 </div>}
               </div>);
