@@ -20,35 +20,43 @@ const G = {
 const ADMIN_PASS = "12345@Jon";
 const ADMIN_TG = "https://t.me/RegimeEdge_Admin";
 
+// ── Animated Trust+ Badge ─────────────────────────────────────────────────────
+function TrustBadge({size=18,style={}}){
+  return(
+    <>
+      <style>{`@keyframes tpPulse{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,0.55)}60%{box-shadow:0 0 0 6px rgba(212,175,55,0)}}@keyframes ckDraw{from{stroke-dashoffset:20}to{stroke-dashoffset:0}}`}</style>
+      <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:size+8,height:size+8,borderRadius:"50%",background:`radial-gradient(circle,rgba(212,175,55,0.17),rgba(212,175,55,0.05))`,border:"1.5px solid rgba(212,175,55,0.47)",animation:"tpPulse 2.2s ease-in-out infinite",flexShrink:0,...style}}>
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{display:"block"}}>
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="#D4AF37" stroke="#E8C84A" strokeWidth="0.5"/>
+          <polyline points="8.5 12.5 11 15 15.5 10" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="20" strokeDashoffset="20" style={{animation:"ckDraw 0.5s 0.4s ease forwards"}}/>
+        </svg>
+      </span>
+    </>
+  );
+}
+
 const INIT = {
-  weeklyBias:{ direction:"Bullish", dayLabel:"Bullish Week", body:"Gold remains in a strong macro uptrend. Real yields declining, DXY weakening below 98.5. Hold longs, avoid selling into strength this week.", image:null, updatedAt:"Monday, May 5", updatedNote:"", postedAt:null },
-  dailyBias:{ direction:"Bullish", dayLabel:"Bullish Day", body:"Intraday — Gold holding above 3280 support. Bias remains long for the session. Watch DXY for direction confirmation.", updatedAt:"Today, 08:00 AM", postedAt:null },
+  weeklyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", image:null, updatedAt:"", updatedNote:"", postedAt:null },
+  dailyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", updatedAt:"", postedAt:null },
   nfpSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-05T12:30:00Z", posted:"", result:"", eventDate:"2026-06-05" },
   fomcSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-17T18:00:00Z", posted:"", result:"", eventDate:"2026-06-17" },
-  news:[
-    { id:1, headline:"Fed officials signal patience on rate cuts as inflation stays above 2%", take:"Bearish short-term for gold — but structural bull trend intact.", time:"Today", tag:"FOMC" },
-    { id:2, headline:"US Dollar weakens as ISM manufacturing misses expectations", take:"Bullish for gold. Dollar weakness = gold strength. Confirms weekly bias.", time:"Today", tag:"USD" },
-    { id:3, headline:"China central bank adds gold reserves for 6th straight month", take:"Structural demand signal. Central bank buying = long-term floor.", time:"Yesterday", tag:"Gold" },
-  ],
-  notices:[
-    { id:1, type:"announcement", text:"Weekly Bias is LIVE for this week. Check the Bias section now.", time:"2h ago" },
-    { id:2, type:"exchange", text:"SELLER FOUND — 500 USDT available. Contact admin to proceed.", time:"4h ago" },
-  ],
-  archiveWeeks:[
-    { id:1, week:"Apr 28 – May 2", bias:"Bullish", result:"green", note:"Gold +2.1% — macro held perfectly." },
-    { id:2, week:"Apr 21 – Apr 25", bias:"Bullish", result:"green", note:"FOMC signal paid. Gold +1.8%." },
-    { id:3, week:"Apr 14 – Apr 18", bias:"Neutral", result:"green", note:"No directional call — right call, ranged all week." },
-    { id:4, week:"Apr 7 – Apr 11", bias:"Bearish", result:"red", note:"Gold reversed hard. Unexpected yield drop." },
-    { id:5, week:"Mar 31 – Apr 4", bias:"Bullish", result:"green", note:"NFP miss — gold surged +2.3%." },
-    { id:6, week:"Mar 24 – Mar 28", bias:"Bullish", result:"green", note:"DXY breakdown confirmed. Gold to new high." },
-    { id:7, week:"Mar 17 – Mar 21", bias:"Bearish", result:"red", note:"Risk-on week. Gold dropped, equities rallied." },
-    { id:8, week:"Mar 10 – Mar 14", bias:"Bullish", result:"green", note:"CPI softer than expected. Gold +1.6%." },
-  ],
-  p2pTransactions:[
-    { id:"TXN-0027", buyer:"Abebe T.", seller:"Yonas M.", amount:45, status:"Completed", time:"2h ago" },
-    { id:"TXN-0026", buyer:"Selam B.", seller:"Pending", amount:30, status:"Pending", time:"5h ago" },
-  ],
+  news:[],
+  notices:[],
+  archiveWeeks:[],
+  p2pTransactions:[],
   eaApprovedUsers:[],
+  exchangeConfig:{
+    min_rate_etb:160,
+    max_rate_etb:195,
+    platform_fee_etb:75,
+    min_usdt:5,
+    max_usdt:500,
+    exchange_active:true,
+    admin_cbe_account:"",
+    admin_cbe_name:"",
+    admin_telebirr:"",
+    admin_telebirr_name:"",
+  },
 };
 
 // ── HOOKS ─────────────────────────────────────────────────────────────────────
@@ -409,14 +417,14 @@ const HomePage = React.memo(function HomePage({st,setPage}){
   const quickNavCards=[
     {label:"Exchange",sub:"USDT ↔ ETBirr",page:"exchange",icon:"⬡",color:"#60a5fa",status:"27+ trades · 0 scams"},
     {label:"EdgeTerminal",sub:"Live EA trading",page:"terminal",icon:"◎",color:"#a78bfa",status:null,isTerminal:true},
-    {label:"News",sub:"Market intelligence",page:"news",icon:"📰",color:G.textSub,status:`${st.news.length} article${st.news.length===1?"":"s"}`},
+    {label:"News",sub:"Market intelligence",page:"news",icon:"◈",color:G.textSub,status:`${st.news.length} article${st.news.length===1?"":"s"}`},
     {label:"Archive",sub:"Performance history",page:"archive",icon:"▣",color:G.textSub,status:`${winRate}% accuracy`},
   ];
 
   const pillars=[
-    {icon:"📊",title:"Macro Regime",desc:"Weekly + daily bias",page:"weekly"},
+    {icon:"◈",title:"Macro Regime",desc:"Weekly + daily bias",page:"weekly"},
     {icon:"⚡",title:"Event Signals",desc:"NFP · FOMC pre-call",page:"events"},
-    {icon:"📰",title:"Live News",desc:"Gold market intel",page:"news"},
+    {icon:"▣",title:"Live News",desc:"Gold market intel",page:"news"},
   ];
 
   return(
@@ -527,7 +535,7 @@ const HomePage = React.memo(function HomePage({st,setPage}){
           </div>
           <div style={{fontSize:22,fontWeight:900,color:wColor,fontFamily:"'Playfair Display',serif",marginBottom:5}}>{st.weeklyBias.dayLabel}</div>
           <div style={{fontSize:11,color:G.textSub,marginBottom:12,display:"flex",alignItems:"center",gap:5}}>
-            <span>🕐</span>{st.weeklyBias.updatedAt}
+            <span style={{color:G.textDim,fontSize:10}}>·</span>{st.weeklyBias.updatedAt}
           </div>
           <p style={{color:G.text,fontSize:13,lineHeight:1.85,margin:"0 0 14px"}}>{st.weeklyBias.body}</p>
           {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:10,marginBottom:14}}/>}
@@ -545,7 +553,7 @@ const HomePage = React.memo(function HomePage({st,setPage}){
           </div>
           <div style={{fontSize:18,fontWeight:900,color:dColor,fontFamily:"'Playfair Display',serif",marginBottom:4}}>{st.dailyBias.dayLabel}</div>
           <div style={{fontSize:11,color:G.textSub,marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
-            <span>🕐</span>{st.dailyBias.updatedAt}
+            <span style={{color:G.textDim,fontSize:10}}>·</span>{st.dailyBias.updatedAt}
           </div>
           <p style={{color:G.text,fontSize:13,lineHeight:1.8,margin:0}}>{st.dailyBias.body}</p>
         </GlowCard>
@@ -614,7 +622,7 @@ const WeeklyPage = React.memo(function WeeklyPage({st}){
       <GlowCard color={c} style={{marginBottom:18}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <BiasTag d={st.weeklyBias.direction}/>
-          <div style={{fontSize:11,color:G.textSub,display:"flex",alignItems:"center",gap:4}}><span>🕐</span>{st.weeklyBias.updatedAt}</div>
+          <div style={{fontSize:11,color:G.textSub,display:"flex",alignItems:"center",gap:4}}><span style={{color:G.textDim,fontSize:10}}>·</span>{st.weeklyBias.updatedAt}</div>
         </div>
         <div style={{fontSize:24,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif",marginBottom:14}}>{st.weeklyBias.dayLabel}</div>
         {st.weeklyBias.updatedNote?<div style={{fontSize:12,color:G.gold,marginBottom:14,padding:"10px 14px",background:G.goldBg,borderRadius:8,borderLeft:`3px solid ${G.gold}`}}>Wednesday Update: {st.weeklyBias.updatedNote}</div>:null}
@@ -688,16 +696,16 @@ function MacroPage({st}){
 // ── EVENTS ────────────────────────────────────────────────────────────────────
 function EventsPage({st}){
   const UPCOMING=[
-    { id:"nfp", title:"Non-Farm Payrolls", short:"NFP", date:"Jun 5, 2026", time:"12:30 UTC", color:G.gold, icon:"📊",
+    { id:"nfp", title:"Non-Farm Payrolls", short:"NFP", date:"Jun 5, 2026", time:"12:30 UTC", color:G.gold, icon:"◈",
       desc:"Monthly US jobs report. Largest single monthly driver of gold and USD volatility.", impact:"Very High",
       sig: st.nfpSignal },
-    { id:"fomc", title:"FOMC Rate Decision", short:"FOMC", date:"Jun 17–18, 2026", time:"18:00 UTC", color:G.blue, icon:"🏦",
+    { id:"fomc", title:"FOMC Rate Decision", short:"FOMC", date:"Jun 17–18, 2026", time:"18:00 UTC", color:G.blue, icon:"⬡",
       desc:"Federal Reserve policy statement and rate decision. Determines USD and gold macro direction.", impact:"Very High",
       sig: st.fomcSignal },
-    { id:"cpi", title:"US CPI Inflation", short:"CPI", date:"Jun 10, 2026", time:"12:30 UTC", color:"#f472b6", icon:"📈",
+    { id:"cpi", title:"US CPI Inflation", short:"CPI", date:"Jun 10, 2026", time:"12:30 UTC", color:"#f472b6", icon:"▲",
       desc:"Consumer price index release. Primary inflation gauge feeding into Fed rate path expectations.", impact:"High",
       sig: null },
-    { id:"gdp", title:"US GDP (Q1 Final)", short:"GDP", date:"Jun 26, 2026", time:"12:30 UTC", color:G.textSub, icon:"🏛",
+    { id:"gdp", title:"US GDP (Q1 Final)", short:"GDP", date:"Jun 26, 2026", time:"12:30 UTC", color:G.textSub, icon:"◉",
       desc:"Quarterly economic output. Confirms growth trajectory and risk sentiment direction.", impact:"Medium",
       sig: null },
   ];
@@ -733,11 +741,11 @@ function EventsPage({st}){
 
               <div style={{display:"flex",gap:14,marginBottom:12}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:11,color:G.textSub}}>📅</span>
+                  
                   <span style={{fontSize:11,color:G.text,fontWeight:600}}>{ev.date}</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:11,color:G.textSub}}>🕐</span>
+                  
                   <span style={{fontSize:11,color:G.textSub}}>{ev.time}</span>
                 </div>
               </div>
@@ -852,7 +860,7 @@ const ArchivePage = React.memo(function ArchivePage({st}){
     <div style={{padding:"32px 22px"}}>
       <SH label="Full Transparency" title="Archive" sub="Every week on record. No edits. No hiding."/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:16}}>
-        {[["Weeks",st.archiveWeeks.length,G.gold],["Accuracy",`${rate}%`,G.green],["Green",green,G.green],[streak>0?`${streak}🔥`:"—","Streak",streak>0?G.gold:G.textSub]].map(([v,l,c],idx)=>(
+        {[[st.archiveWeeks.length,"Weeks",G.gold],[`${rate}%`,"Accuracy",G.green],[green,"Green",G.green],[streak>0?String(streak):"—","Streak",streak>0?G.gold:G.textSub]].map(([v,l,c],idx)=>(
           <GlowCard key={idx} color={c} style={{padding:12,textAlign:"center"}}>
             <div style={{fontSize:18,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif"}}>{v}</div>
             <div style={{fontSize:9,color:G.textSub,marginTop:4}}>{l}</div>
@@ -881,7 +889,7 @@ const ArchivePage = React.memo(function ArchivePage({st}){
           <div style={{flex:1}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
               <span style={{fontSize:13,fontWeight:700,color:G.text}}>{w.week}</span>
-              <span style={{fontSize:18}}>{w.result==="green"?"🟢":"🔴"}</span>
+              <span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:w.result==="green"?G.green:G.red,flexShrink:0}}/>
             </div>
             <div style={{marginBottom:8}}><BiasTag d={w.bias}/></div>
             <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.65}}>{w.note}</p>
@@ -1201,7 +1209,7 @@ function AuthModal({onAuth,onClose}){
 
         {/* Verified badge */}
         <div style={{marginTop:18,padding:"10px 14px",background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:16}}>🔒</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{color:G.textSub,flexShrink:0}}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:G.textSub,letterSpacing:0.5}}>SECURED BY SUPABASE</div>
             <div style={{fontSize:10,color:G.textDim,marginTop:1}}>Passwords hashed · Sessions encrypted · Email verified</div>
@@ -1253,7 +1261,7 @@ function SignedPhoto({rawUrl,bucket,label,height=100}){
   if(failed||!signedUrl) return(
     <div style={{flex:1,background:G.card,border:`1px solid ${G.red}33`,borderRadius:8,overflow:"hidden",textDecoration:"none",display:"block"}}>
       <div style={{height,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
-        <span style={{fontSize:20}}>🔒</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{color:G.textDim}}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <span style={{fontSize:10,color:G.textDim,textAlign:"center",padding:"0 6px"}}>Signed URL failed</span>
       </div>
       <div style={{padding:"5px 8px",background:G.surface,fontSize:11,color:G.textDim,textAlign:"center"}}>{label}</div>
@@ -1275,8 +1283,8 @@ function KycPhotoRow({idUrl,selfieUrl}){
     <>
       <div style={{fontSize:10,color:G.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"12px 0 7px"}}>ID Documents</div>
       <div style={{display:"flex",gap:8,marginBottom:12}}>
-        <SignedPhoto rawUrl={idUrl} bucket="kyc-docs" label="🪪 ID" height={110}/>
-        <SignedPhoto rawUrl={selfieUrl} bucket="kyc-docs" label="🤳 Selfie" height={110}/>
+        <SignedPhoto rawUrl={idUrl} bucket="kyc-docs" label="ID Document" height={110}/>
+        <SignedPhoto rawUrl={selfieUrl} bucket="kyc-docs" label="Selfie" height={110}/>
       </div>
     </>
   );
@@ -1307,8 +1315,22 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[nn,setNn]=useState({headline:"",take:"",tag:"Gold"});
   const[no,setNo]=useState({text:"",type:"announcement"});
   const[aw,setAw]=useState({week:"",bias:"Bullish",result:"green",note:""});
+  const[cfg,setCfg]=useState({platform_fee_etb:75,min_usdt:5,max_usdt:500,min_rate_etb:160,max_rate_etb:195,admin_cbe_account:"",admin_cbe_name:"",admin_telebirr:"",admin_telebirr_name:"",exchange_active:true});
+  const[cfgLoading,setCfgLoading]=useState(false);
+  const[cfgSaving,setCfgSaving]=useState(false);
+  const[cfgMsg,setCfgMsg]=useState("");
+  const[cfgErr,setCfgErr]=useState("");
+  useEffect(()=>{
+    if(tab==="config"){
+      setCfgLoading(true);setCfgMsg("");setCfgErr("");
+      p2pSelect("p2p_config","?id=eq.1&select=*")
+        .then(rows=>{if(rows&&rows[0])setCfg(c=>({...c,...rows[0]}));})
+        .catch(()=>{})
+        .finally(()=>setCfgLoading(false));
+    }
+  },[tab]);
   const imgRef=useRef();
-  const TABS=["bias","events","news","notices","archive","kyc","trust+"];
+  const TABS=["bias","events","news","notices","archive","kyc","trust+","trades","disputes","config"];
 
   // ── KYC Review state
   const[kycList,setKycList]=useState([]);
@@ -1349,6 +1371,50 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[tpExpanded,setTpExpanded]=useState(null);
   const[tpRejInput,setTpRejInput]=useState({});
   const[tpBusy,setTpBusy]=useState({});
+
+  // ── Active Trades state
+  const[tradeList,setTradeList]=useState([]);
+  const[tradeLoading,setTradeLoading]=useState(false);
+  const[tradeErr,setTradeErr]=useState("");
+  const[tradeFilter,setTradeFilter]=useState("all");
+  const[tradeExpanded,setTradeExpanded]=useState(null);
+  const fetchTrades=async(filter)=>{
+    const f=filter!==undefined?filter:tradeFilter;
+    setTradeLoading(true);setTradeErr("");
+    try{
+      const q=f==="all"?"?order=created_at.desc&select=*":`?status=eq.${f}&order=created_at.desc&select=*`;
+      const rows=await p2pSelect("p2p_trades",q);
+      setTradeList(rows||[]);
+    }catch(e){setTradeErr(e.message||"Failed to load");}
+    finally{setTradeLoading(false);}
+  };
+  useEffect(()=>{if(tab==="trades"||tab==="disputes")fetchTrades(tab==="disputes"?"disputed":undefined);},[tab]);
+
+  // ── Admin trade actions
+  const adminResolveTrade=async(tradeId,newStatus)=>{
+    try{
+      await p2pUpdate("p2p_trades",`id=eq.${tradeId}`,{
+        status:newStatus,
+        ...(newStatus==="completed"?{completed_at:new Date().toISOString()}:{}),
+        ...(newStatus==="cancelled"?{cancelled_by:"admin",cancellation_reason:"Resolved by admin"}:{}),
+      });
+      if(newStatus==="completed"||newStatus==="cancelled"){
+        // Re-open listing if cancelled
+        const t=tradeList.find(x=>x.id===tradeId);
+        if(t&&newStatus==="cancelled"&&t.listing_id){
+          await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open"}).catch(()=>{});
+        }
+        await p2pInsert("trade_messages",{
+          trade_id:tradeId,sender_id:"00000000-0000-0000-0000-000000000000",
+          sender_display_name:"Admin",
+          message:`Admin resolved trade as ${newStatus}.`,is_system:true,
+        }).catch(()=>{});
+      }
+      setTradeList(l=>l.map(r=>r.id===tradeId?{...r,status:newStatus}:r));
+      setTradeExpanded(null);
+      alert("Trade updated to: "+newStatus);
+    }catch(e){alert("Error: "+e.message);}
+  };
 
   const fetchTp=async(filter)=>{
     const f=filter!==undefined?filter:tpFilter;
@@ -1419,7 +1485,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <div style={{height:10}}/>
           <FI value={wb.updatedAt} onChange={v=>setWb(b=>({...b,updatedAt:v}))} placeholder="Updated label e.g. Monday, May 5" style={{marginBottom:9}}/>
           <FI value={wb.updatedNote} onChange={v=>setWb(b=>({...b,updatedNote:v}))} placeholder="Wednesday update note (optional)" style={{marginBottom:11}}/>
-          <button onClick={()=>imgRef.current.click()} style={{width:"100%",padding:12,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:wb.image?G.green:G.textSub,fontSize:13,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>{wb.image?"✓ Chart uploaded":"📷 Upload TradingView chart"}</button>
+          <button onClick={()=>imgRef.current.click()} style={{width:"100%",padding:12,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:wb.image?G.green:G.textSub,fontSize:13,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>{wb.image?"Chart uploaded — tap to change":"Upload TradingView chart"}</button>
           <input ref={imgRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setWb(b=>({...b,image:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
           {wb.image&&<button onClick={()=>setWb(b=>({...b,image:null}))} style={{background:"none",border:"none",color:G.red,fontSize:12,cursor:"pointer",marginBottom:10,fontFamily:"inherit"}}>Remove image</button>}
           <Btn onClick={()=>{update("weeklyBias",{...wb,postedAt:new Date().toISOString()});alert("Weekly bias saved!");}} style={{width:"100%"}}>Save Weekly Bias</Btn>
@@ -1499,7 +1565,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           </div>
           <div style={{display:"flex",gap:9,marginBottom:9}}>
             {["green","red"].map(r=>(
-              <button key={r} onClick={()=>setAw(a=>({...a,result:r}))} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${aw.result===r?(r==="green"?G.green:G.red):G.border}`,background:aw.result===r?(r==="green"?G.greenBg:G.redBg):"none",color:aw.result===r?(r==="green"?G.green:G.red):G.textSub,fontSize:13,cursor:"pointer"}}>{r==="green"?"🟢 Green":"🔴 Red"}</button>
+              <button key={r} onClick={()=>setAw(a=>({...a,result:r}))} style={{flex:1,padding:9,borderRadius:9,border:`1px solid ${aw.result===r?(r==="green"?G.green:G.red):G.border}`,background:aw.result===r?(r==="green"?G.greenBg:G.redBg):"none",color:aw.result===r?(r==="green"?G.green:G.red):G.textSub,fontSize:13,cursor:"pointer"}}>{r==="green"?"Green":"Red"}</button>
             ))}
           </div>
           <FI value={aw.note} onChange={v=>setAw(a=>({...a,note:v}))} placeholder="Result note" style={{marginBottom:11}}/>
@@ -1548,7 +1614,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                   <KycPhotoRow idUrl={k.id_photo_url} selfieUrl={k.selfie_url}/>
 
                   {/* Info */}
-                  {[["Name",k.full_name],["Phone",k.phone],["Telegram",k.telegram],["ID Type",k.id_type],["Submitted",k.submitted_at?new Date(k.submitted_at).toLocaleString():"—"]].map(([l,v])=>(
+                  {[["Name",k.full_name],["Phone",k.phone],["Telegram",k.telegram],["ID Type",k.id_type],["Gender",k.gender||"—"],["Date of Birth",k.date_of_birth||"—"],["Submitted",k.submitted_at?new Date(k.submitted_at).toLocaleString():"—"]].map(([l,v])=>(
                     <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${G.border}22`,fontSize:12}}>
                       <span style={{color:G.textSub}}>{l}</span><span style={{color:G.text,fontWeight:600}}>{v||"—"}</span>
                     </div>
@@ -1565,7 +1631,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                     </div>}
                     {k.status!=="banned"&&<div>
                       <input value={banInput[k.id]||""} onChange={e=>setBanInput(b=>({...b,[k.id]:e.target.value}))} placeholder="Ban reason (required)..." style={{width:"100%",background:G.card,border:`1px solid rgba(168,85,247,0.3)`,borderRadius:G.rs,padding:"9px 11px",color:G.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:6}}/>
-                      <button disabled={busy||!banInput[k.id]?.trim()} onClick={()=>kycAction(k.id,"banned",{ban_reason:banInput[k.id]})} style={{width:"100%",padding:10,background:"rgba(168,85,247,0.08)",border:"1px solid rgba(168,85,247,0.4)",borderRadius:G.rs,color:"#a855f7",fontSize:13,fontWeight:800,cursor:(busy||!banInput[k.id]?.trim())?"not-allowed":"pointer",fontFamily:"inherit",opacity:(busy||!banInput[k.id]?.trim())?0.4:1}}>🚫 Permanently Ban</button>
+                      <button disabled={busy||!banInput[k.id]?.trim()} onClick={()=>kycAction(k.id,"banned",{ban_reason:banInput[k.id]})} style={{width:"100%",padding:10,background:"rgba(168,85,247,0.08)",border:"1px solid rgba(168,85,247,0.4)",borderRadius:G.rs,color:"#a855f7",fontSize:13,fontWeight:800,cursor:(busy||!banInput[k.id]?.trim())?"not-allowed":"pointer",fontFamily:"inherit",opacity:(busy||!banInput[k.id]?.trim())?0.4:1}}>Permanently Ban</button>
                     </div>}
                   </div>
                 </div>}
@@ -1591,7 +1657,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               const sc=k.status==="approved"?G.gold:k.status==="rejected"?G.red:k.status==="revoked"?"#a855f7":G.textSub;
               return(<div key={k.id} style={{background:G.surface,border:`1px solid ${open?G.gold+"55":G.border}`,borderRadius:G.r,marginBottom:9,overflow:"hidden"}}>
                 <button onClick={()=>setTpExpanded(open?null:k.id)} style={{width:"100%",padding:"12px 13px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left"}}>
-                  <span style={{fontSize:14}}>⭐</span>
+                  <TrustBadge size={16}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,color:G.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.username}</div>
                     <div style={{fontSize:11,color:G.textSub,marginTop:1}}>{k.platform_name} · {k.claimed_trades} trades claimed · {k.email}</div>
@@ -1614,10 +1680,10 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                   {k.rejection_reason&&<div style={{marginTop:6,padding:"7px 10px",background:G.redBg,borderRadius:7,fontSize:12,color:G.red}}>Rejection: {k.rejection_reason}</div>}
                   {/* Actions */}
                   <div style={{marginTop:13,display:"flex",flexDirection:"column",gap:8}}>
-                    {k.status!=="approved"&&<button disabled={busy} onClick={()=>tpAction(k.id,k.user_id,"approved")} style={{width:"100%",padding:11,background:G.goldBg2,border:`1px solid ${G.gold}`,borderRadius:G.rs,color:G.gold,fontSize:13,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>{busy?"Saving...":"⭐ Grant Trust+ Badge"}</button>}
+                    {k.status!=="approved"&&<button disabled={busy} onClick={()=>tpAction(k.id,k.user_id,"approved")} style={{width:"100%",padding:11,background:G.goldBg2,border:`1px solid ${G.gold}`,borderRadius:G.rs,color:G.gold,fontSize:13,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{busy?"Saving...":<><TrustBadge size={14}/>Grant Trust+ Badge</>}</button>}
                     {k.status==="approved"&&<>
-                      <div style={{padding:8,background:G.goldBg2,border:`1px solid ${G.gold}44`,borderRadius:G.rs,fontSize:12,color:G.gold,textAlign:"center",fontWeight:700}}>⭐ Trust+ Active</div>
-                      <button disabled={busy} onClick={()=>tpAction(k.id,k.user_id,"revoked")} style={{width:"100%",padding:10,background:"rgba(168,85,247,0.08)",border:"1px solid rgba(168,85,247,0.4)",borderRadius:G.rs,color:"#a855f7",fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>🚫 Revoke Trust+</button>
+                      <div style={{padding:8,background:G.goldBg2,border:`1px solid ${G.gold}44`,borderRadius:G.rs,fontSize:12,color:G.gold,textAlign:"center",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><TrustBadge size={13}/>Trust+ Active</div>
+                      <button disabled={busy} onClick={()=>tpAction(k.id,k.user_id,"revoked")} style={{width:"100%",padding:10,background:"rgba(168,85,247,0.08)",border:"1px solid rgba(168,85,247,0.4)",borderRadius:G.rs,color:"#a855f7",fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>Revoke Trust+</button>
                     </>}
                     {k.status!=="rejected"&&k.status!=="approved"&&<div>
                       <input value={tpRejInput[k.id]||""} onChange={e=>setTpRejInput(r=>({...r,[k.id]:e.target.value}))} placeholder="Rejection reason (required)..." style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"9px 11px",color:G.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:6}}/>
@@ -1629,6 +1695,224 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             })}
           </>);
         })()}
+
+        {/* ── ACTIVE TRADES TAB ── */}
+        {(tab==="trades")&&(()=>{
+          const SC={waiting_payment:G.gold,payment_sent:G.blue,completed:G.green,disputed:G.red,cancelled:G.textSub};
+          const SL={waiting_payment:"Waiting Payment",payment_sent:"Payment Sent",completed:"Completed",disputed:"Disputed",cancelled:"Cancelled"};
+          return(<>
+            <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+              {["all","waiting_payment","payment_sent","completed","cancelled"].map(f=>(
+                <button key={f} onClick={()=>{setTradeFilter(f);fetchTrades(f);}} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${tradeFilter===f?G.gold:G.border}`,background:tradeFilter===f?G.goldBg:"none",color:tradeFilter===f?G.gold:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{f==="all"?"All":f.replace("_"," ")}</button>
+              ))}
+              <button onClick={()=>fetchTrades()} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻</button>
+            </div>
+            {tradeLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>Loading...</p>}
+            {tradeErr&&<p style={{color:G.red,fontSize:12,marginBottom:10}}>{tradeErr}</p>}
+            {!tradeLoading&&tradeList.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>No trades found.</p>}
+            {tradeList.map(t=>{
+              const open=tradeExpanded===t.id;
+              const sc=SC[t.status]||G.textSub;
+              return(<div key={t.id} style={{background:G.surface,border:`1px solid ${open?G.gold+"55":G.border}`,borderRadius:G.r,marginBottom:9,overflow:"hidden"}}>
+                <button onClick={()=>setTradeExpanded(open?null:t.id)} style={{width:"100%",padding:"11px 13px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left"}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:sc,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:G.text,fontWeight:700,fontFamily:"monospace"}}>{t.trade_ref||t.id?.slice(0,8)}</div>
+                    <div style={{fontSize:11,color:G.textSub,marginTop:1}}>{t.buyer_display_name} → {t.seller_display_name} · {t.amount_usdt} USDT</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:10,color:sc,fontWeight:700,textTransform:"uppercase"}}>{SL[t.status]||t.status}</div>
+                    <div style={{fontSize:10,color:G.textDim}}>{t.created_at?new Date(t.created_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}):""}</div>
+                  </div>
+                  <span style={{color:G.textSub,fontSize:11}}>{open?"▲":"▼"}</span>
+                </button>
+                {open&&<div style={{padding:"0 13px 14px",borderTop:`1px solid ${G.border}`}}>
+                  {[["Reference",t.trade_ref||"—"],["Buyer",t.buyer_display_name],["Seller",t.seller_display_name],["USDT",t.amount_usdt],["Rate",`${t.rate_etb} ETB`],["Seller receives",`${t.total_etb} ETB`],["Platform fee",`${t.platform_fee_etb||75} ETB`],["Payment method",t.payment_method],["Network",t.network||"—"],["Status",t.status],["Created",t.created_at?new Date(t.created_at).toLocaleString():"—"],["Expires",t.expires_at?new Date(t.expires_at).toLocaleString():"—"],["Buyer paid at",t.buyer_paid_at?new Date(t.buyer_paid_at).toLocaleString():"—"],["Completed at",t.completed_at?new Date(t.completed_at).toLocaleString():"—"],["Cancelled by",t.cancelled_by||"—"],["Cancel reason",t.cancellation_reason||"—"]].map(([l,v])=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${G.border}22`,fontSize:11}}>
+                      <span style={{color:G.textSub}}>{l}</span><span style={{color:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-all"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
+                    </div>
+                  ))}
+                  {/* Payment proof links */}
+                  {(t.payment_proof_url||t.payment_proof_url_2)&&(
+                    <div style={{marginTop:10,display:"flex",gap:8}}>
+                      {t.payment_proof_url&&<a href={t.payment_proof_url} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:"rgba(96,165,250,0.09)",border:`1px solid rgba(96,165,250,0.3)`,borderRadius:G.rs,color:"#60a5fa",fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Seller proof</a>}
+                      {t.payment_proof_url_2&&<a href={t.payment_proof_url_2} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Fee proof</a>}
+                    </div>
+                  )}
+                  {/* Admin TG link */}
+                  <a href={`${ADMIN_TG}?text=Trade%20${t.trade_ref||t.id?.slice(0,8)}`} target="_blank" rel="noreferrer" style={{display:"block",marginTop:10,padding:"9px 0",background:"rgba(0,136,204,0.08)",border:"1px solid rgba(0,136,204,0.3)",borderRadius:G.rs,color:"#29b6f6",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none"}}>
+                    Contact Parties on Telegram
+                  </a>
+                </div>}
+              </div>);
+            })}
+          </>);
+        })()}
+
+        {/* ── DISPUTES TAB ── */}
+        {tab==="disputes"&&(()=>{
+          const disputedTrades=tradeList.filter(t=>t.status==="disputed");
+          return(<>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontSize:13,color:G.red,fontWeight:700}}>Active Disputes ({disputedTrades.length})</div>
+              <button onClick={()=>fetchTrades("disputed")} style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${G.border}`,background:"none",color:G.textSub,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>↻ Refresh</button>
+            </div>
+            {tradeLoading&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:16}}>Loading...</p>}
+            {!tradeLoading&&disputedTrades.length===0&&<p style={{color:G.textSub,fontSize:13,textAlign:"center",padding:24}}>No active disputes. 🎉</p>}
+            {disputedTrades.map(t=>{
+              const open=tradeExpanded===t.id;
+              return(<div key={t.id} style={{background:G.surface,border:`1px solid ${open?G.red+"55":G.red+"22"}`,borderLeft:`3px solid ${G.red}`,borderRadius:G.r,marginBottom:9,overflow:"hidden"}}>
+                <button onClick={()=>setTradeExpanded(open?null:t.id)} style={{width:"100%",padding:"12px 13px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:3}}>
+                      <span style={{fontSize:12,color:G.text,fontWeight:800,fontFamily:"monospace"}}>{t.trade_ref||t.id?.slice(0,8)}</span>
+                      <span style={{fontSize:10,color:G.red,fontWeight:700}}>DISPUTED</span>
+                    </div>
+                    <div style={{fontSize:11,color:G.textSub}}>{t.buyer_display_name} ↔ {t.seller_display_name} · {t.amount_usdt} USDT</div>
+                    {t.dispute_reason&&<div style={{fontSize:11,color:G.red,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.dispute_reason}</div>}
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:10,color:G.textDim}}>{t.disputed_at?new Date(t.disputed_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}):""}</div>
+                  </div>
+                  <span style={{color:G.textSub,fontSize:11}}>{open?"▲":"▼"}</span>
+                </button>
+                {open&&<div style={{padding:"0 13px 14px",borderTop:`1px solid ${G.border}`}}>
+                  {[["Reference",t.trade_ref||"—"],["Buyer",t.buyer_display_name],["Seller",t.seller_display_name],["USDT",t.amount_usdt],["Seller receives",`${t.total_etb} ETB`],["Platform fee",`${t.platform_fee_etb||75} ETB`],["Payment method",t.payment_method],["Dispute reason",t.dispute_reason||"—"],["Disputed at",t.disputed_at?new Date(t.disputed_at).toLocaleString():"—"]].map(([l,v])=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${G.border}22`,fontSize:11}}>
+                      <span style={{color:G.textSub}}>{l}</span><span style={{color:l==="Dispute reason"?G.red:G.text,fontWeight:600,textAlign:"right",maxWidth:"55%",wordBreak:"break-word"}}>{v!==undefined&&v!==null?String(v):"—"}</span>
+                    </div>
+                  ))}
+                  {(t.payment_proof_url||t.payment_proof_url_2)&&(
+                    <div style={{marginTop:10,display:"flex",gap:8}}>
+                      {t.payment_proof_url&&<a href={t.payment_proof_url} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Seller proof</a>}
+                      {t.payment_proof_url_2&&<a href={t.payment_proof_url_2} target="_blank" rel="noreferrer" style={{flex:1,padding:"8px 0",background:G.goldBg,border:`1px solid ${G.gold}44`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>↗ Fee proof</a>}
+                    </div>
+                  )}
+                  <div style={{marginTop:14}}>
+                    <div style={{fontSize:11,color:G.textSub,marginBottom:8,fontWeight:700}}>Admin Resolution</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                      <button onClick={()=>adminResolveTrade(t.id,"completed")} style={{padding:"11px 8px",background:G.greenBg,border:`1px solid ${G.green}`,borderRadius:G.rs,color:G.green,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
+                        ✓ Mark Completed
+                      </button>
+                      <button onClick={()=>adminResolveTrade(t.id,"cancelled")} style={{padding:"11px 8px",background:G.redBg,border:`1px solid ${G.red}`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
+                        ✕ Cancel Trade
+                      </button>
+                    </div>
+                    <a href={`${ADMIN_TG}?text=Dispute%3A%20Trade%20${t.trade_ref||t.id?.slice(0,8)}%20-%20Buyer%3A%20${t.buyer_display_name}%20-%20Seller%3A%20${t.seller_display_name}`} target="_blank" rel="noreferrer" style={{display:"block",padding:"10px 0",background:"rgba(0,136,204,0.08)",border:"1px solid rgba(0,136,204,0.3)",borderRadius:G.rs,color:"#29b6f6",fontSize:12,fontWeight:700,textAlign:"center",textDecoration:"none"}}>
+                      Contact Both Parties on Telegram →
+                    </a>
+                  </div>
+                </div>}
+              </div>);
+            })}
+          </>);
+        })()}
+
+        {/* ── CONFIG TAB ── */}
+        {tab==="config"&&(
+          <div>
+            <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:4}}>Exchange Configuration</div>
+            <div style={{fontSize:11,color:G.textSub,marginBottom:18,lineHeight:1.6}}>Changes are saved directly to Supabase and take effect immediately for all users.</div>
+            {cfgLoading&&<div style={{textAlign:"center",padding:24,color:G.textSub,fontSize:13}}>Loading config...</div>}
+            {!cfgLoading&&<>
+              {/* Exchange on/off */}
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.r,padding:16,marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:2}}>Exchange Status</div>
+                  <div style={{fontSize:11,color:G.textSub}}>Toggle P2P exchange on or off for all users</div>
+                </div>
+                <button onClick={()=>setCfg(c=>({...c,exchange_active:!c.exchange_active}))} style={{padding:"7px 18px",borderRadius:20,border:`1px solid ${cfg.exchange_active?G.green:G.red}`,background:cfg.exchange_active?G.greenBg:G.redBg,color:cfg.exchange_active?G.green:G.red,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                  {cfg.exchange_active?"Online":"Offline"}
+                </button>
+              </div>
+
+              {/* Rate range */}
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.r,padding:16,marginBottom:14}}>
+                <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Rate Range (ETB per USDT)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  {[["Min Rate","min_rate_etb",160],["Max Rate","max_rate_etb",195]].map(([l,k,def])=>(
+                    <div key={k}>
+                      <div style={{fontSize:10,color:G.textSub,marginBottom:5}}>{l}</div>
+                      <input type="number" value={cfg[k]??def} onChange={e=>setCfg(c=>({...c,[k]:Number(e.target.value)}))}
+                        style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"10px 12px",color:G.text,fontSize:14,fontWeight:700,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fee + USDT limits */}
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.r,padding:16,marginBottom:14}}>
+                <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Platform Fee & USDT Limits</div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,color:G.textSub,marginBottom:5}}>Platform Fee (ETB) — buyer pays to admin</div>
+                  <input type="number" value={cfg.platform_fee_etb??75} onChange={e=>setCfg(c=>({...c,platform_fee_etb:Number(e.target.value)}))}
+                    style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"10px 12px",color:G.text,fontSize:14,fontWeight:700,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  {[["Min USDT","min_usdt",5],["Max USDT","max_usdt",500]].map(([l,k,def])=>(
+                    <div key={k}>
+                      <div style={{fontSize:10,color:G.textSub,marginBottom:5}}>{l}</div>
+                      <input type="number" value={cfg[k]??def} onChange={e=>setCfg(c=>({...c,[k]:Number(e.target.value)}))}
+                        style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"10px 12px",color:G.text,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Admin payment accounts */}
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.r,padding:16,marginBottom:14}}>
+                <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Admin Payment Accounts</div>
+                <div style={{fontSize:11,color:G.textSub,marginBottom:14,lineHeight:1.6}}>Buyers pay the 75 ETB fee to one of these. Shown in Trade Room during every trade.</div>
+                {[
+                  ["CBE","admin_cbe_account","admin_cbe_name","CBE account number"],
+                  ["Telebirr","admin_telebirr","admin_telebirr_name","Telebirr phone number"],
+                ].map(([label,accKey,nameKey,ph])=>(
+                  <div key={label} style={{marginBottom:14}}>
+                    <div style={{fontSize:11,color:G.text,fontWeight:700,marginBottom:8}}>{label}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      <div>
+                        <div style={{fontSize:10,color:G.textSub,marginBottom:4}}>Account Number</div>
+                        <input value={cfg[accKey]||""} onChange={e=>setCfg(c=>({...c,[accKey]:e.target.value}))}
+                          placeholder={ph}
+                          style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"10px 10px",color:G.text,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:G.textSub,marginBottom:4}}>Account Name</div>
+                        <input value={cfg[nameKey]||""} onChange={e=>setCfg(c=>({...c,[nameKey]:e.target.value}))}
+                          placeholder="Full name"
+                          style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"10px 10px",color:G.text,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {cfgMsg&&<div style={{color:G.green,fontSize:12,padding:"9px 12px",background:G.greenBg,border:`1px solid ${G.green}33`,borderRadius:G.rs,marginBottom:10}}>{cfgMsg}</div>}
+              {cfgErr&&<div style={{color:G.red,fontSize:12,padding:"9px 12px",background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.rs,marginBottom:10}}>{cfgErr}</div>}
+              <button disabled={cfgSaving} onClick={async()=>{
+                setCfgSaving(true);setCfgMsg("");setCfgErr("");
+                try{
+                  await p2pUpdate("p2p_config","id=eq.1",{
+                    platform_fee_etb:cfg.platform_fee_etb??75,
+                    min_usdt:cfg.min_usdt??5,
+                    max_usdt:cfg.max_usdt??500,
+                    min_rate_etb:cfg.min_rate_etb??160,
+                    max_rate_etb:cfg.max_rate_etb??195,
+                    admin_cbe_account:cfg.admin_cbe_account||"",
+                    admin_cbe_name:cfg.admin_cbe_name||"",
+                    admin_telebirr:cfg.admin_telebirr||"",
+                    admin_telebirr_name:cfg.admin_telebirr_name||"",
+                    exchange_active:cfg.exchange_active,
+                  });
+                  setCfgMsg("Saved to database successfully.");
+                }catch(e){setCfgErr(e.message||"Save failed. Check Supabase connection.");}
+                finally{setCfgSaving(false);}
+              }} style={{width:"100%",padding:13,background:cfgSaving?"none":G.gold,border:cfgSaving?`1px solid ${G.gold}44`:"none",borderRadius:G.rs,color:cfgSaving?G.gold:"#000",fontSize:13,fontWeight:800,cursor:cfgSaving?"not-allowed":"pointer",fontFamily:"inherit",opacity:cfgSaving?0.7:1}}>
+                {cfgSaving?"Saving to Supabase...":"Save Config"}
+              </button>
+            </>}
+          </div>
+        )}
 
       </div>
     </div>
@@ -1665,26 +1949,45 @@ function MenuIcon({open}){
 }
 
 // ── PROFILE PAGE ─────────────────────────────────────────────────────────────
-function ProfilePage({user,onLogout,onSignIn,isApproved}){
-  const[tab,setTab]=useState("profile");
+function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
+  const[tab,setTab]=useState(initTab||"profile");
+  // Sync if initTab changes (e.g. navigated from Security dropdown)
+  useEffect(()=>{ if(initTab) setTab(initTab); },[initTab]);
   const[username,setUsername]=useState(user?.name||"");
   const[phone,setPhone]=useState("");
   const[saving,setSaving]=useState(false);
 
   // Load existing profile data (phone, username) from Supabase on mount
+  const[tradeStats,setTradeStats]=useState({total:null,completed:null,rating:null});
   useEffect(()=>{
     if(!user?.id) return;
     (async()=>{
       try{
         const token=localStorage.getItem("re_access_token");
-        const res=await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=username,phone`,{
-          headers:{"apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token||SUPABASE_ANON_KEY}`}
-        });
-        if(!res.ok) return;
-        const rows=await res.json();
-        if(rows?.[0]){
-          if(rows[0].username) setUsername(rows[0].username);
-          if(rows[0].phone) setPhone(rows[0].phone);
+        const headers={"apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token||SUPABASE_ANON_KEY}`};
+        // Profile data
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=username,phone`,{headers});
+        if(res.ok){
+          const rows=await res.json();
+          if(rows?.[0]){
+            if(rows[0].username) setUsername(rows[0].username);
+            if(rows[0].phone) setPhone(rows[0].phone);
+          }
+        }
+        // Trade stats — total and completed
+        const trRes=await fetch(`${SUPABASE_URL}/rest/v1/p2p_trades?or=(buyer_id.eq.${user.id},seller_id.eq.${user.id})&select=id,status`,{headers});
+        if(trRes.ok){
+          const trades=await trRes.json();
+          const total=trades.length;
+          const completed=trades.filter(t=>t.status==="completed").length;
+          // Rating
+          let rating=null;
+          const rRes=await fetch(`${SUPABASE_URL}/rest/v1/trade_ratings?seller_id=eq.${user.id}&select=stars`,{headers});
+          if(rRes.ok){
+            const ratings=await rRes.json();
+            if(ratings.length>0) rating=(ratings.reduce((sum,r)=>sum+r.stars,0)/ratings.length).toFixed(1);
+          }
+          setTradeStats({total,completed,rating});
         }
       }catch{}
     })();
@@ -1700,7 +2003,9 @@ function ProfilePage({user,onLogout,onSignIn,isApproved}){
 
   if(!user) return(
     <div style={{padding:"48px 22px",textAlign:"center"}}>
-      <div style={{fontSize:52,marginBottom:20}}>👤</div>
+      <div style={{width:64,height:64,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </div>
       <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,color:G.text,marginBottom:10,fontWeight:900}}>Your Profile</div>
       <p style={{color:G.textSub,fontSize:14,lineHeight:1.7,marginBottom:28}}>Sign in to view and manage your account, track your history, and access member features.</p>
       <button onClick={onSignIn} style={{background:G.gold,border:"none",borderRadius:G.rs,padding:"14px 32px",color:"#000",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 6px 24px rgba(212,175,55,0.25)"}}>Sign In / Create Account</button>
@@ -1753,7 +2058,7 @@ function ProfilePage({user,onLogout,onSignIn,isApproved}){
     finally{ setPassLoading(false); }
   };
 
-  const TABS=[["profile","👤 Profile"],["security","🔒 Security"]];
+  const TABS=[["profile","Profile"],["security","Security"]];
 
   return(
     <div style={{padding:"32px 22px"}}>
@@ -1790,9 +2095,13 @@ function ProfilePage({user,onLogout,onSignIn,isApproved}){
         <div>
           {/* Stats row */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:20}}>
-            {[["Member","Active",G.green],["Plan","Free",G.gold],["Status","Verified",G.blue]].map(([l,v,c])=>(
+            {[
+              [tradeStats.total!==null?String(tradeStats.total):"—","Trades",G.blue],
+              [tradeStats.completed!==null&&tradeStats.total?`${Math.round((tradeStats.completed/tradeStats.total)*100)}%`:"—","Success",G.green],
+              [tradeStats.rating!==null?`${tradeStats.rating}★`:"—","Rating",G.gold],
+            ].map(([v,l,c])=>(
               <div key={l} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 10px",textAlign:"center"}}>
-                <div style={{fontSize:13,fontWeight:800,color:c,marginBottom:3}}>{v}</div>
+                <div style={{fontSize:15,fontWeight:800,color:c,marginBottom:3}}>{v}</div>
                 <div style={{fontSize:9,color:G.textSub,letterSpacing:0.5}}>{l}</div>
               </div>
             ))}
@@ -1886,7 +2195,17 @@ function ProfilePage({user,onLogout,onSignIn,isApproved}){
                 <div style={{fontSize:12,color:G.red,marginBottom:12,fontWeight:700}}>⚠ Are you sure? This cannot be undone.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                   <button onClick={()=>setDeleteConfirm(false)} style={{padding:12,background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                  <button onClick={async()=>{await onLogout();}} style={{padding:12,background:G.red,border:"none",borderRadius:G.rs,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Yes, Delete</button>
+                  <button onClick={async()=>{
+                    try{
+                      const token=localStorage.getItem("re_access_token");
+                      await fetch(`${SUPABASE_URL}/rest/v1/profiles`,{
+                        method:"POST",
+                        headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token}`,"Prefer":"resolution=merge-duplicates,return=minimal"},
+                        body:JSON.stringify({id:user.id,deletion_requested_at:new Date().toISOString()})
+                      });
+                    }catch{}
+                    await onLogout();
+                  }} style={{padding:12,background:G.red,border:"none",borderRadius:G.rs,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Yes, Delete</button>
                 </div>
               </div>
             )}
@@ -1967,6 +2286,7 @@ export default function App(){
   const[sessionLoading,setSessionLoading]=useState(true);
   const[isApproved,setIsApproved]=useState(false);
   const[contentLoading,setContentLoading]=useState(true);
+  const[profileInitTab,setProfileInitTab]=useState("profile");
 
   // ── Load content from Supabase on mount
   useEffect(()=>{
@@ -2117,11 +2437,11 @@ export default function App(){
     macro:<MacroPage st={st}/>,
     events:<EventsPage st={st}/>,
     news:<NewsPage st={st}/>,
-    exchange:<ExchangePage st={st} user={user}/>,
+    exchange:<ExchangePage st={st} user={user} onSignIn={()=>setShowAuth(true)}/>,
     archive:<ArchivePage st={st}/>,
     terminal:<TerminalPage st={st} user={user} isApproved={isApproved}/>,
     strategy:<StrategyPage/>,
-    profile:<ProfilePage user={user} onLogout={handleLogout} onSignIn={()=>setShowAuth(true)} isApproved={isApproved}/>,
+    profile:<ProfilePage user={user} onLogout={handleLogout} onSignIn={()=>setShowAuth(true)} isApproved={isApproved} initTab={profileInitTab}/>,
   };
 
   return(
@@ -2159,8 +2479,8 @@ export default function App(){
                     <div style={{fontSize:11,color:G.textSub,marginTop:2}}>{user.email}</div>
                     {isApproved&&<div style={{fontSize:10,color:"#a78bfa",marginTop:4}}>◎ EA Terminal Active</div>}
                   </div>
-                  {[["👤 My Profile","profile"],["🔒 Security","profile"],["◎ Terminal","terminal"]].map(([label,pg])=>(
-                    <button key={label} onClick={()=>nav(pg)} style={{display:"block",width:"100%",padding:"10px 10px",background:"none",border:"none",color:G.text,fontSize:13,fontWeight:500,cursor:"pointer",textAlign:"left",fontFamily:"inherit",borderRadius:8}}>
+                  {[["My Profile","profile","profile"],["Security","profile","security"],["Terminal","terminal",null]].map(([label,pg,subTab])=>(
+                    <button key={label} onClick={()=>{if(subTab)setProfileInitTab(subTab);nav(pg);}} style={{display:"block",width:"100%",padding:"10px 10px",background:"none",border:"none",color:G.text,fontSize:13,fontWeight:500,cursor:"pointer",textAlign:"left",fontFamily:"inherit",borderRadius:8}}>
                       {label}
                     </button>
                   ))}
@@ -2225,7 +2545,7 @@ export default function App(){
       {/* Email Verification Banner */}
       {user&&!user.emailConfirmed&&!showAdmin&&(
         <div style={{background:"rgba(212,175,55,0.1)",borderBottom:`1px solid ${G.gold}33`,padding:"10px 18px",display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:14}}>📧</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="2" style={{flexShrink:0}}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
           <div style={{flex:1,fontSize:12,color:G.gold,lineHeight:1.5}}>Verify your email to unlock all features.</div>
         </div>
       )}
