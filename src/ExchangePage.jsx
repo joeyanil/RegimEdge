@@ -2005,6 +2005,186 @@ function MyActivity({ user, onOpenTrade, onBack }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SELL FORM
+// ─────────────────────────────────────────────────────────────────────────────
+const ALL_PAYMENT_METHODS = ["CBE (Commercial Bank)", "Telebirr", "Awash Bank", "Abyssinia Bank", "Dashen Bank"];
+
+function SellForm({ user, kyc, config, onBack, onDone }) {
+  const [amount, setAmount] = useState("");
+  const [rate, setRate] = useState("");
+  const [selectedMethods, setSelectedMethods] = useState([]);
+  const [methodAccounts, setMethodAccounts] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState(false);
+
+  const minRate = config?.min_rate_etb || 160;
+  const maxRate = config?.max_rate_etb || 195;
+  const min = config?.min_usdt || 5;
+  const max = config?.max_usdt || 500;
+  const fee = config?.platform_fee_etb || 50;
+  const amt = parseFloat(amount) || 0;
+  const rateVal = parseFloat(rate) || 0;
+  const totalEtb = amt && rateVal ? Math.round(amt * rateVal) : 0;
+
+  useEffect(() => {
+    if (!rate && minRate && maxRate) setRate(String(Math.round((minRate + maxRate) / 2)));
+  }, [minRate, maxRate]);
+
+  const toggleMethod = m => setSelectedMethods(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
+  const setAF = (method, field, value) => setMethodAccounts(prev => ({ ...prev, [method]: { ...prev[method], [field]: value } }));
+
+  const rateValid = rateVal >= minRate && rateVal <= maxRate;
+  const amtValid = amt >= min && amt <= max;
+  const canSubmit = amount && amtValid && rateValid &&
+    selectedMethods.length > 0 &&
+    selectedMethods.every(m => methodAccounts[m]?.account?.trim() && methodAccounts[m]?.name?.trim());
+
+  // Check seller has no active listing already
+  const handlePost = async () => {
+    setErr(""); setLoading(true);
+    try {
+      // Warn if seller already has active listing
+      const existing = await p2pSelect("p2p_listings", `?seller_id=eq.${user.id}&status=eq.open&select=id`).catch(() => []);
+      if (existing?.length > 0) {
+        const proceed = window.confirm("You already have an active listing. Post another one?");
+        if (!proceed) { setLoading(false); return; }
+      }
+      const primary = methodAccounts[selectedMethods[0]];
+      const paymentDetails = selectedMethods.map(m => ({ method:m, ...methodAccounts[m] }));
+      await p2pInsert("p2p_listings", {
+        seller_id:user.id,
+        seller_display_name:kyc?.full_name || user.name || "Seller",
+        amount_usdt:amt,
+        rate_etb:rateVal,
+        total_etb:totalEtb,
+        display_total_etb:totalEtb + fee,
+        payment_method:selectedMethods.join(", "),
+        payment_details:JSON.stringify(paymentDetails),
+        seller_account:primary?.account || "",
+        seller_account_name:primary?.name || "",
+        seller_rating:0, seller_completed_trades:0, seller_success_rate:0,
+        seller_trust_plus:kyc?.trust_plus || false,
+        status:"open",
+      });
+      await sendNotificationEmail("listing_posted", { user_id:user.id, email:user.email, amount:amt, rate:rateVal });
+      setDone(true);
+    } catch (e) {
+      setErr(e.message || "Something went wrong. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (done) return (
+    <div style={{ padding:"28px 18px", textAlign:"center" }}>
+      <GlowCard color={G.green}>
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
+          <Icon name="checkCircle" size={44} color={G.green} />
+        </div>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.green, fontWeight:900, marginBottom:10 }}>Listing Live!</div>
+        <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:18 }}>Your listing is now visible to all buyers.</p>
+        <Btn onClick={onDone} color={G.green}>Back to Exchange</Btn>
+      </GlowCard>
+    </div>
+  );
+
+  return (
+    <div style={{ padding:"24px 18px 40px" }}>
+      <BackBtn onClick={onBack} />
+      <SH label="P2P Exchange" title="Sell USDT" sub="Post your USDT for sale. Buyers come to you." />
+
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ marginBottom:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+            <span style={{ fontSize:11, color:G.textSub }}>USDT Amount to Sell</span>
+            <span style={{ fontSize:10, color:G.textDim }}>Min {min} · Max {max}</span>
+          </div>
+          <div style={{ position:"relative" }}>
+            <FI value={amount} onChange={setAmount} placeholder={`e.g. 100`} type="number" min={min} max={max} />
+            <span style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", color:G.gold, fontSize:12, fontWeight:700, pointerEvents:"none" }}>USDT</span>
+          </div>
+          {amount && !amtValid && <div style={{ color:G.red, fontSize:11, marginTop:4 }}>Must be {min}–{max} USDT</div>}
+        </div>
+
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+            <span style={{ fontSize:11, color:G.textSub }}>Your Rate (ETB per 1 USDT)</span>
+            <span style={{ fontSize:10, color:G.textDim }}>Allowed: {minRate}–{maxRate}</span>
+          </div>
+          <div style={{ position:"relative" }}>
+            <FI value={rate} onChange={setRate} placeholder={`${minRate}–${maxRate}`} type="number" />
+            <span style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", color:G.textSub, fontSize:11, pointerEvents:"none" }}>ETB</span>
+          </div>
+          {rate && !rateValid && <div style={{ color:G.red, fontSize:11, marginTop:4 }}>Rate must be between {minRate} and {maxRate} ETB</div>}
+        </div>
+      </Card>
+
+      {/* Live preview */}
+      {amt > 0 && rateValid && totalEtb > 0 && (
+        <div style={{ background:G.card, border:`1px solid ${G.gold}44`, borderRadius:G.r, padding:"14px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:9, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Live Preview</div>
+          {[
+            ["You receive", `${totalEtb} ETB`, G.green],
+            ["Buyer also pays (separate)", `${fee} ETB fee`, G.textSub],
+            ["Buyer's total", `${totalEtb + fee} ETB`, G.gold],
+          ].map(([l, v, c]) => (
+            <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${G.border}22`, fontSize:12 }}>
+              <span style={{ color:G.textSub }}>{l}</span>
+              <span style={{ color:c, fontWeight:700 }}>{v}</span>
+            </div>
+          ))}
+          <div style={{ marginTop:10, padding:"8px 12px", background:G.greenBg, borderRadius:G.rs }}>
+            <p style={{ color:G.green, fontSize:12, margin:0, fontWeight:700 }}>✓ You receive {totalEtb} ETB — the fee is paid by buyer, not deducted from you.</p>
+          </div>
+        </div>
+      )}
+
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:G.textSub, marginBottom:12 }}>Payment Methods You Accept — select all that apply</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {ALL_PAYMENT_METHODS.map(m => {
+            const sel = selectedMethods.includes(m);
+            return (
+              <div key={m}>
+                <button onClick={() => toggleMethod(m)} style={{
+                  width:"100%", padding:"11px 14px", borderRadius:G.rs,
+                  border:`1px solid ${sel ? G.gold : G.border}`,
+                  background:sel ? G.goldBg : "transparent",
+                  color:sel ? G.gold : G.textSub,
+                  fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                  textAlign:"left", display:"flex", justifyContent:"space-between", alignItems:"center",
+                }}>
+                  {m}
+                  {sel && <span style={{ fontSize:14, color:G.gold }}>✓</span>}
+                </button>
+                {sel && (
+                  <div style={{ padding:"10px 12px", background:G.surface, borderRadius:`0 0 ${G.rs}px ${G.rs}px`, marginTop:-1, border:`1px solid ${G.gold}33`, borderTop:"none", display:"flex", flexDirection:"column", gap:8 }}>
+                    <FI value={methodAccounts[m]?.account || ""} onChange={v => setAF(m, "account", v)} placeholder={m.includes("Telebirr") ? "Phone number e.g. 0912345678" : "Account number"} />
+                    <FI value={methodAccounts[m]?.name || ""} onChange={v => setAF(m, "name", v)} placeholder="Account holder full name" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <div style={{ background:"rgba(34,197,94,0.05)", border:`1px solid ${G.green}22`, borderRadius:G.rs, padding:"10px 14px", marginBottom:14 }}>
+        <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>
+          Buyers will see your listing and contact you. Once a buyer opens a trade, you have 1 hour to complete it.
+        </p>
+      </div>
+
+      <ErrBox msg={err} />
+      <Btn onClick={handlePost} disabled={!canSubmit || loading}>
+        {loading ? "Posting..." : "Post Listing — Free"}
+      </Btn>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EXCHANGE HUB (main dashboard after KYC approved)
 // ─────────────────────────────────────────────────────────────────────────────
 function ExchangeHub({ user, kyc, config, setScreen }) {
