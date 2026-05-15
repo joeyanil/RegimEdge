@@ -1895,40 +1895,68 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           COMPLETED
       ══════════════════════════════════════ */}
       {trade.status === "completed" && (
-        <div style={{ background:`linear-gradient(135deg,${G.green}0a,${G.card})`, border:`1px solid ${G.green}44`, borderRadius:G.r, padding:"20px 16px", marginBottom:12, textAlign:"center" }}>
-          <style>{`@keyframes pop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}`}</style>
-          <div style={{ width:60, height:60, borderRadius:"50%", background:`${G.green}18`, border:`2px solid ${G.green}44`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", animation:"pop 0.5s ease" }}>
-            <span style={{ fontSize:28 }}>✅</span>
+        <div style={{ position:"relative", background:`linear-gradient(160deg,#141000 0%,#1a1400 40%,${G.card} 100%)`, border:`1px solid ${G.gold}28`, borderRadius:G.r, padding:"36px 20px 28px", marginBottom:12, textAlign:"center", overflow:"hidden" }}>
+          {/* Radial gold wash */}
+          <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:220, height:140, background:`radial-gradient(ellipse at 50% 0%,${G.gold}0f,transparent 70%)`, pointerEvents:"none" }} />
+          {/* Gold Ring SVG */}
+          <div style={{ width:100, height:100, margin:"0 auto 24px", position:"relative" }}>
+            <svg width="100" height="100" viewBox="0 0 100 100" fill="none" overflow="visible" style={{ animation:"goldRingGlow 3s ease-in-out 2.2s infinite" }}>
+              <circle cx="50" cy="50" r="45" stroke={G.gold} strokeWidth="2.5" fill="none" strokeOpacity="0.15" />
+              <circle cx="50" cy="50" r="45" stroke={G.gold} strokeWidth="2.5" fill="none" strokeLinecap="round" transform="rotate(-90 50 50)" strokeDasharray="283" strokeDashoffset="283" style={{ animation:"drawGoldRing 1.1s cubic-bezier(0.4,0,0.2,1) 0.1s forwards" }} />
+              <circle cx="50" cy="50" r="34" fill={G.gold} fillOpacity="0.07" opacity="0" style={{ animation:"goldFillFade 0.5s ease 1.3s forwards" }} />
+              <circle cx="50" cy="50" r="34" stroke={G.gold} strokeWidth="1" fill="none" strokeOpacity="0" style={{ animation:"goldFillFade 0.4s ease 1.35s forwards" }} />
+              <polyline points="34,51 46,63 66,39" stroke={G.gold} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="42" strokeDashoffset="42" style={{ animation:"drawGoldCheck 0.5s cubic-bezier(0.4,0,0.2,1) 1.6s forwards" }} />
+            </svg>
           </div>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.green, fontWeight:900, marginBottom:6 }}>Trade Completed!</div>
-          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 16px" }}>
-            {isBuyer ? `${trade.amount_usdt} USDT sent to your ${trade.network} address.` : `You received ${sellerAmount} ETB.`}
+          {/* Eyebrow */}
+          <div style={{ fontSize:10, letterSpacing:3, color:G.gold, textTransform:"uppercase", marginBottom:7, opacity:0, animation:"goldTextFadeUp 0.4s ease 1.8s forwards" }}>Settlement Confirmed</div>
+          {/* Title */}
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:900, color:G.text, marginBottom:5, letterSpacing:0.3, opacity:0, animation:"goldTextFadeUp 0.5s ease 1.92s forwards" }}>Trade Complete</div>
+          {/* Amount */}
+          <div style={{ fontSize:30, fontWeight:900, color:isBuyer?G.gold:G.green, fontFamily:"monospace", letterSpacing:-1, marginBottom:4, opacity:0, animation:"goldTextFadeUp 0.5s ease 2.06s forwards" }}>
+            {isBuyer ? `${trade.amount_usdt} USDT` : `${sellerAmount} ETB`}
+          </div>
+          {/* Subtitle */}
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.6, margin:"0 0 24px", opacity:0, animation:"goldTextFadeUp 0.4s ease 2.18s forwards" }}>
+            {isBuyer ? `Received in your ${trade.network||"BEP20"} wallet` : "Payment received successfully"}
           </p>
-          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", textAlign:"left", marginBottom:isBuyer && !rated ? 16 : 0 }}>
-            <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Trade Record</div>
+          {/* Divider */}
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, opacity:0, animation:"goldTextFadeUp 0.3s ease 2.28s forwards" }}>
+            <div style={{ flex:1, height:1, background:`linear-gradient(90deg,transparent,${G.gold}33)` }} />
+            <span style={{ fontSize:9, color:G.dim, letterSpacing:2, textTransform:"uppercase" }}>Trade Record</span>
+            <div style={{ flex:1, height:1, background:`linear-gradient(270deg,transparent,${G.gold}33)` }} />
+          </div>
+          {/* Rows */}
+          <div style={{ background:G.bgDeep, border:`1px solid ${G.gold}12`, borderRadius:G.rs, padding:"4px 0", marginBottom:isBuyer && !rated ? 18 : 0, textAlign:"left" }}>
             {[
-              ["Reference", trade.trade_ref || "—"],
-              ["Amount", `${trade.amount_usdt} USDT`],
-              ["Rate", `${trade.rate_etb} ETB/USDT`],
+              ["Reference",       trade.trade_ref||"—"],
+              ["Amount",          `${trade.amount_usdt} USDT`],
+              ["Rate",            `${trade.rate_etb} ETB/USDT`],
               ["Seller received", `${sellerAmount} ETB`],
-              ["Network", trade.network || "—"],
-              ["Buyer", trade.buyer_display_name],
-              ["Seller", trade.seller_display_name],
-              ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
-            ].map(([l, v]) => (
-              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
-                <span style={{ color:G.textSub }}>{l}</span>
-                <span style={{ color:G.text, fontWeight:600 }}>{v}</span>
+              ["Network",         trade.network||"—"],
+              ["Buyer",           trade.buyer_display_name],
+              ["Seller",          trade.seller_display_name],
+              ["Completed",       trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
+            ].map(([l, v], i) => (
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 14px", borderBottom:i<7?`1px solid ${G.gold}0d`:"none", opacity:0, animation:`goldRowIn 0.35s ease ${2.32+i*0.07}s forwards` }}>
+                <span style={{ fontSize:11, color:G.textSub }}>{l}</span>
+                <span style={{ fontSize:11, fontWeight:700, color:l==="Seller received"?G.gold:G.text, fontFamily:l==="Reference"?"monospace":"inherit" }}>{v}</span>
               </div>
             ))}
           </div>
+          {/* Verified pill */}
+          <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:`${G.gold}10`, border:`1px solid ${G.gold}28`, borderRadius:20, padding:"5px 14px", fontSize:11, color:G.goldLight||G.gold, fontWeight:700, letterSpacing:0.8, margin:`18px 0 ${isBuyer && !rated ? 18 : 0}px`, opacity:0, animation:`goldPillFade 0.4s ease ${2.32+8*0.07}s forwards` }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+            ON-CHAIN CONFIRMED
+          </div>
+          {/* Rating */}
           {isBuyer && !rated && (
-            <div style={{ marginTop:16, textAlign:"left" }}>
-              <div style={{ fontSize:13, color:G.textSub, marginBottom:10, fontWeight:700 }}>Rate your seller</div>
+            <div style={{ marginTop:20, textAlign:"left" }}>
+              <div style={{ fontSize:11, color:G.textSub, marginBottom:10, fontWeight:700, letterSpacing:0.5, textTransform:"uppercase" }}>Rate your seller</div>
               <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:10 }}>
                 {[1,2,3,4,5].map(s => (
-                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.1s", transform:s <= stars ? "scale(1.2)" : "scale(1)" }}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill={s <= stars ? G.gold : "none"} stroke={s <= stars ? G.gold : G.textDim} strokeWidth="1.5">
+                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.15s", transform:s<=stars?"scale(1.25)":"scale(1)" }}>
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill={s<=stars?G.gold:"none"} stroke={s<=stars?G.gold:G.textDim} strokeWidth="1.5">
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   </button>
@@ -1936,12 +1964,12 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               </div>
               {stars > 0 && <FI value={ratingComment} onChange={setRatingComment} placeholder="Leave a comment (optional)" style={{ marginBottom:10, fontSize:12 }} />}
               <div style={{ display:"flex", gap:8 }}>
-                <Btn onClick={submitRating} disabled={!stars || loading} small style={{ flex:1 }}>Submit Rating</Btn>
+                <Btn onClick={submitRating} disabled={!stars||loading} small style={{ flex:1 }}>Submit Rating</Btn>
                 <button onClick={() => setRated(true)} style={{ background:"none", border:"none", color:G.textSub, fontSize:12, cursor:"pointer", fontFamily:"inherit", padding:"0 14px" }}>Skip</button>
               </div>
             </div>
           )}
-          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"10px 0 0" }}>Thanks for rating! 🙏</p>}
+          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"14px 0 0" }}>Thank you for rating!</p>}
         </div>
       )}
 
