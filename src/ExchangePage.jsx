@@ -281,7 +281,7 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
           Verification Pending
         </div>
         <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, margin:0 }}>
-          Documents submitted. Admin will review within 24 hours. You will receive an email when approved.
+          Documents submitted. Our team will review within 24 hours. You will receive an email when approved.
         </p>
       </GlowCard>
     </div>
@@ -434,7 +434,7 @@ function TrustPlusScreen({ user, kyc, onBack }) {
 
   if (app && step === 0) {
     const SC = {
-      pending: { color:G.gold, title:"Application Pending", desc:"Admin will review within 48 hours." },
+      pending: { color:G.gold, title:"Application Pending", desc:"Our team will review within 48 hours." },
       approved: { color:G.gold, title:"Trust+ Active", desc:"Your Trust+ badge is live. Buyers see it on your listings." },
       rejected: { color:G.red, title:"Application Not Approved", desc:app.rejection_reason || "Not approved. Complete more trades and re-apply." },
       revoked: { color:G.purple, title:"Trust+ Revoked", desc:"Your Trust+ was revoked by admin." },
@@ -620,7 +620,7 @@ function TrustPlusScreen({ user, kyc, onBack }) {
       <GlowCard color={G.gold}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}><TrustBadge size={52} /></div>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.gold, fontWeight:900, marginBottom:10 }}>Application Submitted</div>
-        <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, margin:"0 0 18px" }}>Admin will review within 48 hours.</p>
+        <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, margin:"0 0 18px" }}>Our team will review within 48 hours.</p>
         <Btn onClick={onBack}>Back to Exchange</Btn>
       </GlowCard>
     </div>
@@ -769,144 +769,12 @@ function TradeChat({ trade, user }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NETWORK PICKER MODAL
-// ─────────────────────────────────────────────────────────────────────────────
-const NETWORKS = [
-  { id:"TRC20", label:"TRC20", sub:"TRON Network — Most common in Ethiopia", fee:"~1 USDT network fee" },
-  { id:"BEP20", label:"BEP20", sub:"BNB Smart Chain — Lower fee option", fee:"~0.1 USDT network fee" },
-];
-
-function NetworkPicker({ onConfirm, onCancel }) {
-  const [network, setNetwork] = useState("TRC20");
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:`${G.r}px ${G.r}px 0 0`, padding:"24px 20px 36px", width:"100%", maxWidth:480 }}>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.text, fontWeight:900, marginBottom:4 }}>Select Network</div>
-        <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>Choose the network to receive your USDT</div>
-        <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:18 }}>
-          {NETWORKS.map(n => (
-            <button key={n.id} onClick={() => setNetwork(n.id)} style={{
-              background:network === n.id ? G.goldBg2 : G.surface,
-              border:`1px solid ${network === n.id ? G.gold : G.border}`,
-              borderRadius:G.r, padding:"14px 16px", cursor:"pointer",
-              textAlign:"left", fontFamily:"inherit",
-              display:"flex", justifyContent:"space-between", alignItems:"center",
-            }}>
-              <div>
-                <div style={{ fontSize:15, fontWeight:800, color:network === n.id ? G.gold : G.text, marginBottom:2 }}>{n.label}</div>
-                <div style={{ fontSize:12, color:G.textSub }}>{n.sub}</div>
-              </div>
-              <div style={{ textAlign:"right", flexShrink:0 }}>
-                <div style={{ fontSize:11, color:G.textSub }}>{n.fee}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-        <Btn onClick={() => onConfirm(network)}>Confirm — {network}</Btn>
-        <div style={{ height:10 }} />
-        <OutlineBtn onClick={onCancel} color={G.textSub}>Cancel</OutlineBtn>
-      </div>
-    </div>
-  );
-}
-
-// Cancel Trade Modal
-function CancelTradeModal({ trade, user, isBuyer, onCancelled, onClose }) {
-  const CANCEL_REASONS = [
-    "Changed my mind",
-    "Cannot complete payment in time",
-    "Found a better rate",
-    "Technical issue",
-    "Other",
-  ];
-  const SELLER_CANCEL_REASONS = [
-    "Buyer did not pay seller amount",
-    "Buyer did not pay platform fee",
-    "Buyer is unresponsive",
-    "Trade conditions changed",
-    "Other",
-  ];
-  const reasons = isBuyer ? CANCEL_REASONS : SELLER_CANCEL_REASONS;
-  const [reason, setReason] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-
-  const handleCancel = async () => {
-    if (!reason) { setErr("Please select a reason."); return; }
-    setErr(""); setLoading(true);
-    try {
-      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, {
-        status:"cancelled",
-        cancellation_reason:reason,
-        cancelled_by:isBuyer ? "buyer" : "seller",
-      });
-      // Reopen listing
-      if (trade.listing_id) {
-        await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"open" });
-      }
-      // If buyer cancels, increment their cancellation count
-      if (isBuyer) {
-        try {
-          const kycRows = await p2pSelect("kyc_submissions", `?user_id=eq.${trade.buyer_id}&select=cancellation_count`);
-          const current = kycRows?.[0]?.cancellation_count || 0;
-          await p2pUpdate("kyc_submissions", `user_id=eq.${trade.buyer_id}`, { cancellation_count: current + 1 });
-        } catch {}
-      }
-      await p2pInsert("trade_messages", {
-        trade_id:trade.id, sender_id:user.id,
-        sender_display_name:"System",
-        message:`Trade cancelled by ${isBuyer ? "buyer" : "seller"}: ${reason}`,
-        is_system:true,
-      });
-      await sendNotificationEmail("trade_cancelled", {
-        trade_ref:trade.trade_ref, reason,
-        cancelled_by:isBuyer ? "buyer" : "seller",
-      });
-      onCancelled();
-    } catch (e) {
-      setErr(e.message || "Failed to cancel. Try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:`${G.r}px ${G.r}px 0 0`, padding:"24px 20px 40px", width:"100%", maxWidth:480 }}>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.red, fontWeight:900, marginBottom:4 }}>Cancel Trade</div>
-        <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>This action cannot be undone. The listing will reopen for other buyers.</div>
-        <div style={{ fontSize:11, color:G.textSub, marginBottom:10 }}>Reason for cancellation</div>
-        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:18 }}>
-          {reasons.map(r => (
-            <button key={r} onClick={() => setReason(r)} style={{
-              padding:"11px 14px", borderRadius:G.rs,
-              border:`1px solid ${reason === r ? G.red : G.border}`,
-              background:reason === r ? G.redBg : "transparent",
-              color:reason === r ? G.red : G.textSub,
-              fontSize:13, fontWeight:600, cursor:"pointer",
-              fontFamily:"inherit", textAlign:"left",
-            }}>{r}</button>
-          ))}
-        </div>
-        <ErrBox msg={err} />
-        <Btn onClick={handleCancel} disabled={!reason || loading} color={G.red}>
-          {loading ? "Cancelling..." : "Confirm Cancellation"}
-        </Btn>
-        <div style={{ height:10 }} />
-        <OutlineBtn onClick={onClose} color={G.textSub}>Keep Trade</OutlineBtn>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // TRADE ROOM
 // ─────────────────────────────────────────────────────────────────────────────
 function TradeRoom({ initialTrade, user, config, onBack }) {
   const [trade, setTrade] = useState(initialTrade);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [msg, setMsg] = useState("");
   const [proof1, setProof1] = useState(null);
   const [proof2, setProof2] = useState(null);
   const [proof1Preview, setProof1Preview] = useState(null);
@@ -918,6 +786,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   const [ratingComment, setRatingComment] = useState("");
   const [rated, setRated] = useState(false);
   const [notifyBusy, setNotifyBusy] = useState(false);
+  const [releaseChecked, setReleaseChecked] = useState(false);
   const proof1Ref = useRef();
   const proof2Ref = useRef();
   const { copy, copied } = useCopyText();
@@ -925,11 +794,9 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   const isBuyer = trade.buyer_id === user.id;
   const isSeller = trade.seller_id === user.id;
   const { left: timeLeft, expired, urgency } = useCountdown(trade.expires_at);
-
-  const platformFee = config?.platform_fee_etb || trade.platform_fee_etb || 75;
+  const platformFee = config?.platform_fee_etb || trade.platform_fee_etb || 50;
   const sellerAmount = trade.total_etb;
 
-  // Poll trade status every 8 seconds
   const refreshTrade = useCallback(async () => {
     try {
       const rows = await p2pSelect("p2p_trades", `?id=eq.${trade.id}&select=*`);
@@ -942,25 +809,23 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
     return () => clearInterval(id);
   }, [refreshTrade]);
 
-  // Check if already rated
   useEffect(() => {
     if (trade.status === "completed" && isBuyer) {
       p2pSelect("trade_ratings", `?trade_id=eq.${trade.id}&buyer_id=eq.${user.id}&select=id`)
-        .then(rows => { if (rows?.length > 0) setRated(true); })
-        .catch(() => {});
+        .then(rows => { if (rows?.length > 0) setRated(true); }).catch(() => {});
     }
   }, [trade.id, trade.status, isBuyer, user.id]);
 
-  // Timer color
   const timerColor = urgency === "critical" ? G.red : urgency === "warning" ? G.gold : G.green;
-
-  // Step progress
   const getStep = () => {
     if (trade.status === "waiting_payment") return 0;
     if (trade.status === "payment_sent") return 1;
     if (trade.status === "completed" || trade.status === "seller_confirmed") return 2;
     return 0;
   };
+  const currentStep = getStep();
+  const steps = ["Pay", "Confirm", "Done"];
+  const isActive = !["completed", "cancelled", "disputed"].includes(trade.status);
 
   const markPaid = async () => {
     if (!proof1 || !proof2) { setErr("Upload both payment screenshots first."); return; }
@@ -970,96 +835,49 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       const url1 = await p2pUpload("payment-proofs", `${trade.id}/proof1_${Date.now()}`, proof1);
       const url2 = await p2pUpload("payment-proofs", `${trade.id}/proof2_${Date.now()}`, proof2);
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, {
-        status:"payment_sent",
-        buyer_paid_at:new Date().toISOString(),
-        payment_proof_url:url1,
-        payment_proof_url_2:url2,
+        status:"payment_sent", buyer_paid_at:new Date().toISOString(),
+        payment_proof_url:url1, payment_proof_url_2:url2,
       });
-      await p2pInsert("trade_messages", {
-        trade_id:trade.id, sender_id:user.id,
-        sender_display_name:"System",
-        message:"Buyer has submitted payment proof. Seller please verify and release USDT.",
-        is_system:true,
-      });
-      await sendNotificationEmail("buyer_paid", {
-        trade_ref:trade.trade_ref, seller_id:trade.seller_id,
-      });
+      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"📸 Buyer submitted payment proof. Seller: please verify screenshots and release USDT.", is_system:true });
+      await sendNotificationEmail("buyer_paid", { trade_ref:trade.trade_ref, seller_id:trade.seller_id });
       await refreshTrade();
-      setMsg("Payment confirmed. Waiting for seller to release USDT.");
-    } catch (e) {
-      setErr(e.message || "Something went wrong. Try again.");
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setErr(e.message || "Something went wrong. Try again."); }
+    finally { setLoading(false); }
   };
 
   const confirmRelease = async () => {
     setErr(""); setLoading(true);
     try {
-      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, {
-        status:"completed",
-        completed_at:new Date().toISOString(),
-        seller_confirmed_at:new Date().toISOString(),
-      });
-      await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"completed" });
-      await p2pInsert("trade_messages", {
-        trade_id:trade.id, sender_id:user.id,
-        sender_display_name:"System",
-        message:"Seller confirmed payment. USDT has been released. Trade completed!",
-        is_system:true,
-      });
-      await sendNotificationEmail("trade_completed", {
-        trade_ref:trade.trade_ref,
-        buyer_id:trade.buyer_id,
-        seller_id:trade.seller_id,
-      });
+      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"completed", completed_at:new Date().toISOString(), seller_confirmed_at:new Date().toISOString() });
+      // Reopen listing with decremented amount if partial, else complete
+      const remaining = (trade.listing_amount_usdt || 0) - trade.amount_usdt;
+      const minU = config?.min_usdt || 5;
+      if (trade.listing_id) {
+        await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, remaining >= minU ? { status:"open", amount_usdt:remaining } : { status:"completed" });
+      }
+      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"✅ Seller confirmed payment received. USDT released to buyer. Trade completed!", is_system:true });
+      await sendNotificationEmail("trade_completed", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
       await refreshTrade();
-    } catch (e) {
-      setErr(e.message || "Failed. Try again.");
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setErr(e.message || "Failed. Try again."); }
+    finally { setLoading(false); }
   };
 
   const raiseDispute = async () => {
     if (!disputeReason.trim()) return;
     setErr(""); setLoading(true);
     try {
-      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, {
-        status:"disputed",
-        dispute_reason:disputeReason.trim(),
-        disputed_at:new Date().toISOString(),
-      });
-      await p2pInsert("trade_messages", {
-        trade_id:trade.id, sender_id:user.id,
-        sender_display_name:"System",
-        message:`Dispute raised: ${disputeReason.trim()} — Admin will contact both parties on Telegram within 2 hours.`,
-        is_system:true,
-      });
-      await sendNotificationEmail("dispute_raised", {
-        trade_ref:trade.trade_ref,
-        dispute_reason:disputeReason.trim(),
-        buyer_id:trade.buyer_id,
-        seller_id:trade.seller_id,
-      });
-      setShowDispute(false);
-      await refreshTrade();
-    } catch (e) {
-      setErr(e.message || "Failed. Try again.");
-    } finally {
-      setLoading(false);
-    }
+      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"disputed", dispute_reason:disputeReason.trim(), disputed_at:new Date().toISOString() });
+      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:`⚠️ Dispute raised: ${disputeReason.trim()} — Our team will contact both parties on Telegram within 2 hours.`, is_system:true });
+      await sendNotificationEmail("dispute_raised", { trade_ref:trade.trade_ref, dispute_reason:disputeReason.trim(), buyer_id:trade.buyer_id, seller_id:trade.seller_id });
+      setShowDispute(false); await refreshTrade();
+    } catch (e) { setErr(e.message || "Failed. Try again."); }
+    finally { setLoading(false); }
   };
 
   const notifyBuyer = async () => {
     setNotifyBusy(true);
     try {
-      await p2pInsert("trade_messages", {
-        trade_id:trade.id, sender_id:user.id,
-        sender_display_name:"System",
-        message:"⚠️ Seller has not received your complete payment. Please check and complete the remaining payment within 30 minutes.",
-        is_system:true,
-      });
+      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"⚠️ Seller has not received complete payment. Please verify and complete your payment within 30 minutes or the trade will be cancelled.", is_system:true });
     } catch {} finally { setNotifyBusy(false); }
   };
 
@@ -1067,29 +885,26 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
     if (!stars) return;
     setLoading(true);
     try {
-      await p2pInsert("trade_ratings", {
-        trade_id:trade.id, buyer_id:user.id,
-        seller_id:trade.seller_id, stars,
-        comment:ratingComment.trim() || null,
-      });
+      await p2pInsert("trade_ratings", { trade_id:trade.id, buyer_id:user.id, seller_id:trade.seller_id, stars, comment:ratingComment.trim() || null });
       setRated(true);
-      await sendNotificationEmail("rating_received", {
-        seller_id:trade.seller_id, stars, trade_ref:trade.trade_ref,
-      });
+      await sendNotificationEmail("rating_received", { seller_id:trade.seller_id, stars, trade_ref:trade.trade_ref });
     } catch {} finally { setLoading(false); }
   };
 
-  // Progress steps
-  const currentStep = getStep();
-  const steps = ["Pay", "Confirm", "Done"];
-
-  const isActive = !["completed", "cancelled", "disputed"].includes(trade.status);
+  const StatusMap = {
+    waiting_payment:[G.gold,"Waiting Payment"],
+    payment_sent:[G.blue,"Payment Sent"],
+    seller_confirmed:[G.green,"Confirmed"],
+    completed:[G.green,"Completed"],
+    disputed:[G.red,"Disputed"],
+    cancelled:[G.textSub,"Cancelled"],
+  };
+  const [statusColor, statusLabel] = StatusMap[trade.status] || [G.textSub, trade.status];
 
   return (
-    <div style={{ padding:"18px 16px 28px" }}>
+    <div style={{ padding:"16px 16px 36px", background:G.bg, minHeight:"100vh" }}>
       {showCancelModal && (
-        <CancelTradeModal
-          trade={trade} user={user} isBuyer={isBuyer}
+        <CancelTradeModal trade={trade} user={user} isBuyer={isBuyer}
           onCancelled={async () => { setShowCancelModal(false); await refreshTrade(); }}
           onClose={() => setShowCancelModal(false)}
         />
@@ -1097,382 +912,343 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
 
       <BackBtn onClick={onBack} />
 
-      {/* Trade Reference + Status Header */}
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+      {/* ── HEADER CARD ── */}
+      <div style={{ background:`linear-gradient(135deg,${G.card} 0%,${G.bgDeep} 100%)`, border:`1px solid ${statusColor}33`, borderRadius:G.r, padding:"16px 16px 14px", marginBottom:12, boxShadow:`0 0 24px ${statusColor}0a` }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
           <div>
-            <div style={{ fontSize:10, color:G.textDim, marginBottom:3 }}>Trade Reference</div>
-            <div style={{ fontFamily:"monospace", fontSize:16, fontWeight:900, color:G.gold }}>
-              {trade.trade_ref || trade.id?.slice(0, 8)}
+            <div style={{ fontSize:9, color:G.textDim, marginBottom:4, letterSpacing:2 }}>TRADE REFERENCE</div>
+            <div style={{ fontFamily:"monospace", fontSize:17, fontWeight:900, color:G.gold, letterSpacing:1 }}>
+              {trade.trade_ref || trade.id?.slice(0, 8).toUpperCase()}
+            </div>
+            <div style={{ fontSize:11, color:G.textSub, marginTop:3 }}>
+              {isBuyer ? "You are the Buyer" : "You are the Seller"} · {trade.amount_usdt} USDT
             </div>
           </div>
-          <div style={{ textAlign:"right" }}>
-            {/* Status badge */}
-            {(() => {
-              const statusMap = {
-                waiting_payment: [G.gold, "Waiting Payment"],
-                payment_sent: [G.blue, "Payment Sent"],
-                seller_confirmed: [G.green, "Confirmed"],
-                completed: [G.green, "Completed"],
-                disputed: [G.red, "Disputed"],
-                cancelled: [G.textSub, "Cancelled"],
-              };
-              const [color, label] = statusMap[trade.status] || [G.textSub, trade.status];
-              return <Badge color={color}>{label}</Badge>;
-            })()}
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+            <Badge color={statusColor}>{statusLabel}</Badge>
+            {isActive && (
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background:timerColor, animation:urgency==="critical"?"pulse 1s ease-in-out infinite":"none" }} />
+                <span style={{ fontFamily:"monospace", fontSize:15, fontWeight:900, color:timerColor }}>{timeLeft}</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Progress bar */}
+        {/* Progress Steps */}
         {isActive && (
-          <div style={{ display:"flex", alignItems:"center", gap:0, marginBottom:14 }}>
+          <div style={{ display:"flex", alignItems:"center" }}>
             {steps.map((step, i) => {
               const done = i < currentStep;
               const active = i === currentStep;
-              const stepColor = done ? G.green : active ? G.gold : G.textDim;
+              const c = done ? G.green : active ? G.gold : G.textDim;
               return (
                 <div key={step} style={{ display:"flex", alignItems:"center", flex:1 }}>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flex:"0 0 auto" }}>
-                    <div style={{
-                      width:28, height:28, borderRadius:"50%",
-                      background:done ? G.green : active ? G.gold : G.surface,
-                      border:`2px solid ${stepColor}`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      transition:"all 0.3s",
-                    }}>
-                      {done
-                        ? <span style={{ color:"#000", fontSize:12, fontWeight:900 }}>✓</span>
-                        : <span style={{ color:active ? "#000" : G.textDim, fontSize:11, fontWeight:800 }}>{i + 1}</span>
-                      }
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
+                    <div style={{ width:30, height:30, borderRadius:"50%", background:done ? G.green : active ? G.gold : G.surface, border:`2px solid ${c}`, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.3s", boxShadow:active ? `0 0 10px ${G.gold}44` : "none" }}>
+                      {done ? <span style={{ color:"#000", fontSize:13, fontWeight:900 }}>✓</span>
+                             : <span style={{ color:active ? "#000" : G.textDim, fontSize:11, fontWeight:800 }}>{i+1}</span>}
                     </div>
-                    <div style={{ fontSize:9, color:stepColor, marginTop:3, fontWeight:700 }}>{step}</div>
+                    <div style={{ fontSize:9, color:c, marginTop:3, fontWeight:700 }}>{step}</div>
                   </div>
-                  {i < steps.length - 1 && (
-                    <div style={{ flex:1, height:2, background:i < currentStep ? G.green : G.border, margin:"0 4px", marginBottom:16, transition:"background 0.3s" }} />
-                  )}
+                  {i < steps.length-1 && <div style={{ flex:1, height:2.5, background:i < currentStep ? G.green : G.border, margin:"0 4px", marginBottom:16, transition:"background 0.4s", borderRadius:2 }} />}
                 </div>
               );
             })}
           </div>
         )}
+      </div>
 
-        {/* Timer */}
-        {isActive && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ fontSize:11, color:G.textSub }}>
-              {expired ? "Trade expired" : "Time to pay"}
+      {/* ── TRADE SUMMARY ── */}
+      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:G.r, marginBottom:12, overflow:"hidden" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)" }}>
+          {[
+            ["USDT", `${trade.amount_usdt}`, G.gold],
+            ["Rate", `${trade.rate_etb}`, G.text],
+            [isBuyer ? "You Pay" : "You Get", `${isBuyer ? sellerAmount + platformFee : sellerAmount}`, isBuyer ? G.text : G.green],
+          ].map(([k, v, c], i) => (
+            <div key={k} style={{ padding:"12px 14px", borderRight:i<2?`1px solid ${G.border}`:"none", textAlign:"center" }}>
+              <div style={{ fontSize:9, color:G.textDim, marginBottom:4, letterSpacing:1 }}>{k}</div>
+              <div style={{ fontSize:16, fontWeight:900, color:c, fontFamily:"'Playfair Display',serif" }}>{v}</div>
+              <div style={{ fontSize:9, color:G.textDim, marginTop:1 }}>{k==="USDT"?"USDT":k==="Rate"?"ETB/USDT":"ETB"}</div>
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              {!expired && urgency === "critical" && (
-                <style>{`@keyframes timerPulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
-              )}
-              <div style={{
-                fontFamily:"monospace", fontSize:18, fontWeight:900,
-                color:timerColor,
-                animation:urgency === "critical" && !expired ? "timerPulse 1s ease-in-out infinite" : "none",
-              }}>
-                {timeLeft}
+          ))}
+        </div>
+        <div style={{ borderTop:`1px solid ${G.border}`, padding:"10px 14px", display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:6 }}>
+          <div style={{ display:"flex", gap:6 }}>
+            <span style={{ fontSize:11, color:G.textSub }}>Method:</span>
+            <span style={{ fontSize:11, color:G.text, fontWeight:600 }}>{trade.payment_method}</span>
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <span style={{ fontSize:11, color:G.textSub }}>Network:</span>
+            <span style={{ fontSize:11, color:G.gold, fontWeight:700 }}>{trade.network || "—"}</span>
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <span style={{ fontSize:11, color:G.textSub }}>{isBuyer ? "Seller" : "Buyer"}:</span>
+            <span style={{ fontSize:11, color:G.text, fontWeight:600 }}>{isBuyer ? trade.seller_display_name : trade.buyer_display_name}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════
+          BUYER — waiting_payment
+      ══════════════════════════════════════ */}
+      {isBuyer && trade.status === "waiting_payment" && (<>
+        {/* Payment breakdown */}
+        <style>{`@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+        <div style={{ background:G.card, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"14px 16px", marginBottom:10, animation:"slideDown 0.4s ease" }}>
+          <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:12 }}>Your Payment Breakdown</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, padding:"10px 12px", background:G.bgDeep, borderRadius:G.rs }}>
+            <span style={{ fontSize:13, color:G.textSub }}>Total to pay</span>
+            <span style={{ fontSize:22, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif" }}>{sellerAmount + platformFee} ETB</span>
+          </div>
+          <div style={{ borderLeft:`3px solid ${G.border}`, paddingLeft:14, marginLeft:6 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:7 }}>
+              <span style={{ fontSize:12, color:G.textSub }}>→ To Seller ({trade.payment_method})</span>
+              <span style={{ fontSize:13, fontWeight:800, color:G.green }}>{sellerAmount} ETB</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", borderLeft:`2px solid ${G.gold}55`, paddingLeft:10 }}>
+              <span style={{ fontSize:12, color:G.textSub }}>→ To RegimeEdge (separate transfer)</span>
+              <span style={{ fontSize:13, fontWeight:800, color:G.gold }}>{platformFee} ETB</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Step 1: Pay Seller */}
+        <div style={{ background:G.card, border:`1px solid ${G.green}33`, borderRadius:G.r, padding:"14px 16px", marginBottom:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+            <div style={{ width:28, height:28, borderRadius:"50%", background:G.green, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ color:"#000", fontSize:13, fontWeight:900 }}>1</span>
+            </div>
+            <span style={{ fontSize:12, color:G.green, fontWeight:800, letterSpacing:1, textTransform:"uppercase" }}>Pay the Seller</span>
+          </div>
+          <div style={{ background:G.surface, borderRadius:G.rs, padding:"12px 14px", marginBottom:10 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+              <span style={{ fontSize:12, color:G.textSub }}>Amount</span>
+              <span style={{ fontSize:16, fontWeight:900, color:G.gold }}>{sellerAmount} ETB</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+              <span style={{ fontSize:12, color:G.textSub }}>Method</span>
+              <span style={{ fontSize:13, color:G.text, fontWeight:700 }}>{trade.payment_method}</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:trade.seller_account_name ? 6 : 0 }}>
+              <span style={{ fontSize:12, color:G.textSub }}>Account</span>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:13, color:G.text, fontWeight:700, fontFamily:"monospace" }}>{trade.seller_account}</span>
+                <button onClick={() => copy("sel_acc", trade.seller_account)} style={{ background:copied.sel_acc ? G.green : G.surface, border:`1px solid ${copied.sel_acc ? G.green : G.border}`, borderRadius:6, padding:"3px 8px", cursor:"pointer", color:copied.sel_acc ? "#000" : G.textSub, fontSize:10, fontWeight:700 }}>
+                  {copied.sel_acc ? "✓" : "Copy"}
+                </button>
               </div>
+            </div>
+            {trade.seller_account_name && (
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ fontSize:12, color:G.textSub }}>Account Name</span>
+                <span style={{ fontSize:12, color:G.text, fontWeight:600 }}>{trade.seller_account_name}</span>
+              </div>
+            )}
+          </div>
+          <div style={{ background:"rgba(239,68,68,0.08)", borderRadius:G.rs, padding:"8px 12px" }}>
+            <p style={{ color:G.red, fontSize:11, margin:0, fontWeight:700 }}>Send EXACTLY {sellerAmount} ETB — not more, not less</p>
+          </div>
+        </div>
+
+        {/* Step 2: Pay Platform Fee */}
+        {config && (config.admin_cbe_account || config.admin_telebirr) && (
+          <div style={{ background:G.card, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"14px 16px", marginBottom:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:G.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <span style={{ color:"#000", fontSize:13, fontWeight:900 }}>2</span>
+              </div>
+              <span style={{ fontSize:12, color:G.gold, fontWeight:800, letterSpacing:1, textTransform:"uppercase" }}>Pay RegimeEdge — {platformFee} ETB</span>
+            </div>
+            <div style={{ background:G.surface, borderRadius:G.rs, padding:"12px 14px" }}>
+              {config.admin_cbe_account && (
+                <div style={{ marginBottom:config.admin_telebirr ? 10 : 0 }}>
+                  <div style={{ fontSize:10, color:G.textDim, marginBottom:3, letterSpacing:1 }}>CBE</div>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:G.text, fontFamily:"monospace" }}>{config.admin_cbe_account}</span>
+                    <button onClick={() => copy("adm_cbe", config.admin_cbe_account)} style={{ background:copied.adm_cbe ? G.green : G.surface, border:`1px solid ${copied.adm_cbe ? G.green : G.border}`, borderRadius:6, padding:"3px 8px", cursor:"pointer", color:copied.adm_cbe ? "#000" : G.textSub, fontSize:10, fontWeight:700 }}>{copied.adm_cbe ? "✓" : "Copy"}</button>
+                  </div>
+                  {config.admin_cbe_name && <div style={{ fontSize:11, color:G.textSub, marginTop:2 }}>{config.admin_cbe_name}</div>}
+                </div>
+              )}
+              {config.admin_telebirr && (
+                <div>
+                  <div style={{ fontSize:10, color:G.textDim, marginBottom:3, letterSpacing:1 }}>Telebirr</div>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:G.text, fontFamily:"monospace" }}>{config.admin_telebirr}</span>
+                    <button onClick={() => copy("adm_tb", config.admin_telebirr)} style={{ background:copied.adm_tb ? G.green : G.surface, border:`1px solid ${copied.adm_tb ? G.green : G.border}`, borderRadius:6, padding:"3px 8px", cursor:"pointer", color:copied.adm_tb ? "#000" : G.textSub, fontSize:10, fontWeight:700 }}>{copied.adm_tb ? "✓" : "Copy"}</button>
+                  </div>
+                  {config.admin_telebirr_name && <div style={{ fontSize:11, color:G.textSub, marginTop:2 }}>{config.admin_telebirr_name}</div>}
+                </div>
+              )}
             </div>
           </div>
         )}
-      </Card>
 
-      {/* Trade Summary */}
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:12 }}>Trade Summary</div>
-        {[
-          ["USDT Amount", `${trade.amount_usdt} USDT`, G.gold],
-          ["Rate", `${trade.rate_etb} ETB / USDT`, G.text],
-          ["To Seller", `${sellerAmount} ETB`, G.text],
-          ["Platform Fee", `${platformFee} ETB`, G.textSub],
-          ["Payment Method", trade.payment_method, G.text],
-          ["Your Role", isBuyer ? "BUYER" : "SELLER", isBuyer ? G.blue : G.green],
-          ["Partner", isBuyer ? trade.seller_display_name : trade.buyer_display_name, G.text],
-          ["Network", trade.network || "—", G.text],
-        ].map(([l, v, c]) => (
-          <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${G.border}22`, fontSize:12 }}>
-            <span style={{ color:G.textSub }}>{l}</span>
-            <span style={{ color:c, fontWeight:600 }}>{v}</span>
+        {/* Step 3: Upload proof */}
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:G.r, padding:"14px 16px", marginBottom:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+            <div style={{ width:28, height:28, borderRadius:"50%", background:G.surface, border:`2px solid ${G.border}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ color:G.textSub, fontSize:13, fontWeight:900 }}>3</span>
+            </div>
+            <span style={{ fontSize:12, color:G.textSub, fontWeight:800, letterSpacing:1, textTransform:"uppercase" }}>Upload Both Payment Screenshots</span>
           </div>
-        ))}
-      </Card>
+          <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:12 }}>
+            <UploadBtn label="Screenshot of seller payment" uploaded={!!proof1} inputRef={proof1Ref} preview={proof1Preview} onChange={e => preRead(e, setProof1, setProof1Preview)} />
+            <UploadBtn label="Screenshot of platform fee payment" uploaded={!!proof2} inputRef={proof2Ref} preview={proof2Preview} onChange={e => preRead(e, setProof2, setProof2Preview)} />
+          </div>
+          <ErrBox msg={err} />
+          <Btn onClick={markPaid} disabled={!proof1 || !proof2 || loading || expired} color={G.green}>
+            {loading ? "Submitting..." : expired ? "Trade Expired" : "✓ I Have Paid Both — Submit Proof"}
+          </Btn>
+        </div>
+      </>)}
 
-      {/* ── BUYER: waiting_payment ── */}
-      {isBuyer && trade.status === "waiting_payment" && (
-        <>
-          {/* Animated fee breakdown reveal */}
-          <style>{`
-            @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
-          `}</style>
-          <Card style={{ marginBottom:12, animation:"slideDown 0.4s 0.3s ease both" }}>
-            <div style={{ fontSize:10, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:12 }}>Payment Breakdown</div>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-              <span style={{ fontSize:13, color:G.textSub }}>Total you pay</span>
-              <span style={{ fontSize:18, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif" }}>{sellerAmount + platformFee} ETB</span>
-            </div>
-            <div style={{ borderLeft:`3px solid ${G.border}`, paddingLeft:12, marginLeft:4 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                <span style={{ fontSize:12, color:G.textSub }}>→ To Seller</span>
-                <span style={{ fontSize:13, fontWeight:700, color:G.green }}>{sellerAmount} ETB</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", borderLeft:`2px solid ${G.gold}44`, paddingLeft:8, marginLeft:-4 }}>
-                <span style={{ fontSize:12, color:G.textSub }}>→ RegimeEdge Exchange Fee</span>
-                <span style={{ fontSize:13, fontWeight:700, color:G.gold }}>{platformFee} ETB</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Step 1: Pay Seller */}
-          <Card style={{ marginBottom:10, borderColor:G.green+"33" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-              <div style={{ width:22, height:22, borderRadius:"50%", background:G.green, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <span style={{ fontSize:12, fontWeight:900, color:"#000" }}>1</span>
-              </div>
-              <span style={{ fontSize:10, color:G.green, letterSpacing:2, textTransform:"uppercase", fontWeight:700 }}>Payment 1 — Pay the Seller</span>
-            </div>
-            <div style={{ background:G.surface, borderRadius:G.rs, padding:"10px 12px", marginBottom:10 }}>
-              {[
-                ["Method", trade.payment_method],
-                ["Amount", `${sellerAmount} ETB`],
-              ].map(([l, v]) => (
-                <div key={l} style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                  <span style={{ fontSize:12, color:G.textSub }}>{l}</span>
-                  <span style={{ fontSize:13, color:l === "Amount" ? G.gold : G.text, fontWeight:l === "Amount" ? 900 : 700 }}>{v}</span>
-                </div>
-              ))}
-              {/* Account with copy */}
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:4 }}>
-                <span style={{ fontSize:12, color:G.textSub }}>Account</span>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:13, color:G.text, fontWeight:700 }}>{trade.seller_account}</span>
-                  <button onClick={() => copy("seller_acc", trade.seller_account)} style={{
-                    background:copied.seller_acc ? G.green : G.surface,
-                    border:`1px solid ${copied.seller_acc ? G.green : G.border}`,
-                    borderRadius:6, padding:"3px 7px", cursor:"pointer",
-                    color:copied.seller_acc ? "#000" : G.textSub, fontSize:10,
-                  }}>
-                    {copied.seller_acc ? "✓" : "Copy"}
-                  </button>
-                </div>
-              </div>
-              {trade.seller_account_name && (
-                <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
-                  <span style={{ fontSize:12, color:G.textSub }}>Account Name</span>
-                  <span style={{ fontSize:13, color:G.text, fontWeight:600 }}>{trade.seller_account_name}</span>
-                </div>
-              )}
-            </div>
-            <div style={{ background:G.redBg, borderRadius:G.rs, padding:"8px 12px" }}>
-              <p style={{ color:G.red, fontSize:11, margin:0, fontWeight:700 }}>
-                Send EXACTLY {sellerAmount} ETB — not more, not less
-              </p>
-            </div>
-          </Card>
-
-          {/* Step 2: Pay Platform Fee */}
-          {config && (config.admin_cbe_account || config.admin_telebirr) && (
-            <Card style={{ marginBottom:10, borderColor:G.gold+"33" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                <div style={{ width:22, height:22, borderRadius:"50%", background:G.gold, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <span style={{ fontSize:12, fontWeight:900, color:"#000" }}>2</span>
-                </div>
-                <span style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", fontWeight:700 }}>Payment 2 — RegimeEdge Fee — {platformFee} ETB</span>
-              </div>
-              <div style={{ background:G.surface, borderRadius:G.rs, padding:"10px 12px" }}>
-                {config.admin_cbe_account && (
-                  <div style={{ marginBottom:config.admin_telebirr ? 10 : 0 }}>
-                    <div style={{ fontSize:10, color:G.textDim, marginBottom:3 }}>CBE</div>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                      <span style={{ fontSize:13, fontWeight:700, color:G.text }}>{config.admin_cbe_account}</span>
-                      <button onClick={() => copy("admin_cbe", config.admin_cbe_account)} style={{
-                        background:copied.admin_cbe ? G.green : G.surface,
-                        border:`1px solid ${copied.admin_cbe ? G.green : G.border}`,
-                        borderRadius:6, padding:"3px 7px", cursor:"pointer",
-                        color:copied.admin_cbe ? "#000" : G.textSub, fontSize:10,
-                      }}>{copied.admin_cbe ? "✓" : "Copy"}</button>
-                    </div>
-                    {config.admin_cbe_name && <div style={{ fontSize:11, color:G.textSub, marginTop:2 }}>{config.admin_cbe_name}</div>}
-                  </div>
-                )}
-                {config.admin_telebirr && (
-                  <div>
-                    <div style={{ fontSize:10, color:G.textDim, marginBottom:3 }}>Telebirr</div>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                      <span style={{ fontSize:13, fontWeight:700, color:G.text }}>{config.admin_telebirr}</span>
-                      <button onClick={() => copy("admin_tb", config.admin_telebirr)} style={{
-                        background:copied.admin_tb ? G.green : G.surface,
-                        border:`1px solid ${copied.admin_tb ? G.green : G.border}`,
-                        borderRadius:6, padding:"3px 7px", cursor:"pointer",
-                        color:copied.admin_tb ? "#000" : G.textSub, fontSize:10,
-                      }}>{copied.admin_tb ? "✓" : "Copy"}</button>
-                    </div>
-                    {config.admin_telebirr_name && <div style={{ fontSize:11, color:G.textSub, marginTop:2 }}>{config.admin_telebirr_name}</div>}
-                  </div>
-                )}
-              </div>
-              <div style={{ marginTop:8 }}>
-                <p style={{ color:G.textSub, fontSize:11, margin:0 }}>
-                  This is the RegimeEdge platform fee — paid once per trade, separately to admin.
-                </p>
-              </div>
-            </Card>
-          )}
-
-          {/* Step 3: Upload proof */}
-          <Card style={{ marginBottom:12 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
-              <div style={{ width:22, height:22, borderRadius:"50%", background:G.surface, border:`1px solid ${G.border}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <span style={{ fontSize:12, fontWeight:900, color:G.textSub }}>3</span>
-              </div>
-              <span style={{ fontSize:10, color:G.textSub, letterSpacing:2, textTransform:"uppercase", fontWeight:700 }}>Upload Both Screenshots</span>
-            </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:12 }}>
-              <UploadBtn
-                label="Screenshot of seller payment"
-                uploaded={!!proof1} inputRef={proof1Ref} preview={proof1Preview}
-                onChange={e => preRead(e, setProof1, setProof1Preview)}
-              />
-              <UploadBtn
-                label="Screenshot of platform fee payment"
-                uploaded={!!proof2} inputRef={proof2Ref} preview={proof2Preview}
-                onChange={e => preRead(e, setProof2, setProof2Preview)}
-              />
-            </div>
-            <ErrBox msg={err} />
-            <Btn
-              onClick={markPaid}
-              disabled={!proof1 || !proof2 || loading || expired}
-              color={G.green}
-            >
-              {loading ? "Submitting..." : expired ? "Trade Expired" : "I Have Paid Both ✓"}
-            </Btn>
-          </Card>
-        </>
-      )}
-
-      {/* ── BUYER: payment_sent ── */}
+      {/* ══════════════════════════════════════
+          BUYER — payment_sent (waiting for seller)
+      ══════════════════════════════════════ */}
       {isBuyer && trade.status === "payment_sent" && (
-        <GlowCard color={G.blue} style={{ marginBottom:12, textAlign:"center" }}>
-          <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-            <Icon name="clock" size={28} color={G.blue} />
+        <div style={{ background:G.card, border:`1px solid ${G.blue}33`, borderRadius:G.r, padding:"20px 16px", marginBottom:12 }}>
+          <div style={{ textAlign:"center", marginBottom:16 }}>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            <div style={{ width:48, height:48, border:`3px solid ${G.border}`, borderTop:`3px solid ${G.blue}`, borderRadius:"50%", animation:"spin 1.2s linear infinite", margin:"0 auto 12px" }} />
+            <div style={{ fontSize:15, fontWeight:800, color:G.blue, marginBottom:6 }}>Waiting for Seller to Release</div>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>Your screenshots were received. The seller is verifying both payments.</p>
           </div>
-          <div style={{ color:G.blue, fontWeight:700, fontSize:14 }}>Waiting for Seller to Release</div>
-          <p style={{ color:G.textSub, fontSize:12, margin:"6px 0 0" }}>
-            Payment submitted. The seller is verifying your screenshots.
-          </p>
-          {/* Show proof thumbnails */}
           {(trade.payment_proof_url || trade.payment_proof_url_2) && (
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
-              {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([, u]) => u).map(([label, url], i) => (
-                <a key={i} href={url} target="_blank" rel="noreferrer" style={{
-                  display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                  background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs,
-                  padding:"10px 0", color:G.blue, fontSize:11, textDecoration:"none",
-                }}>
-                  <Icon name="eye" size={14} color={G.blue} />
-                  {label}
-                </a>
-              ))}
-            </div>
-          )}
-        </GlowCard>
-      )}
-
-      {/* ── SELLER: waiting_payment ── */}
-      {isSeller && trade.status === "waiting_payment" && (
-        <Card style={{ marginBottom:12, borderColor:G.gold+"33" }}>
-          <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:12 }}>Awaiting Buyer Payment</div>
-          <div style={{ background:G.surface, borderRadius:G.rs, padding:"12px 14px", marginBottom:12 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-              <span style={{ fontSize:12, color:G.textSub }}>You will receive</span>
-              <span style={{ fontSize:18, fontWeight:900, color:G.green, fontFamily:"'Playfair Display',serif" }}>{sellerAmount} ETB</span>
-            </div>
-            <div style={{ display:"flex", justifyContent:"space-between" }}>
-              <span style={{ fontSize:12, color:G.textSub }}>Platform fee (paid by buyer separately)</span>
-              <span style={{ fontSize:12, color:G.textSub }}>{platformFee} ETB</span>
-            </div>
-          </div>
-          <p style={{ color:G.textSub, fontSize:12, lineHeight:1.6, margin:0 }}>
-            Buyer will upload 2 screenshots — one for your payment, one for the platform fee. Verify both before releasing USDT.
-          </p>
-        </Card>
-      )}
-
-      {/* ── SELLER: payment_sent — verify checklist ── */}
-      {isSeller && trade.status === "payment_sent" && (
-        <Card style={{ marginBottom:12, borderColor:G.green+"44" }}>
-          <div style={{ fontSize:13, fontWeight:800, color:G.green, marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
-            <Icon name="checkCircle" size={16} color={G.green} />
-            Buyer Claims Payment Sent
-          </div>
-
-          {/* Proof images */}
-          {(trade.payment_proof_url || trade.payment_proof_url_2) && (
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
-              {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([, u]) => u).map(([label, url], i) => (
-                <a key={i} href={url} target="_blank" rel="noreferrer" style={{
-                  display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                  background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs,
-                  padding:"12px 0", color:G.blue, fontSize:11, textDecoration:"none",
-                }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([,u]) => u).map(([label, url]) => (
+                <a key={label} href={url} target="_blank" rel="noreferrer" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 0", color:G.blue, fontSize:11, fontWeight:700, textDecoration:"none" }}>
                   <Icon name="eye" size={16} color={G.blue} />
                   {label}
                 </a>
               ))}
             </div>
           )}
+        </div>
+      )}
 
-          <div style={{ background:G.surface, borderRadius:G.rs, padding:"10px 12px", marginBottom:14 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-              <span style={{ fontSize:12, color:G.textSub }}>Your payment</span>
-              <span style={{ fontSize:14, fontWeight:900, color:G.green }}>{sellerAmount} ETB</span>
+      {/* ══════════════════════════════════════
+          SELLER — waiting_payment
+      ══════════════════════════════════════ */}
+      {isSeller && trade.status === "waiting_payment" && (
+        <div style={{ background:G.card, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"14px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:12 }}>Awaiting Buyer Payment</div>
+          <div style={{ background:G.surface, borderRadius:G.rs, padding:"12px 14px", marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+              <span style={{ fontSize:12, color:G.textSub }}>You will receive</span>
+              <span style={{ fontSize:20, fontWeight:900, color:G.green, fontFamily:"'Playfair Display',serif" }}>{sellerAmount} ETB</span>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between" }}>
-              <span style={{ fontSize:12, color:G.textSub }}>Platform fee (verified separately)</span>
+              <span style={{ fontSize:12, color:G.textSub }}>Platform fee (paid by buyer to our team)</span>
               <span style={{ fontSize:12, color:G.textSub }}>{platformFee} ETB</span>
             </div>
           </div>
+          {/* Buyer's USDT receive address */}
+          {trade.buyer_usdt_address && (
+            <div style={{ background:G.bgDeep, border:`1px solid ${G.gold}44`, borderRadius:G.r, padding:"12px 14px", marginBottom:12 }}>
+              <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Send USDT To — Buyer's Address</div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <div style={{ padding:"3px 12px", background:G.goldBg2, border:`1px solid ${G.gold}44`, borderRadius:20, fontSize:11, color:G.gold, fontWeight:900 }}>{trade.network || "TRC20"}</div>
+              </div>
+              <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"10px 12px", marginBottom:8 }}>
+                <div style={{ fontSize:10, color:G.textDim, marginBottom:4 }}>Buyer's USDT Wallet Address</div>
+                <div style={{ fontSize:12, color:G.text, fontWeight:700, wordBreak:"break-all", fontFamily:"monospace", lineHeight:1.6 }}>{trade.buyer_usdt_address}</div>
+              </div>
+              <button onClick={() => copy("buyer_addr", trade.buyer_usdt_address)} style={{ width:"100%", padding:"11px 0", background:copied.buyer_addr ? G.green : G.goldBg, border:`1px solid ${copied.buyer_addr ? G.green : G.gold+"44"}`, borderRadius:G.rs, color:copied.buyer_addr ? "#000" : G.gold, fontSize:12, fontWeight:800, cursor:"pointer", fontFamily:"inherit", transition:"all 0.2s" }}>
+                {copied.buyer_addr ? "✓ Copied to Clipboard!" : "Copy Address"}
+              </button>
+              <p style={{ color:G.red, fontSize:11, margin:"8px 0 0", fontWeight:700 }}>
+                ⚠ Send ONLY via {trade.network || "TRC20"} — wrong network = permanent loss of buyer's funds
+              </p>
+            </div>
+          )}
+          <p style={{ color:G.textSub, fontSize:12, lineHeight:1.6, margin:0 }}>
+            Buyer will upload 2 screenshots when done — one for your payment, one for the platform fee.
+          </p>
+        </div>
+      )}
 
+      {/* ══════════════════════════════════════
+          SELLER — payment_sent (verify & release)
+      ══════════════════════════════════════ */}
+      {isSeller && trade.status === "payment_sent" && (
+        <div style={{ background:G.card, border:`1px solid ${G.green}44`, borderRadius:G.r, padding:"14px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:G.green, marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:G.green, animation:"pulse 1.5s ease-in-out infinite" }} />
+            Buyer Claims Payment Sent — Verify Before Releasing
+          </div>
+          {/* Proof thumbnails */}
+          {(trade.payment_proof_url || trade.payment_proof_url_2) && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+              {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([,u]) => u).map(([label, url]) => (
+                <a key={label} href={url} target="_blank" rel="noreferrer" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"14px 0", color:G.blue, fontSize:11, fontWeight:700, textDecoration:"none" }}>
+                  <Icon name="eye" size={18} color={G.blue} />
+                  View {label}
+                </a>
+              ))}
+            </div>
+          )}
+          <div style={{ background:G.surface, borderRadius:G.rs, padding:"10px 12px", marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+              <span style={{ fontSize:12, color:G.textSub }}>Check your {trade.payment_method}</span>
+              <span style={{ fontSize:15, fontWeight:900, color:G.green }}>{sellerAmount} ETB</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <span style={{ fontSize:12, color:G.textSub }}>Platform fee to our team</span>
+              <span style={{ fontSize:12, color:G.textSub }}>{platformFee} ETB</span>
+            </div>
+          </div>
+          {/* Release checklist */}
           <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.rs, padding:"10px 12px", marginBottom:14 }}>
             <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>
-              <strong style={{ color:G.text }}>Before releasing:</strong> Check your {trade.payment_method} account for {sellerAmount} ETB AND confirm buyer paid {platformFee} ETB to admin.
+              <strong style={{ color:G.text }}>Before releasing:</strong> Confirm {sellerAmount} ETB arrived in your {trade.payment_method} account AND the fee screenshot shows {platformFee} ETB paid to our team.
             </p>
           </div>
-
+          <div onClick={() => setReleaseChecked(c => !c)} style={{ display:"flex", gap:10, alignItems:"center", cursor:"pointer", marginBottom:14, padding:"10px 12px", background:releaseChecked ? G.greenBg : G.surface, border:`1px solid ${releaseChecked ? G.green : G.border}`, borderRadius:G.rs, transition:"all 0.15s" }}>
+            <div style={{ width:22, height:22, borderRadius:6, border:`2px solid ${releaseChecked ? G.green : G.border}`, background:releaseChecked ? G.green : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.15s" }}>
+              {releaseChecked && <span style={{ color:"#000", fontSize:14, fontWeight:900 }}>✓</span>}
+            </div>
+            <span style={{ fontSize:13, color:releaseChecked ? G.green : G.textSub, fontWeight:600 }}>
+              I have verified both payments are correct
+            </span>
+          </div>
           <ErrBox msg={err} />
-          <Btn onClick={confirmRelease} disabled={loading} color={G.green}>
+          <Btn onClick={confirmRelease} disabled={loading || !releaseChecked} color={G.green}>
             {loading ? "Processing..." : "Release USDT to Buyer →"}
           </Btn>
           <div style={{ height:8 }} />
-          <OutlineBtn onClick={notifyBuyer} color={G.gold} small>
+          <OutlineBtn onClick={notifyBuyer} color={G.gold}>
             {notifyBusy ? "Sending..." : "⚠ Payment Incomplete — Notify Buyer"}
           </OutlineBtn>
-        </Card>
+        </div>
       )}
 
-      {/* ── COMPLETED ── */}
+      {/* ══════════════════════════════════════
+          COMPLETED
+      ══════════════════════════════════════ */}
       {trade.status === "completed" && (
-        <GlowCard color={G.green} style={{ marginBottom:12, textAlign:"center" }}>
-          <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-            <Icon name="checkCircle" size={36} color={G.green} />
+        <div style={{ background:`linear-gradient(135deg,${G.green}0a,${G.card})`, border:`1px solid ${G.green}44`, borderRadius:G.r, padding:"20px 16px", marginBottom:12, textAlign:"center" }}>
+          <style>{`@keyframes pop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}`}</style>
+          <div style={{ width:60, height:60, borderRadius:"50%", background:`${G.green}18`, border:`2px solid ${G.green}44`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", animation:"pop 0.5s ease" }}>
+            <span style={{ fontSize:28 }}>✅</span>
           </div>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.green, fontWeight:900, marginBottom:6 }}>
-            Trade Completed! 🎉
-          </div>
-          {/* Full trade details for records */}
-          <div style={{ background:G.bgDeep, borderRadius:G.rs, padding:"12px 14px", marginTop:12, textAlign:"left" }}>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.green, fontWeight:900, marginBottom:6 }}>Trade Completed!</div>
+          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 16px" }}>
+            {isBuyer ? `${trade.amount_usdt} USDT sent to your ${trade.network} address.` : `You received ${sellerAmount} ETB.`}
+          </p>
+          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", textAlign:"left", marginBottom:isBuyer && !rated ? 16 : 0 }}>
             <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Trade Record</div>
             {[
               ["Reference", trade.trade_ref || "—"],
               ["Amount", `${trade.amount_usdt} USDT`],
               ["Rate", `${trade.rate_etb} ETB/USDT`],
-              ["Seller received", `${trade.total_etb} ETB`],
-              ["Platform fee", `${platformFee} ETB`],
+              ["Seller received", `${sellerAmount} ETB`],
               ["Network", trade.network || "—"],
               ["Buyer", trade.buyer_display_name],
               ["Seller", trade.seller_display_name],
-              ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-US", { dateStyle:"medium", timeStyle:"short" }) : "—"],
+              ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
             ].map(([l, v]) => (
               <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
                 <span style={{ color:G.textSub }}>{l}</span>
@@ -1480,48 +1256,39 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               </div>
             ))}
           </div>
-
-          {/* Rating (buyer only) */}
           {isBuyer && !rated && (
-            <div style={{ marginTop:14 }}>
-              <div style={{ fontSize:13, color:G.textSub, marginBottom:10 }}>Rate your seller</div>
-              <div style={{ display:"flex", justifyContent:"center", gap:8, marginBottom:8 }}>
-                {[1, 2, 3, 4, 5].map(s => (
-                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24"
-                      fill={s <= stars ? G.gold : "none"}
-                      stroke={s <= stars ? G.gold : G.textDim} strokeWidth="1.5">
+            <div style={{ marginTop:16, textAlign:"left" }}>
+              <div style={{ fontSize:13, color:G.textSub, marginBottom:10, fontWeight:700 }}>Rate your seller</div>
+              <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:10 }}>
+                {[1,2,3,4,5].map(s => (
+                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.1s", transform:s <= stars ? "scale(1.2)" : "scale(1)" }}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill={s <= stars ? G.gold : "none"} stroke={s <= stars ? G.gold : G.textDim} strokeWidth="1.5">
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   </button>
                 ))}
               </div>
-              {stars > 0 && (
-                <div style={{ marginBottom:8 }}>
-                  <FI value={ratingComment} onChange={setRatingComment} placeholder="Leave a comment (optional)" style={{ fontSize:12 }} />
-                </div>
-              )}
+              {stars > 0 && <FI value={ratingComment} onChange={setRatingComment} placeholder="Leave a comment (optional)" style={{ marginBottom:10, fontSize:12 }} />}
               <div style={{ display:"flex", gap:8 }}>
                 <Btn onClick={submitRating} disabled={!stars || loading} small style={{ flex:1 }}>Submit Rating</Btn>
-                <button onClick={() => setRated(true)} style={{ background:"none", border:"none", color:G.textSub, fontSize:12, cursor:"pointer", fontFamily:"inherit", padding:"0 12px" }}>Skip</button>
+                <button onClick={() => setRated(true)} style={{ background:"none", border:"none", color:G.textSub, fontSize:12, cursor:"pointer", fontFamily:"inherit", padding:"0 14px" }}>Skip</button>
               </div>
             </div>
           )}
-          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"8px 0 0" }}>Rating submitted. Thank you!</p>}
-        </GlowCard>
+          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"10px 0 0" }}>Thanks for rating! 🙏</p>}
+        </div>
       )}
 
-      {/* ── CANCELLED ── */}
+      {/* ══════════════════════════════════════
+          CANCELLED
+      ══════════════════════════════════════ */}
       {trade.status === "cancelled" && (
-        <GlowCard color={G.textSub} style={{ marginBottom:12 }}>
-          <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-            <Icon name="xCircle" size={32} color={G.textSub} />
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:G.r, padding:"18px 16px", marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+            <span style={{ fontSize:24 }}>❌</span>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.textSub, fontWeight:900 }}>Trade Cancelled</div>
           </div>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.textSub, fontWeight:900, marginBottom:6, textAlign:"center" }}>
-            Trade Cancelled
-          </div>
-          {/* Full details */}
-          <div style={{ background:G.bgDeep, borderRadius:G.rs, padding:"12px 14px", marginTop:10 }}>
+          <div style={{ background:G.bgDeep, borderRadius:G.rs, padding:"12px 14px" }}>
             {[
               ["Reference", trade.trade_ref || "—"],
               ["Cancelled by", trade.cancelled_by || "—"],
@@ -1536,262 +1303,355 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               </div>
             ))}
           </div>
-        </GlowCard>
+        </div>
       )}
 
-      {/* ── DISPUTED ── */}
+      {/* ══════════════════════════════════════
+          DISPUTED
+      ══════════════════════════════════════ */}
       {trade.status === "disputed" && (
-        <GlowCard color={G.red} style={{ marginBottom:12 }}>
-          <div style={{ color:G.red, fontWeight:700, fontSize:14, marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
-            <Icon name="alertCircle" size={16} color={G.red} />Dispute Active
+        <div style={{ background:G.card, border:`1px solid ${G.red}44`, borderRadius:G.r, padding:"16px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:G.red, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:20 }}>⚠️</span> Dispute Active
           </div>
           {trade.dispute_reason && (
             <div style={{ background:G.redBg, borderRadius:G.rs, padding:"8px 12px", marginBottom:10 }}>
               <p style={{ color:G.textSub, fontSize:12, margin:0 }}><strong style={{ color:G.red }}>Reason:</strong> {trade.dispute_reason}</p>
             </div>
           )}
-          {/* Full details */}
-          <div style={{ background:G.bgDeep, borderRadius:G.rs, padding:"12px 14px", marginTop:4 }}>
-            {[
-              ["Reference", trade.trade_ref || "—"],
-              ["Amount", `${trade.amount_usdt} USDT`],
-              ["Buyer", trade.buyer_display_name],
-              ["Seller", trade.seller_display_name],
-              ["Disputed at", trade.disputed_at ? new Date(trade.disputed_at).toLocaleString() : "—"],
-            ].map(([l, v]) => (
+          <div style={{ background:G.bgDeep, borderRadius:G.rs, padding:"12px 14px", marginBottom:10 }}>
+            {[["Reference", trade.trade_ref || "—"], ["Amount", `${trade.amount_usdt} USDT`], ["Buyer", trade.buyer_display_name], ["Seller", trade.seller_display_name]].map(([l, v]) => (
               <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
                 <span style={{ color:G.textSub }}>{l}</span>
                 <span style={{ color:G.text, fontWeight:600 }}>{v}</span>
               </div>
             ))}
           </div>
-          <p style={{ color:G.textSub, fontSize:12, margin:"10px 0 0", lineHeight:1.6 }}>
-            Admin will contact both parties on Telegram within 2 hours.{" "}
-            <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{ color:G.gold }}>Contact Admin →</a>
+          <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>
+            Our team will contact both parties on Telegram within 2 hours.{" "}
+            <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{ color:G.gold, fontWeight:700 }}>Contact Our Team →</a>
           </p>
-        </GlowCard>
+        </div>
       )}
 
-      {OkBox({ msg })}
-
-      {/* ── Dispute & Cancel buttons (active trades) ── */}
-      {isActive && !["completed", "cancelled", "disputed"].includes(trade.status) && (
+      {/* ══════════════════════════════════════
+          DISPUTE + CANCEL BUTTONS (active only)
+      ══════════════════════════════════════ */}
+      {isActive && (
         <div style={{ marginBottom:12, display:"flex", flexDirection:"column", gap:8 }}>
-          {/* Dispute */}
           {!showDispute ? (
-            <OutlineBtn onClick={() => setShowDispute(true)} color={G.red} small>
-              Raise a Dispute
-            </OutlineBtn>
+            <OutlineBtn onClick={() => setShowDispute(true)} color={G.red} small>Raise a Dispute</OutlineBtn>
           ) : (
-            <Card style={{ borderColor:G.red+"33" }}>
+            <div style={{ background:G.card, border:`1px solid ${G.red}33`, borderRadius:G.r, padding:"14px 14px" }}>
               <div style={{ fontSize:13, fontWeight:700, color:G.red, marginBottom:10 }}>Raise a Dispute</div>
               <textarea
                 value={disputeReason}
                 onChange={e => setDisputeReason(e.target.value)}
                 placeholder="Describe what went wrong in detail..."
-                style={{
-                  width:"100%", background:G.surface, border:`1px solid ${G.border}`,
-                  borderRadius:G.rs, padding:"11px 13px", color:G.text,
-                  fontSize:13, outline:"none", boxSizing:"border-box",
-                  fontFamily:"inherit", resize:"vertical", minHeight:80, marginBottom:10,
-                }}
+                style={{ width:"100%", background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"11px 13px", color:G.text, fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"inherit", resize:"vertical", minHeight:80, marginBottom:10 }}
               />
               <ErrBox msg={err} />
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                 <OutlineBtn onClick={() => { setShowDispute(false); setErr(""); }} small>Cancel</OutlineBtn>
                 <Btn onClick={raiseDispute} disabled={!disputeReason.trim() || loading} color={G.red} small>Submit</Btn>
               </div>
-            </Card>
+            </div>
           )}
-
-          {/* Cancel trade (any active trade, before payment_sent) */}
-          <OutlineBtn onClick={() => setShowCancelModal(true)} color={G.textSub} small>
-            Cancel Trade
-          </OutlineBtn>
+          <OutlineBtn onClick={() => setShowCancelModal(true)} color={G.textSub} small>Cancel Trade</OutlineBtn>
         </div>
       )}
 
-      {/* Chat */}
-      {!["cancelled"].includes(trade.status) && (
-        <TradeChat trade={trade} user={user} />
-      )}
+      {/* Trade Chat */}
+      {trade.status !== "cancelled" && <TradeChat trade={trade} user={user} />}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SELL FORM
+// BUY FLOW — Multi-step modal (Amount → Network → Address → Confirm)
 // ─────────────────────────────────────────────────────────────────────────────
-const ALL_PAYMENT_METHODS = ["CBE (Commercial Bank)", "Telebirr", "Awash Bank", "Abyssinia Bank", "Dashen Bank"];
+const NETWORKS = [
+  {
+    id:"TRC20", label:"TRC20", chain:"TRON Network",
+    sub:"Most common in Ethiopia — recommended",
+    fee:"~1 USDT network fee",
+    how:"Open Binance → Wallets → Spot → USDT → Withdraw → select TRC20 → copy address",
+    prefix:"T", length:"34 characters starting with T",
+  },
+  {
+    id:"BEP20", label:"BEP20 (BSC)", chain:"BNB Smart Chain",
+    sub:"Lower fee — use only if you have a BSC wallet",
+    fee:"~0.1 USDT network fee",
+    how:"Open Binance → Wallets → Spot → USDT → Withdraw → select BEP20 (BSC) → copy address",
+    prefix:"0x", length:"42 characters starting with 0x",
+  },
+];
 
-function SellForm({ user, kyc, config, onBack, onDone }) {
+function BuyFlowModal({ listing, user, kyc, config, onConfirm, onCancel }) {
+  const [step, setStep] = useState(1);
   const [amount, setAmount] = useState("");
-  const [rate, setRate] = useState("");
-  const [selectedMethods, setSelectedMethods] = useState([]);
-  const [methodAccounts, setMethodAccounts] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [done, setDone] = useState(false);
+  const [network, setNetwork] = useState("TRC20");
+  const [address, setAddress] = useState("");
+  const [addrErr, setAddrErr] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const minRate = config?.min_rate_etb || 160;
-  const maxRate = config?.max_rate_etb || 195;
-  const min = config?.min_usdt || 5;
-  const max = config?.max_usdt || 500;
-  const fee = config?.platform_fee_etb || 75;
+  const fee = config?.platform_fee_etb || 50;
+  const minU = config?.min_usdt || 5;
+  const maxU = Math.min(config?.max_usdt || 500, listing.amount_usdt);
   const amt = parseFloat(amount) || 0;
-  const rateVal = parseFloat(rate) || 0;
-  const totalEtb = amt && rateVal ? Math.round(amt * rateVal) : 0;
+  const sellerEtb = amt && listing.rate_etb ? Math.round(amt * listing.rate_etb) : 0;
+  const totalEtb = sellerEtb + fee;
+  const amtValid = amt >= minU && amt <= maxU;
+  const selectedNet = NETWORKS.find(n => n.id === network);
 
-  // Pre-fill rate with midpoint as suggestion
-  useEffect(() => {
-    if (!rate && minRate && maxRate) {
-      setRate(String(Math.round((minRate + maxRate) / 2)));
-    }
-  }, [minRate, maxRate]);
-
-  const toggleMethod = m => setSelectedMethods(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
-  const setAccountField = (method, field, value) => setMethodAccounts(prev => ({ ...prev, [method]: { ...prev[method], [field]: value } }));
-
-  const rateValid = rateVal >= minRate && rateVal <= maxRate;
-  const canSubmit = amount && amt >= min && amt <= max && rateValid &&
-    selectedMethods.length > 0 &&
-    selectedMethods.every(m => methodAccounts[m]?.account?.trim() && methodAccounts[m]?.name?.trim());
-
-  const handlePost = async () => {
-    setErr(""); setLoading(true);
-    try {
-      const primaryAccount = methodAccounts[selectedMethods[0]];
-      const paymentDetails = selectedMethods.map(m => ({ method: m, ...methodAccounts[m] }));
-      await p2pInsert("p2p_listings", {
-        seller_id:user.id,
-        seller_display_name:kyc?.full_name || user.name || "Seller",
-        amount_usdt:amt,
-        rate_etb:rateVal,
-        total_etb:totalEtb,
-        display_total_etb:totalEtb + fee,
-        payment_method:selectedMethods.join(", "),
-        payment_details:JSON.stringify(paymentDetails),
-        seller_account:primaryAccount?.account || "",
-        seller_account_name:primaryAccount?.name || "",
-        seller_rating:0, seller_completed_trades:0, seller_success_rate:0,
-        seller_trust_plus:kyc?.trust_plus || false,
-        status:"open",
-      });
-      await sendNotificationEmail("listing_posted", { user_id:user.id, email:user.email, amount:amt, rate:rateVal });
-      setDone(true);
-    } catch (e) {
-      setErr(e.message || "Something went wrong. Try again.");
-    } finally {
-      setLoading(false);
-    }
+  const validateAddress = (addr, net) => {
+    if (!addr.trim()) return "Address is required.";
+    if (net === "TRC20" && !addr.startsWith("T")) return "TRC20 address must start with T";
+    if (net === "BEP20" && !addr.startsWith("0x")) return "BEP20 address must start with 0x";
+    if (net === "TRC20" && addr.length !== 34) return `TRC20 address must be exactly 34 characters (yours: ${addr.length})`;
+    if (net === "BEP20" && addr.length !== 42) return `BEP20 address must be exactly 42 characters (yours: ${addr.length})`;
+    return "";
   };
 
-  if (done) return (
-    <div style={{ padding:"28px 18px", textAlign:"center" }}>
-      <GlowCard color={G.green}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
-          <Icon name="checkCircle" size={44} color={G.green} />
-        </div>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.green, fontWeight:900, marginBottom:10 }}>Listing Live</div>
-        <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:18 }}>Your listing is now visible to buyers.</p>
-        <Btn onClick={onDone} color={G.green}>Back to Exchange</Btn>
-      </GlowCard>
+  const Progress = () => (
+    <div style={{ display:"flex", alignItems:"center", marginBottom:22 }}>
+      {["Amount","Network","Address","Confirm"].map((s, i) => {
+        const idx = i + 1;
+        const done = idx < step;
+        const active = idx === step;
+        const c = done ? G.green : active ? G.gold : G.textDim;
+        return (
+          <div key={s} style={{ display:"flex", alignItems:"center", flex:1 }}>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
+              <div style={{ width:26, height:26, borderRadius:"50%", background:done ? G.green : active ? G.gold : G.surface, border:`2px solid ${c}`, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.3s" }}>
+                {done ? <span style={{ color:"#000", fontSize:11, fontWeight:900 }}>✓</span>
+                       : <span style={{ color:active ? "#000" : G.textDim, fontSize:10, fontWeight:800 }}>{idx}</span>}
+              </div>
+              <div style={{ fontSize:8, color:c, marginTop:2, fontWeight:700 }}>{s}</div>
+            </div>
+            {i < 3 && <div style={{ flex:1, height:2, background:done ? G.green : G.border, margin:"0 3px", marginBottom:14, transition:"background 0.3s" }} />}
+          </div>
+        );
+      })}
     </div>
   );
 
   return (
-    <div style={{ padding:"28px 18px" }}>
-      <BackBtn onClick={onBack} />
-      <SH label="P2P Exchange" title="Sell USDT" sub="Post your USDT for sale. Buyers find you." />
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:`${G.r}px ${G.r}px 0 0`, padding:"24px 20px 44px", width:"100%", maxWidth:480, maxHeight:"94vh", overflowY:"auto" }}>
 
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ marginBottom:14 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-            <span style={{ fontSize:11, color:G.textSub }}>USDT Amount</span>
-            <span style={{ fontSize:10, color:G.textDim }}>Min {min} · Max {max}</span>
+        {step === 1 && <>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>How much USDT?</div>
+          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>
+            Seller has <span style={{ color:G.gold, fontWeight:700 }}>{listing.amount_usdt} USDT</span> at <span style={{ color:G.text, fontWeight:700 }}>{listing.rate_etb} ETB/USDT</span>
           </div>
-          <FI value={amount} onChange={setAmount} placeholder={`${min}–${max}`} type="number" min={min} max={max} />
-          {amount && (amt < min || amt > max) && (
-            <div style={{ color:G.red, fontSize:11, marginTop:4 }}>Must be {min}–{max} USDT</div>
-          )}
-        </div>
-
-        <div>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-            <span style={{ fontSize:11, color:G.textSub }}>Your Rate (ETB per 1 USDT)</span>
-            <span style={{ fontSize:10, color:G.textDim }}>Allowed: {minRate}–{maxRate}</span>
-          </div>
-          <FI value={rate} onChange={setRate} placeholder={`${minRate}–${maxRate}`} type="number" />
-          {rate && !rateValid && (
-            <div style={{ color:G.red, fontSize:11, marginTop:4 }}>Rate must be between {minRate} and {maxRate} ETB</div>
-          )}
-        </div>
-      </Card>
-
-      {/* Live calculation */}
-      {amt > 0 && rateValid && totalEtb > 0 && (
-        <Card style={{ marginBottom:12, borderColor:G.gold+"33" }}>
-          <div style={{ fontSize:9, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Live Calculation</div>
-          {[
-            ["Buyer pays you", `${totalEtb} ETB`, G.green],
-            ["Platform fee (buyer pays admin)", `${fee} ETB`, G.textSub],
-            ["Total buyer pays", `${totalEtb + fee} ETB`, G.gold],
-          ].map(([l, v, c]) => (
-            <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${G.border}22`, fontSize:12 }}>
-              <span style={{ color:G.textSub }}>{l}</span>
-              <span style={{ color:c, fontWeight:700 }}>{v}</span>
+          <Progress />
+          <div style={{ marginBottom:14 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+              <span style={{ fontSize:11, color:G.textSub }}>Enter amount (USDT)</span>
+              <span style={{ fontSize:11, color:G.textDim }}>Min {minU} · Max {maxU}</span>
             </div>
-          ))}
-          <div style={{ marginTop:8, padding:"8px 10px", background:G.greenBg, borderRadius:G.rs }}>
-            <p style={{ color:G.green, fontSize:12, margin:0, fontWeight:700 }}>
-              ✓ You receive: {totalEtb} ETB — The 75 ETB fee is not taken from you.
-            </p>
+            <div style={{ position:"relative" }}>
+              <FI value={amount} onChange={v => setAmount(v)} placeholder={`${minU}–${maxU}`} type="number" min={minU} max={maxU} />
+              <span style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", color:G.gold, fontSize:13, fontWeight:700, pointerEvents:"none" }}>USDT</span>
+            </div>
+            {amount && !amtValid && <div style={{ color:G.red, fontSize:11, marginTop:5 }}>Enter between {minU} and {maxU} USDT</div>}
           </div>
-        </Card>
-      )}
-
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:G.textSub, marginBottom:12 }}>Payment Method(s) — select all you accept</div>
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {ALL_PAYMENT_METHODS.map(m => {
-            const selected = selectedMethods.includes(m);
-            return (
-              <div key={m}>
-                <button onClick={() => toggleMethod(m)} style={{
-                  width:"100%", padding:"11px 14px", borderRadius:G.rs,
-                  border:`1px solid ${selected ? G.gold : G.border}`,
-                  background:selected ? G.goldBg : "transparent",
-                  color:selected ? G.gold : G.textSub,
-                  fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-                  textAlign:"left", display:"flex", justifyContent:"space-between", alignItems:"center",
-                }}>
-                  {m}
-                  {selected && <span style={{ fontSize:12, color:G.gold }}>✓</span>}
-                </button>
-                {selected && (
-                  <div style={{ padding:"10px 12px", background:G.surface, borderRadius:`0 0 ${G.rs}px ${G.rs}px`, marginTop:-1, border:`1px solid ${G.gold}33`, borderTop:"none", display:"flex", flexDirection:"column", gap:8 }}>
-                    <FI
-                      value={methodAccounts[m]?.account || ""}
-                      onChange={v => setAccountField(m, "account", v)}
-                      placeholder={m.includes("Telebirr") ? "Phone number e.g. 0912345678" : "Account number"}
-                    />
-                    <FI
-                      value={methodAccounts[m]?.name || ""}
-                      onChange={v => setAccountField(m, "name", v)}
-                      placeholder="Account holder name"
-                    />
-                  </div>
-                )}
+          {amt > 0 && amtValid && (
+            <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"14px", marginBottom:16 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ fontSize:12, color:G.textSub }}>You receive</span>
+                <span style={{ fontSize:20, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif" }}>{amt} USDT</span>
               </div>
-            );
-          })}
-        </div>
-      </Card>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                <span style={{ fontSize:12, color:G.textSub }}>Pay to seller</span>
+                <span style={{ fontSize:14, fontWeight:700, color:G.green }}>{sellerEtb} ETB</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", paddingTop:8, borderTop:`1px solid ${G.border}` }}>
+                <span style={{ fontSize:12, color:G.textSub, fontWeight:700 }}>Total you pay</span>
+                <span style={{ fontSize:15, fontWeight:900, color:G.text }}>{totalEtb} ETB</span>
+              </div>
+            </div>
+          )}
+          <Btn onClick={() => setStep(2)} disabled={!amtValid}>Next — Select Network →</Btn>
+          <div style={{ height:10 }} />
+          <OutlineBtn onClick={onCancel} color={G.textSub}>Cancel</OutlineBtn>
+        </>}
 
-      <ErrBox msg={err} />
-      <Btn onClick={handlePost} disabled={!canSubmit || loading}>
-        {loading ? "Posting..." : "Post Listing — Free"}
-      </Btn>
+        {step === 2 && <>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>Select Network</div>
+          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>Which network does your USDT wallet use?</div>
+          <Progress />
+          <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:14 }}>
+            {NETWORKS.map(n => (
+              <button key={n.id} onClick={() => setNetwork(n.id)} style={{
+                background:network === n.id ? G.goldBg2 : G.surface,
+                border:`2px solid ${network === n.id ? G.gold : G.border}`,
+                borderRadius:G.r, padding:"16px 14px", cursor:"pointer", textAlign:"left", fontFamily:"inherit",
+              }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                      <span style={{ fontSize:16, fontWeight:900, color:network === n.id ? G.gold : G.text }}>{n.label}</span>
+                      <span style={{ fontSize:10, color:G.textSub, background:G.bgDeep, padding:"2px 8px", borderRadius:8, border:`1px solid ${G.border}` }}>{n.chain}</span>
+                    </div>
+                    <div style={{ fontSize:12, color:G.textSub }}>{n.sub}</div>
+                  </div>
+                  <div style={{ width:22, height:22, borderRadius:"50%", border:`2px solid ${network === n.id ? G.gold : G.border}`, background:network === n.id ? G.gold : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    {network === n.id && <span style={{ color:"#000", fontSize:12, fontWeight:900 }}>✓</span>}
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:G.textDim }}>{n.fee}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{ background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, padding:"10px 14px", marginBottom:14 }}>
+            <p style={{ color:G.red, fontSize:12, margin:0, fontWeight:700 }}>⚠ Wrong network = permanent loss of funds. Double-check before continuing.</p>
+          </div>
+          <Btn onClick={() => setStep(3)}>Next — Enter Address →</Btn>
+          <div style={{ height:10 }} />
+          <OutlineBtn onClick={() => setStep(1)} color={G.textSub}>← Back</OutlineBtn>
+        </>}
+
+        {step === 3 && <>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>Your USDT Address</div>
+          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>The seller will send {amt} USDT directly to this address</div>
+          <Progress />
+          <div style={{ background:G.goldBg, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"14px", marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+              <span style={{ fontSize:20 }}>💡</span>
+              <div style={{ fontSize:12, fontWeight:800, color:G.gold }}>How to find your {selectedNet?.label} address</div>
+            </div>
+            <div style={{ fontSize:12, color:G.textSub, lineHeight:1.8, marginBottom:10 }}>{selectedNet?.how}</div>
+            <div style={{ background:G.surface, borderRadius:G.rs, padding:"8px 12px", display:"flex", gap:8, alignItems:"center" }}>
+              <span style={{ fontSize:16 }}>📍</span>
+              <div>
+                <div style={{ fontSize:10, color:G.textDim, marginBottom:1 }}>Address format</div>
+                <div style={{ fontSize:12, color:G.text, fontWeight:700 }}>{selectedNet?.length}</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:11, color:G.textSub, marginBottom:6 }}>Paste your {selectedNet?.label} address below</div>
+            <textarea
+              value={address}
+              onChange={e => { setAddress(e.target.value); setAddrErr(""); }}
+              placeholder={`Paste your ${network} USDT address here...`}
+              style={{
+                width:"100%", background:G.surface,
+                border:`1.5px solid ${addrErr ? G.red : address && validateAddress(address.trim(), network) === "" ? G.green : G.border}`,
+                borderRadius:G.rs, padding:"12px 14px", color:G.text, fontSize:12,
+                outline:"none", boxSizing:"border-box", fontFamily:"monospace",
+                resize:"none", minHeight:72, lineHeight:1.6,
+              }}
+            />
+            {addrErr && <div style={{ color:G.red, fontSize:11, marginTop:4 }}>{addrErr}</div>}
+            {address && !addrErr && validateAddress(address.trim(), network) === "" && (
+              <div style={{ color:G.green, fontSize:11, marginTop:4 }}>✓ Address format looks valid</div>
+            )}
+          </div>
+          <div style={{ background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, padding:"10px 14px", marginBottom:14 }}>
+            <p style={{ color:G.red, fontSize:12, margin:0 }}>Sending to a wrong address or wrong network results in permanent loss. We cannot recover funds.</p>
+          </div>
+          <Btn onClick={() => {
+            const e = validateAddress(address.trim(), network);
+            if (e) { setAddrErr(e); return; }
+            setAddrErr(""); setStep(4);
+          }} disabled={!address.trim()}>Review & Confirm →</Btn>
+          <div style={{ height:10 }} />
+          <OutlineBtn onClick={() => setStep(2)} color={G.textSub}>← Back</OutlineBtn>
+        </>}
+
+        {step === 4 && <>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>Confirm Trade</div>
+          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>Review every detail before confirming — this cannot be changed</div>
+          <Progress />
+          <div style={{ background:G.surface, border:`1px solid ${G.gold}44`, borderRadius:G.r, padding:"14px 16px", marginBottom:14 }}>
+            <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Trade Summary</div>
+            {[
+              ["You Receive", `${amt} USDT`, G.gold],
+              ["Rate", `${listing.rate_etb} ETB / USDT`, G.text],
+              ["Pay Seller", `${sellerEtb} ETB`, G.green],
+              ["Total You Pay", `${totalEtb} ETB`, G.text],
+              ["Seller", listing.seller_display_name, G.text],
+              ["Payment Method", listing.payment_method, G.text],
+            ].map(([l, v, c]) => (
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${G.border}22`, fontSize:12 }}>
+                <span style={{ color:G.textSub }}>{l}</span>
+                <span style={{ color:c, fontWeight:700 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:G.bgDeep, border:`2px solid ${G.gold}55`, borderRadius:G.r, padding:"14px 16px", marginBottom:16 }}>
+            <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Your Receiving Details</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+              <div style={{ padding:"4px 12px", background:G.goldBg2, border:`1px solid ${G.gold}44`, borderRadius:20, fontSize:13, color:G.gold, fontWeight:900 }}>{network}</div>
+              <span style={{ fontSize:11, color:G.textSub }}>{selectedNet?.chain}</span>
+            </div>
+            <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px" }}>
+              <div style={{ fontSize:10, color:G.textDim, marginBottom:4 }}>Your USDT Address</div>
+              <div style={{ fontSize:12, color:G.text, fontWeight:700, wordBreak:"break-all", fontFamily:"monospace", lineHeight:1.6 }}>{address.trim()}</div>
+            </div>
+            <div style={{ marginTop:10, padding:"9px 12px", background:G.redBg, borderRadius:G.rs, border:`1px solid ${G.red}22` }}>
+              <p style={{ color:G.red, fontSize:11, margin:0, fontWeight:700 }}>This is the address the seller will send {amt} USDT to. Confirm it is correct.</p>
+            </div>
+          </div>
+          <Btn onClick={async () => { setBusy(true); try { await onConfirm({ amount:amt, network, address:address.trim() }); } catch {} finally { setBusy(false); } }} disabled={busy} color={G.green}>
+            {busy ? "Opening Trade Room..." : "✓ Confirm & Open Trade Room"}
+          </Btn>
+          <div style={{ height:10 }} />
+          <OutlineBtn onClick={() => setStep(3)} color={G.textSub}>← Edit Address</OutlineBtn>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// Cancel Trade Modal
+function CancelTradeModal({ trade, user, isBuyer, onCancelled, onClose }) {
+  const BUYER_REASONS = ["Changed my mind","Cannot complete payment in time","Found a better rate","Technical issue","Other"];
+  const SELLER_REASONS = ["Buyer did not pay seller amount","Buyer did not pay platform fee","Buyer is unresponsive","Trade conditions changed","Other"];
+  const reasons = isBuyer ? BUYER_REASONS : SELLER_REASONS;
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const handleCancel = async () => {
+    if (!reason) { setErr("Please select a reason."); return; }
+    setErr(""); setLoading(true);
+    try {
+      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"cancelled", cancellation_reason:reason, cancelled_by:isBuyer ? "buyer" : "seller" });
+      if (trade.listing_id) await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"open" });
+      if (isBuyer) {
+        try {
+          const kycRows = await p2pSelect("kyc_submissions", `?user_id=eq.${trade.buyer_id}&select=cancellation_count`);
+          const current = kycRows?.[0]?.cancellation_count || 0;
+          await p2pUpdate("kyc_submissions", `user_id=eq.${trade.buyer_id}`, { cancellation_count: current + 1 });
+        } catch {}
+      }
+      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:`Trade cancelled by ${isBuyer ? "buyer" : "seller"}: ${reason}`, is_system:true });
+      await sendNotificationEmail("trade_cancelled", { trade_ref:trade.trade_ref, reason, cancelled_by:isBuyer ? "buyer" : "seller" });
+      onCancelled();
+    } catch (e) { setErr(e.message || "Failed to cancel. Try again."); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:`${G.r}px ${G.r}px 0 0`, padding:"24px 20px 40px", width:"100%", maxWidth:480 }}>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.red, fontWeight:900, marginBottom:4 }}>Cancel Trade</div>
+        <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>This action cannot be undone. The listing will reopen for other buyers.</div>
+        <div style={{ fontSize:11, color:G.textSub, marginBottom:10 }}>Reason for cancellation</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:18 }}>
+          {reasons.map(r => (
+            <button key={r} onClick={() => setReason(r)} style={{ padding:"11px 14px", borderRadius:G.rs, border:`1px solid ${reason === r ? G.red : G.border}`, background:reason === r ? G.redBg : "transparent", color:reason === r ? G.red : G.textSub, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}>{r}</button>
+          ))}
+        </div>
+        <ErrBox msg={err} />
+        <Btn onClick={handleCancel} disabled={!reason || loading} color={G.red}>{loading ? "Cancelling..." : "Confirm Cancellation"}</Btn>
+        <div style={{ height:10 }} />
+        <OutlineBtn onClick={onClose} color={G.textSub}>Keep Trade</OutlineBtn>
+      </div>
     </div>
   );
 }
@@ -1802,73 +1662,86 @@ function SellForm({ user, kyc, config, onBack, onDone }) {
 function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState(null);
   const [err, setErr] = useState("");
-  const [networkListing, setNetworkListing] = useState(null);
+  const [buyFlowListing, setBuyFlowListing] = useState(null);
+  const [buying, setBuying] = useState(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
-    // Trust+ sellers first, then by creation time
-    p2pSelect("p2p_listings", "?status=eq.open&order=seller_trust_plus.desc,created_at.asc&select=*")
-      .then(setListings).catch(() => setListings([])).finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+    p2pSelect("p2p_trades", "?status=eq.waiting_payment&select=id,listing_id,expires_at")
+      .then(async rows => {
+        const now = new Date();
+        for (const t of (rows || [])) {
+          if (t.expires_at && new Date(t.expires_at) < now) {
+            try {
+              await p2pUpdate("p2p_trades", `id=eq.${t.id}`, { status:"cancelled", cancellation_reason:"Expired", cancelled_by:"system" });
+              if (t.listing_id) await p2pUpdate("p2p_listings", `id=eq.${t.listing_id}`, { status:"open" });
+            } catch {}
+          }
+        }
+      }).catch(() => {}).finally(() => {
+        p2pSelect("p2p_listings", "?status=eq.open&order=seller_trust_plus.desc,created_at.asc&select=*")
+          .then(setListings).catch(() => setListings([])).finally(() => setLoading(false));
+      });
+  }, []);
 
-  const handleBuyNow = async (listing, network) => {
-    if (listing.seller_id === user.id) {
-      setErr("You cannot buy your own listing.");
-      return;
-    }
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const handleBuyConfirm = async ({ amount, network, address }) => {
+    const listing = buyFlowListing;
+    if (!listing) return;
+    if (listing.seller_id === user.id) { setErr("You cannot buy your own listing."); setBuyFlowListing(null); return; }
+    try {
+      const active = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&status=in.(waiting_payment,payment_sent)&select=id`);
+      if (active?.length > 0) { setErr("You have an active trade. Complete or cancel it first."); setBuyFlowListing(null); return; }
+    } catch {}
     setErr(""); setBuying(listing.id);
     try {
-      const fee = config?.platform_fee_etb || 75;
+      const fee = config?.platform_fee_etb || 50;
+      const totalEtb = Math.round(amount * listing.rate_etb);
       const inserted = await p2pInsert("p2p_trades", {
         listing_id:listing.id,
         buyer_id:user.id,
         buyer_display_name:kyc?.full_name || user.name || "Buyer",
         seller_id:listing.seller_id,
         seller_display_name:listing.seller_display_name,
-        amount_usdt:listing.amount_usdt,
+        amount_usdt:amount,
         rate_etb:listing.rate_etb,
-        total_etb:listing.total_etb,
+        total_etb:totalEtb,
         platform_fee_etb:fee,
         payment_method:listing.payment_method,
         seller_account:listing.seller_account,
         seller_account_name:listing.seller_account_name || "",
         network,
+        buyer_usdt_address:address,
         direction:"sell_usdt",
         expires_at:new Date(Date.now() + 3600000).toISOString(),
       });
       const newTrade = Array.isArray(inserted) ? inserted[0] : inserted;
-      if (!newTrade?.id) throw new Error("Trade creation failed — no ID returned.");
-
-      await p2pUpdate("p2p_listings", `id=eq.${listing.id}`, { status:"taken" });
-      await p2pInsert("trade_messages", {
-        trade_id:newTrade.id, sender_id:user.id,
-        sender_display_name:"System",
-        message:`Trade started. Buyer receiving via ${network}. Payment required within 1 hour.`,
-        is_system:true,
-      });
-      await sendNotificationEmail("trade_opened", {
-        trade_ref:newTrade.trade_ref,
-        seller_id:listing.seller_id,
-        buyer_id:user.id,
-      });
-      setNetworkListing(null);
+      if (!newTrade?.id) throw new Error("Trade creation failed.");
+      const remaining = listing.amount_usdt - amount;
+      const minU = config?.min_usdt || 5;
+      await p2pUpdate("p2p_listings", `id=eq.${listing.id}`, remaining < minU ? { status:"taken", amount_usdt: Math.max(0, remaining) } : { status:"taken" });
+      await p2pInsert("trade_messages", { trade_id:newTrade.id, sender_id:user.id, sender_display_name:"System", message:`🔔 New trade! Buyer wants ${amount} USDT via ${network}. Payment required within 1 hour.`, is_system:true });
+      await sendNotificationEmail("trade_opened", { trade_ref:newTrade.trade_ref, seller_id:listing.seller_id, buyer_id:user.id });
+      setBuyFlowListing(null);
       onOpenTrade(newTrade);
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setBuying(null);
-    }
+    } catch (e) { setErr(e.message); }
+    finally { setBuying(null); }
   };
+
+  const fee = config?.platform_fee_etb || 50;
 
   return (
     <>
-      {networkListing && (
-        <NetworkPicker
-          onConfirm={net => handleBuyNow(networkListing, net)}
-          onCancel={() => { setNetworkListing(null); setBuying(null); }}
+      {buyFlowListing && (
+        <BuyFlowModal listing={buyFlowListing} user={user} kyc={kyc} config={config}
+          onConfirm={handleBuyConfirm}
+          onCancel={() => { setBuyFlowListing(null); setBuying(null); }}
         />
       )}
       <div style={{ padding:"18px 16px 28px" }}>
@@ -1878,56 +1751,35 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
             <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>P2P Exchange</div>
             <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900 }}>Buy USDT</div>
           </div>
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <div style={{ display:"flex", gap:8 }}>
             <button onClick={load} style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, color:G.textSub, padding:"7px 12px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
               <Icon name="refreshCw" size={12} color={G.textSub} />Refresh
             </button>
-            {onSell && (
-              <button onClick={onSell} style={{ background:G.goldBg, border:`1px solid ${G.gold}44`, borderRadius:G.rs, color:G.gold, padding:"7px 12px", fontSize:12, cursor:"pointer", fontFamily:"inherit", fontWeight:700 }}>
-                Sell USDT
-              </button>
-            )}
+            {onSell && <button onClick={onSell} style={{ background:G.goldBg, border:`1px solid ${G.gold}44`, borderRadius:G.rs, color:G.gold, padding:"7px 12px", fontSize:12, cursor:"pointer", fontFamily:"inherit", fontWeight:700 }}>Sell USDT</button>}
           </div>
         </div>
         <ErrBox msg={err} />
         {loading ? <Spinner /> : listings.length === 0 ? (
           <Card style={{ textAlign:"center", padding:44 }}>
-            <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
-              <Icon name="list" size={36} color={G.textDim} />
-            </div>
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}><Icon name="list" size={36} color={G.textDim} /></div>
             <div style={{ color:G.textSub, fontSize:14 }}>No listings right now. Be the first to sell.</div>
             {onSell && <div style={{ marginTop:14 }}><Btn onClick={onSell} full={false} style={{ padding:"10px 24px" }}>Post Your Listing</Btn></div>}
           </Card>
         ) : listings.map(l => {
           const methods = l.payment_method ? l.payment_method.split(", ") : [];
-          const isOwnListing = l.seller_id === user.id;
+          const isOwn = l.seller_id === user.id;
           return (
-            <div key={l.id} style={{
-              background:G.card,
-              border:`1px solid ${l.seller_trust_plus ? G.gold+"66" : G.border}`,
-              borderTop:l.seller_trust_plus ? `3px solid ${G.gold}` : `1px solid ${G.border}`,
-              borderRadius:G.r, marginBottom:12, overflow:"hidden",
-              boxShadow:l.seller_trust_plus ? `0 0 20px rgba(212,175,55,0.1)` : `0 2px 12px rgba(0,0,0,0.2)`,
-            }}>
-              {/* Trust+ top bar */}
+            <div key={l.id} style={{ background:G.card, border:`1px solid ${l.seller_trust_plus ? G.gold+"66" : G.border}`, borderTop:l.seller_trust_plus ? `3px solid ${G.gold}` : `1px solid ${G.border}`, borderRadius:G.r, marginBottom:12, overflow:"hidden", boxShadow:l.seller_trust_plus ? `0 0 20px rgba(212,175,55,0.1)` : `0 2px 12px rgba(0,0,0,0.2)` }}>
               {l.seller_trust_plus && (
                 <div style={{ padding:"5px 16px", background:G.goldBg, borderBottom:`1px solid ${G.gold}22`, display:"flex", alignItems:"center", gap:6 }}>
                   <TrustBadge size={11} />
                   <span style={{ fontSize:10, color:G.gold, fontWeight:700, letterSpacing:1 }}>TRUST+ SELLER — MOST TRUSTED</span>
                 </div>
               )}
-              {/* Seller info */}
               <div style={{ padding:"14px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${G.border}` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{
-                    width:38, height:38, borderRadius:"50%",
-                    background:l.seller_trust_plus ? `linear-gradient(135deg,${G.gold}66,${G.gold}33)` : `linear-gradient(135deg,${G.gold}44,${G.gold}22)`,
-                    border:`2px solid ${l.seller_trust_plus ? G.gold : G.gold+"44"}`,
-                    display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                  }}>
-                    <span style={{ fontFamily:"'Playfair Display',serif", fontSize:17, color:G.gold, fontWeight:900 }}>
-                      {(l.seller_display_name || "S")[0].toUpperCase()}
-                    </span>
+                  <div style={{ width:40, height:40, borderRadius:"50%", background:l.seller_trust_plus ? `linear-gradient(135deg,${G.gold}66,${G.gold}33)` : `linear-gradient(135deg,${G.gold}44,${G.gold}22)`, border:`2px solid ${l.seller_trust_plus ? G.gold : G.gold+"44"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <span style={{ fontFamily:"'Playfair Display',serif", fontSize:17, color:G.gold, fontWeight:900 }}>{(l.seller_display_name || "S")[0].toUpperCase()}</span>
                   </div>
                   <div>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
@@ -1935,9 +1787,7 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
                       {l.seller_trust_plus && <TrustBadge size={14} />}
                     </div>
                     <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-                      <Badge color={G.green} style={{ fontSize:9, padding:"2px 7px" }}>
-                        <Icon name="shieldCheck" size={9} color={G.green} />KYC Verified
-                      </Badge>
+                      <Badge color={G.green} style={{ fontSize:9, padding:"2px 7px" }}><Icon name="shieldCheck" size={9} color={G.green} />KYC Verified</Badge>
                       {l.seller_completed_trades > 0 && <span style={{ fontSize:11, color:G.textSub }}>{l.seller_completed_trades} trades</span>}
                       {l.seller_success_rate > 0 && <span style={{ fontSize:11, color:G.green }}>{l.seller_success_rate}%</span>}
                     </div>
@@ -1945,46 +1795,31 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
                 </div>
                 {l.seller_rating > 0 && (
                   <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill={G.gold} stroke={G.gold} strokeWidth="0.5">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill={G.gold} stroke={G.gold} strokeWidth="0.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                     <span style={{ fontSize:13, color:G.gold, fontWeight:700 }}>{l.seller_rating}</span>
                   </div>
                 )}
               </div>
-
-              {/* Amounts grid */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", borderBottom:`1px solid ${G.border}` }}>
                 {[
-                  ["Amount", `$${l.amount_usdt}`, G.gold],
+                  ["Available", `${l.amount_usdt} USDT`, G.gold],
                   ["Rate", `${l.rate_etb} ETB`, G.text],
-                  ["You Pay", `${l.display_total_etb} ETB`, G.green],
+                  ["Min Pay", `${Math.round((config?.min_usdt || 5) * l.rate_etb + fee)} ETB`, G.green],
                 ].map(([k, v, c], i) => (
-                  <div key={k} style={{ padding:"12px 14px", borderRight:i < 2 ? `1px solid ${G.border}` : "none" }}>
+                  <div key={k} style={{ padding:"11px 12px", borderRight:i < 2 ? `1px solid ${G.border}` : "none" }}>
                     <div style={{ fontSize:10, color:G.textDim, marginBottom:3 }}>{k}</div>
-                    <div style={{ fontSize:15, fontWeight:900, color:c, fontFamily:"'Playfair Display',serif" }}>{v}</div>
+                    <div style={{ fontSize:14, fontWeight:900, color:c, fontFamily:"'Playfair Display',serif" }}>{v}</div>
                   </div>
                 ))}
               </div>
-
-              {/* Payment methods + Buy button */}
-              <div style={{ padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ padding:"11px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {methods.map(m => (
-                    <span key={m} style={{ fontSize:11, color:G.textSub, background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"3px 8px" }}>{m}</span>
-                  ))}
+                  {methods.map(m => <span key={m} style={{ fontSize:11, color:G.textSub, background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"3px 8px" }}>{m}</span>)}
                 </div>
-                {isOwnListing ? (
-                  <span style={{ fontSize:11, color:G.textSub, fontStyle:"italic" }}>Your listing</span>
-                ) : (
-                  <Btn
-                    onClick={() => setNetworkListing(l)}
-                    disabled={buying === l.id} full={false}
-                    style={{ padding:"9px 20px", fontSize:13 }}
-                  >
-                    {buying === l.id ? "Opening..." : "Buy Now"}
-                  </Btn>
-                )}
+                {isOwn
+                  ? <span style={{ fontSize:11, color:G.textSub, fontStyle:"italic" }}>Your listing</span>
+                  : <Btn onClick={() => setBuyFlowListing(l)} disabled={buying === l.id} full={false} style={{ padding:"9px 18px", fontSize:13 }}>{buying === l.id ? "Opening..." : "Buy Now"}</Btn>
+                }
               </div>
             </div>
           );
@@ -1993,6 +1828,7 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
     </>
   );
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MY TRADES + MY LISTINGS
@@ -2150,7 +1986,7 @@ function MyActivity({ user, onOpenTrade, onBack }) {
               <div style={{ display:"flex", justifyContent:"space-between", paddingTop:8, borderTop:`1px solid ${G.border}22`, fontSize:12 }}>
                 <span style={{ color:G.textSub }}>{isBuyer ? "Paid total" : "Received"}</span>
                 <span style={{ color:G.green, fontWeight:700 }}>
-                  {isBuyer ? (t.total_etb + (t.platform_fee_etb || 75)) : t.total_etb} ETB
+                  {isBuyer ? (t.total_etb + (t.platform_fee_etb || 50)) : t.total_etb} ETB
                 </span>
               </div>
             )}
@@ -2305,10 +2141,9 @@ function ExchangeHub({ user, kyc, config, setScreen }) {
           {[
             ["Payment Window", "1 hour to complete payment"],
             ["Trade Size", "$5 – $500 USDT per trade"],
-            ["Platform Fee", "75 ETB — paid by buyer to admin"],
             ["KYC Required", "Both parties must be verified"],
             ["Fraud Policy", "Permanent ban + legal action"],
-            ["Disputes", "Admin resolves within 2 hours via Telegram"],
+            ["Disputes", "Our team resolves within 2 hours via Telegram"],
           ].map(([l, v]) => (
             <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:`1px solid ${G.border}22` }}>
               <span style={{ fontSize:12, color:G.textSub }}>{l}</span>
@@ -2352,7 +2187,7 @@ function NotLoggedIn({ onSignIn }) {
         {[
           ["🪪", "Verify your identity with a real Ethiopian ID"],
           ["📋", "Browse listings or post your USDT to sell"],
-          ["💸", "Buyer pays ETB to seller + 75 ETB platform fee"],
+          ["💸", "Buyer pays ETB to seller + small platform fee"],
           ["✅", "Seller confirms and releases USDT instantly"],
         ].map(([icon, text], i) => (
           <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:12 }}>
@@ -2440,7 +2275,7 @@ function ExchangePage({ user, onSignIn }) {
         <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{
           display:"inline-block", marginTop:14,
           color:G.gold, fontSize:13, fontWeight:700,
-        }}>Contact Admin →</a>
+        }}>Contact Our Team →</a>
       </GlowCard>
     </div>
   );
@@ -2472,7 +2307,7 @@ function ExchangePage({ user, onSignIn }) {
         </p>
         <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{
           display:"inline-block", marginTop:14, color:G.gold, fontSize:13, fontWeight:700,
-        }}>Contact Admin if you believe this is an error →</a>
+        }}>Contact our team if you believe this is an error →</a>
       </GlowCard>
     </div>
   );
