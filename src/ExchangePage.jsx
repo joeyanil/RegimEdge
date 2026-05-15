@@ -251,6 +251,73 @@ const preRead = async (e, setter, setPreview) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// IMAGE LIGHTBOX — inline image viewer (fixes "opens as broken link" bug)
+// ─────────────────────────────────────────────────────────────────────────────
+function ImageLightbox({ url, label, onClose }) {
+  if (!url) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position:"fixed", inset:0, background:"rgba(0,0,0,0.94)", zIndex:2000,
+        display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+        padding:20,
+      }}
+    >
+      <style>{`@keyframes lbIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}`}</style>
+      {/* Header */}
+      <div style={{
+        width:"100%", maxWidth:480, display:"flex", justifyContent:"space-between",
+        alignItems:"center", marginBottom:12,
+      }}>
+        <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontWeight:600 }}>{label}</span>
+        <button
+          onClick={onClose}
+          style={{
+            background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)",
+            borderRadius:20, width:32, height:32, cursor:"pointer", color:"#fff",
+            fontSize:16, display:"flex", alignItems:"center", justifyContent:"center",
+          }}
+        >✕</button>
+      </div>
+      {/* Image */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ animation:"lbIn 0.2s ease", maxWidth:480, width:"100%" }}
+      >
+        <img
+          src={url}
+          alt={label}
+          style={{
+            width:"100%", maxHeight:"75vh", objectFit:"contain",
+            borderRadius:12, border:"1px solid rgba(255,255,255,0.12)",
+            display:"block",
+          }}
+          onError={e => {
+            e.target.style.display = "none";
+            e.target.nextSibling.style.display = "flex";
+          }}
+        />
+        {/* Fallback if image fails */}
+        <div style={{
+          display:"none", alignItems:"center", justifyContent:"center",
+          flexDirection:"column", gap:12, padding:40,
+          background:"rgba(255,255,255,0.05)", borderRadius:12,
+          border:"1px solid rgba(255,255,255,0.1)",
+        }}>
+          <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span style={{ color:"rgba(255,255,255,0.4)", fontSize:12 }}>Could not load image</span>
+          <a href={url} target="_blank" rel="noreferrer" style={{ color:G.gold, fontSize:12, fontWeight:700 }}>Open in browser →</a>
+        </div>
+      </div>
+      <p style={{ color:"rgba(255,255,255,0.3)", fontSize:11, marginTop:14 }}>Tap outside to close</p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // KYC SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 const ID_TYPES = ["National ID", "Passport", "Driver's License", "Kebele ID"];
@@ -769,6 +836,144 @@ function TradeChat({ trade, user }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TRADE COMPLETED BANNER — Binance-inspired glowing celebration
+// ─────────────────────────────────────────────────────────────────────────────
+function TradeCompletedBanner({ trade, isBuyer, sellerAmount }) {
+  return (
+    <>
+      <style>{`
+        @keyframes tcRing1{0%{transform:scale(0.6);opacity:0}60%{opacity:1}100%{transform:scale(1.05);opacity:0.6}}
+        @keyframes tcRing2{0%{transform:scale(0.55);opacity:0}40%{opacity:0.7}100%{transform:scale(1.12);opacity:0}}
+        @keyframes tcRing3{0%{transform:scale(0.5);opacity:0}30%{opacity:0.5}100%{transform:scale(1.2);opacity:0}}
+        @keyframes tcCheck{0%{stroke-dashoffset:80}100%{stroke-dashoffset:0}}
+        @keyframes tcPop{0%{transform:scale(0);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+        @keyframes tcFadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes tcParticle{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}
+        @keyframes tcGlow{0%,100%{box-shadow:0 0 30px rgba(34,197,94,0.3),0 0 60px rgba(34,197,94,0.1)}50%{box-shadow:0 0 50px rgba(34,197,94,0.5),0 0 90px rgba(34,197,94,0.2)}}
+      `}</style>
+
+      <div style={{
+        background:`linear-gradient(160deg,${G.green}0d 0%,${G.bgDeep} 60%)`,
+        border:`1px solid ${G.green}44`, borderRadius:G.r,
+        padding:"28px 16px 22px", marginBottom:12, textAlign:"center",
+        animation:"tcGlow 3s ease-in-out infinite",
+        position:"relative", overflow:"hidden",
+      }}>
+
+        {/* Background shimmer */}
+        <div style={{
+          position:"absolute", inset:0, pointerEvents:"none",
+          background:`radial-gradient(ellipse 70% 50% at 50% 20%,${G.green}09,transparent)`,
+        }} />
+
+        {/* Icon with concentric rings */}
+        <div style={{ position:"relative", width:100, height:100, margin:"0 auto 20px" }}>
+          {/* Ring 3 — outermost */}
+          <div style={{
+            position:"absolute", inset:-12, borderRadius:"50%",
+            border:`1.5px solid ${G.green}30`,
+            animation:"tcRing3 2.4s ease-out infinite",
+          }} />
+          {/* Ring 2 */}
+          <div style={{
+            position:"absolute", inset:-4, borderRadius:"50%",
+            border:`1.5px solid ${G.green}50`,
+            animation:"tcRing2 2.4s ease-out 0.3s infinite",
+          }} />
+          {/* Ring 1 — inner */}
+          <div style={{
+            position:"absolute", inset:0, borderRadius:"50%",
+            border:`2px solid ${G.green}70`,
+            animation:"tcRing1 2.4s ease-out 0.6s infinite",
+          }} />
+          {/* Icon circle */}
+          <div style={{
+            width:100, height:100, borderRadius:"50%",
+            background:`radial-gradient(circle,${G.green}28,${G.green}0a)`,
+            border:`2.5px solid ${G.green}99`,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            animation:"tcPop 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards",
+            boxShadow:`0 0 32px ${G.green}40, inset 0 1px 0 ${G.green}33`,
+          }}>
+            <svg width="46" height="46" viewBox="0 0 46 46" fill="none">
+              <circle cx="23" cy="23" r="22" fill={`${G.green}18`} />
+              <polyline
+                points="11 23 19 31 35 15"
+                stroke={G.green} strokeWidth="3.5"
+                strokeLinecap="round" strokeLinejoin="round"
+                fill="none"
+                strokeDasharray="80" strokeDashoffset="80"
+                style={{ animation:"tcCheck 0.55s 0.35s ease forwards" }}
+              />
+            </svg>
+          </div>
+
+          {/* Particle sparks */}
+          {[
+            { tx:"-38px", ty:"-28px", delay:"0.7s", color:G.green },
+            { tx:"40px", ty:"-32px", delay:"0.8s", color:G.gold },
+            { tx:"44px", ty:"12px", delay:"0.65s", color:G.green },
+            { tx:"-42px", ty:"14px", delay:"0.75s", color:G.gold },
+            { tx:"4px", ty:"-44px", delay:"0.72s", color:G.green },
+            { tx:"-8px", ty:"44px", delay:"0.85s", color:G.gold },
+          ].map((p, i) => (
+            <div key={i} style={{
+              position:"absolute", top:"50%", left:"50%",
+              width:7, height:7, borderRadius:"50%",
+              background:p.color,
+              "--tx":p.tx, "--ty":p.ty,
+              animation:`tcParticle 0.9s ${p.delay} cubic-bezier(0.25,0.46,0.45,0.94) both`,
+              boxShadow:`0 0 6px ${p.color}`,
+            }} />
+          ))}
+        </div>
+
+        {/* Headline */}
+        <div style={{
+          fontFamily:"'Playfair Display',serif", fontSize:26, color:G.green,
+          fontWeight:900, marginBottom:6, letterSpacing:0.3,
+          animation:"tcFadeUp 0.5s 0.4s ease both",
+        }}>Trade Completed!</div>
+
+        {/* Subline */}
+        <p style={{
+          color:G.textSub, fontSize:13, margin:"0 0 20px",
+          lineHeight:1.6, animation:"tcFadeUp 0.5s 0.55s ease both",
+        }}>
+          {isBuyer
+            ? `${trade.amount_usdt} USDT sent to your ${trade.network} address.`
+            : `You received ${sellerAmount} ETB — great trade!`}
+        </p>
+
+        {/* Trade record */}
+        <div style={{
+          background:G.bgDeep, border:`1px solid ${G.border}`,
+          borderRadius:G.rs, padding:"12px 14px", textAlign:"left",
+          animation:"tcFadeUp 0.5s 0.7s ease both",
+        }}>
+          <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Trade Record</div>
+          {[
+            ["Reference", trade.trade_ref || "—"],
+            ["Amount", `${trade.amount_usdt} USDT`],
+            ["Rate", `${trade.rate_etb} ETB/USDT`],
+            ["Seller received", `${sellerAmount} ETB`],
+            ["Network", trade.network || "—"],
+            ["Buyer", trade.buyer_display_name],
+            ["Seller", trade.seller_display_name],
+            ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
+          ].map(([l, v]) => (
+            <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
+              <span style={{ color:G.textSub }}>{l}</span>
+              <span style={{ color:G.text, fontWeight:600 }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TRADE ROOM
 // ─────────────────────────────────────────────────────────────────────────────
 function TradeRoom({ initialTrade, user, config, onBack }) {
@@ -787,6 +992,11 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   const [rated, setRated] = useState(false);
   const [notifyBusy, setNotifyBusy] = useState(false);
   const [releaseChecked, setReleaseChecked] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [lightboxLabel, setLightboxLabel] = useState("");
+  const [buyerConfirmStep, setBuyerConfirmStep] = useState(0); // 0=idle, 1=checking, 2=dispute
+  const [reportLoading, setReportLoading] = useState(false);
+  const [txHash, setTxHash] = useState("");
   const proof1Ref = useRef();
   const proof2Ref = useRef();
   const { copy, copied } = useCopyText();
@@ -820,12 +1030,12 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   const getStep = () => {
     if (trade.status === "waiting_payment") return 0;
     if (trade.status === "payment_sent") return 1;
-    if (trade.status === "completed" || trade.status === "seller_confirmed") return 2;
+    if (["completed","seller_confirmed","seller_released","usdt_dispute"].includes(trade.status)) return 2;
     return 0;
   };
   const currentStep = getStep();
-  const steps = ["Pay", "Confirm", "Done"];
-  const isActive = !["completed", "cancelled", "disputed"].includes(trade.status);
+  const steps = ["Pay", "Verify", "Done"];
+  const isActive = !["completed","cancelled","disputed","usdt_dispute"].includes(trade.status);
 
   const markPaid = async () => {
     if (!proof1 || !proof2) { setErr("Upload both payment screenshots first."); return; }
@@ -848,18 +1058,77 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   const confirmRelease = async () => {
     setErr(""); setLoading(true);
     try {
-      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"completed", completed_at:new Date().toISOString(), seller_confirmed_at:new Date().toISOString() });
+      // Seller releases → status becomes "seller_released" (buyer must confirm receipt)
+      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, {
+        status:"seller_released",
+        seller_confirmed_at:new Date().toISOString(),
+      });
       // Reopen listing with decremented amount if partial, else complete
       const remaining = (trade.listing_amount_usdt || 0) - trade.amount_usdt;
       const minU = config?.min_usdt || 5;
       if (trade.listing_id) {
         await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, remaining >= minU ? { status:"open", amount_usdt:remaining } : { status:"completed" });
       }
-      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"✅ Seller confirmed payment received. USDT released to buyer. Trade completed!", is_system:true });
+      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"🚀 Seller confirmed payment received and released USDT. Buyer: please check your Binance wallet now!", is_system:true });
       await sendNotificationEmail("trade_completed", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
       await refreshTrade();
     } catch (e) { setErr(e.message || "Failed. Try again."); }
     finally { setLoading(false); }
+  };
+
+  const confirmReceipt = async () => {
+    setErr(""); setLoading(true);
+    try {
+      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, {
+        status:"completed",
+        completed_at:new Date().toISOString(),
+        buyer_confirmed_at:new Date().toISOString(),
+      });
+      await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"✅ Buyer confirmed USDT received. Trade is now officially complete!", is_system:true });
+      setBuyerConfirmStep(0);
+      await refreshTrade();
+    } catch (e) { setErr(e.message || "Failed. Try again."); }
+    finally { setLoading(false); }
+  };
+
+  const reportNotReceived = async () => {
+    setReportLoading(true);
+    try {
+      // Fetch both parties' KYC for telegram handles
+      let buyerTg = "", sellerTg = "";
+      try {
+        const [bKyc, sKyc] = await Promise.all([
+          p2pSelect("kyc_submissions", `?user_id=eq.${trade.buyer_id}&select=telegram`),
+          p2pSelect("kyc_submissions", `?user_id=eq.${trade.seller_id}&select=telegram`),
+        ]);
+        buyerTg = bKyc?.[0]?.telegram || "N/A";
+        sellerTg = sKyc?.[0]?.telegram || "N/A";
+      } catch {}
+      const txNote = txHash.trim() ? `\nSeller Txn Hash: ${txHash.trim()}` : "";
+      await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, {
+        status:"usdt_dispute",
+        dispute_reason:"Buyer reports USDT not received after seller confirmed release.",
+        disputed_at:new Date().toISOString(),
+        buyer_telegram:buyerTg,
+        seller_telegram:sellerTg,
+      });
+      await p2pInsert("trade_messages", {
+        trade_id:trade.id, sender_id:user.id, sender_display_name:"System",
+        message:`⚠️ USDT DISPUTE — Buyer did not receive USDT after seller released.\nBuyer Telegram: ${buyerTg}\nSeller Telegram: ${sellerTg}${txNote}\n\nAdmin team will contact both parties within 2 hours.`,
+        is_system:true,
+      });
+      await sendNotificationEmail("dispute_raised", {
+        trade_ref:trade.trade_ref,
+        dispute_reason:"Buyer reports USDT not received after seller confirmed release.",
+        buyer_id:trade.buyer_id,
+        seller_id:trade.seller_id,
+        buyer_telegram:buyerTg,
+        seller_telegram:sellerTg,
+      });
+      setBuyerConfirmStep(0);
+      await refreshTrade();
+    } catch (e) { setErr(e.message || "Failed. Try again."); }
+    finally { setReportLoading(false); }
   };
 
   const raiseDispute = async () => {
@@ -895,14 +1164,19 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
     waiting_payment:[G.gold,"Waiting Payment"],
     payment_sent:[G.blue,"Payment Sent"],
     seller_confirmed:[G.green,"Confirmed"],
+    seller_released:[G.green,"USDT Sent"],
     completed:[G.green,"Completed"],
     disputed:[G.red,"Disputed"],
+    usdt_dispute:[G.red,"USDT Dispute"],
     cancelled:[G.textSub,"Cancelled"],
   };
   const [statusColor, statusLabel] = StatusMap[trade.status] || [G.textSub, trade.status];
 
   return (
     <div style={{ padding:"16px 16px 36px", background:G.bg, minHeight:"100vh" }}>
+      {/* Image lightbox portal */}
+      {lightboxUrl && <ImageLightbox url={lightboxUrl} label={lightboxLabel} onClose={() => { setLightboxUrl(null); setLightboxLabel(""); }} />}
+
       {showCancelModal && (
         <CancelTradeModal trade={trade} user={user} isBuyer={isBuyer}
           onCancelled={async () => { setShowCancelModal(false); await refreshTrade(); }}
@@ -1119,10 +1393,19 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           {(trade.payment_proof_url || trade.payment_proof_url_2) && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
               {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([,u]) => u).map(([label, url]) => (
-                <a key={label} href={url} target="_blank" rel="noreferrer" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 0", color:G.blue, fontSize:11, fontWeight:700, textDecoration:"none" }}>
+                <button
+                  key={label}
+                  onClick={() => { setLightboxUrl(url); setLightboxLabel(label + " proof"); }}
+                  style={{
+                    display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                    background:G.surface, border:`1px solid ${G.border}`,
+                    borderRadius:G.rs, padding:"12px 0", cursor:"pointer",
+                    color:G.blue, fontSize:11, fontWeight:700, fontFamily:"inherit",
+                  }}
+                >
                   <Icon name="eye" size={16} color={G.blue} />
                   {label}
-                </a>
+                </button>
               ))}
             </div>
           )}
@@ -1179,14 +1462,26 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
             <div style={{ width:8, height:8, borderRadius:"50%", background:G.green, animation:"pulse 1.5s ease-in-out infinite" }} />
             Buyer Claims Payment Sent — Verify Before Releasing
           </div>
-          {/* Proof thumbnails */}
+          {/* Proof thumbnails — tap to open inline (not link) */}
           {(trade.payment_proof_url || trade.payment_proof_url_2) && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
               {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([,u]) => u).map(([label, url]) => (
-                <a key={label} href={url} target="_blank" rel="noreferrer" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"14px 0", color:G.blue, fontSize:11, fontWeight:700, textDecoration:"none" }}>
+                <button
+                  key={label}
+                  onClick={() => { setLightboxUrl(url); setLightboxLabel(label + " proof"); }}
+                  style={{
+                    display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                    background:G.surface, border:`1px solid ${G.border}`,
+                    borderRadius:G.rs, padding:"14px 0", cursor:"pointer",
+                    color:G.blue, fontSize:11, fontWeight:700, fontFamily:"inherit",
+                    transition:"all 0.15s",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = G.blue+"66"; e.currentTarget.style.background = G.blueBg; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = G.border; e.currentTarget.style.background = G.surface; }}
+                >
                   <Icon name="eye" size={18} color={G.blue} />
                   View {label}
-                </a>
+                </button>
               ))}
             </div>
           )}
@@ -1200,11 +1495,31 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               <span style={{ fontSize:12, color:G.textSub }}>{platformFee} ETB</span>
             </div>
           </div>
-          {/* Release checklist */}
-          <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.rs, padding:"10px 12px", marginBottom:14 }}>
-            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>
-              <strong style={{ color:G.text }}>Before releasing:</strong> Confirm {sellerAmount} ETB arrived in your {trade.payment_method} account AND the fee screenshot shows {platformFee} ETB paid to our team.
-            </p>
+
+          {/* ── SELLER VERIFICATION GUIDE ── */}
+          <div style={{
+            background:G.bgDeep, border:`1px solid ${G.gold}33`,
+            borderRadius:G.rs, padding:"12px 14px", marginBottom:14,
+          }}>
+            <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+              <svg width={10} height={10} viewBox="0 0 24 24" fill={G.gold}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              Screenshot Verification Guide
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {[
+                { color:G.green, icon:"✓", text:`Amount is EXACTLY ${sellerAmount} ETB — not a penny less` },
+                { color:G.green, icon:"✓", text:`Date matches today: ${new Date().toLocaleDateString("en-GB", { day:"2-digit", month:"2-digit", year:"numeric" })}` },
+                { color:G.green, icon:"✓", text:"Transfer time is RECENT — within the last 60 minutes" },
+                { color:G.green, icon:"✓", text:`Platform fee screenshot shows EXACTLY ${platformFee} ETB paid to our team` },
+                { color:G.red, icon:"⚠", text:"Edited screenshots are detectable — do NOT release if anything looks off" },
+                { color:G.red, icon:"⚠", text:"Wrong account name or unusually old timestamp = FAKE PROOF — dispute instead" },
+              ].map(({ color, icon, text }, i) => (
+                <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                  <span style={{ color, fontSize:13, flexShrink:0, marginTop:0.5, fontWeight:900 }}>{icon}</span>
+                  <span style={{ color:color === G.red ? G.red+"cc" : G.textSub, fontSize:12, lineHeight:1.5 }}>{text}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div onClick={() => setReleaseChecked(c => !c)} style={{ display:"flex", gap:10, alignItems:"center", cursor:"pointer", marginBottom:14, padding:"10px 12px", background:releaseChecked ? G.greenBg : G.surface, border:`1px solid ${releaseChecked ? G.green : G.border}`, borderRadius:G.rs, transition:"all 0.15s" }}>
             <div style={{ width:22, height:22, borderRadius:6, border:`2px solid ${releaseChecked ? G.green : G.border}`, background:releaseChecked ? G.green : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.15s" }}>
@@ -1226,38 +1541,121 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       )}
 
       {/* ══════════════════════════════════════
+          BUYER — seller_released (check wallet)
+      ══════════════════════════════════════ */}
+      {isBuyer && trade.status === "seller_released" && (
+        <div style={{ background:G.card, border:`1px solid ${G.green}44`, borderRadius:G.r, padding:"20px 16px", marginBottom:12 }}>
+          <style>{`@keyframes walletPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}`}</style>
+          {buyerConfirmStep === 0 && (<>
+            {/* Step 0 — check wallet intro */}
+            <div style={{ textAlign:"center", marginBottom:18 }}>
+              <div style={{ width:60, height:60, borderRadius:"50%", background:`${G.green}18`, border:`2px solid ${G.green}44`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", animation:"walletPulse 2s ease-in-out infinite" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={G.green} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" /><line x1="1" y1="10" x2="23" y2="10"/>
+                </svg>
+              </div>
+              <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.green, fontWeight:900, marginBottom:6 }}>
+                Seller Sent Your USDT!
+              </div>
+              <p style={{ color:G.textSub, fontSize:13, margin:0, lineHeight:1.6 }}>
+                {trade.amount_usdt} USDT has been released to your {trade.network} address. Please check your wallet before confirming.
+              </p>
+            </div>
+
+            {/* How to check wallet — Binance steps */}
+            <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", marginBottom:14 }}>
+              <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>
+                How to Check on Binance
+              </div>
+              {[
+                { step:"1", text:"Open the Binance app on your phone", icon:"📱" },
+                { step:"2", text:`Go to: Wallets → ${trade.network === "BEP20" ? "Funding" : "Spot"} Wallet`, icon:"👛" },
+                { step:"3", text:"Search for USDT in your balance list", icon:"🔍" },
+                { step:"4", text:`Confirm your balance increased by ${trade.amount_usdt} USDT`, icon:"✅" },
+                { step:"💡", text:"If it's not there yet, wait 1–3 minutes — blockchain takes a moment", icon:null, dim:true },
+              ].map(({ step, text, dim }) => (
+                <div key={step} style={{ display:"flex", gap:10, marginBottom:10, alignItems:"flex-start" }}>
+                  <div style={{
+                    width:24, height:24, borderRadius:"50%", flexShrink:0,
+                    background:dim ? G.surface : `${G.gold}22`,
+                    border:`1px solid ${dim ? G.border : G.gold+"44"}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:10, fontWeight:900, color:dim ? G.textDim : G.gold,
+                  }}>{step}</div>
+                  <span style={{ color:dim ? G.textDim : G.textSub, fontSize:12, lineHeight:1.5, marginTop:2 }}>{text}</span>
+                </div>
+              ))}
+            </div>
+
+            <ErrBox msg={err} />
+            <Btn onClick={confirmReceipt} disabled={loading} color={G.green} style={{ marginBottom:8 }}>
+              {loading ? "Confirming..." : "✓ I Received My USDT — Complete Trade"}
+            </Btn>
+            <OutlineBtn onClick={() => setBuyerConfirmStep(1)} color={G.red} small>
+              ⚠ I Did Not Receive USDT
+            </OutlineBtn>
+          </>)}
+
+          {buyerConfirmStep === 1 && (<>
+            {/* Step 1 — not received, ask seller to verify */}
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:14, fontWeight:800, color:G.red, marginBottom:8, display:"flex", alignItems:"center", gap:8 }}>
+                <span>⚠️</span> Did Not Receive USDT?
+              </div>
+              <p style={{ color:G.textSub, fontSize:12, lineHeight:1.6, margin:"0 0 12px" }}>
+                Before raising a dispute, please double check: wait 3–5 minutes and refresh your wallet. Blockchain confirmations take time.
+              </p>
+              <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.rs, padding:"10px 12px", marginBottom:14 }}>
+                <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.5 }}>
+                  If the seller claims they sent it, they can provide the transaction hash (TxID) below so our team can verify on-chain.
+                </p>
+              </div>
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:11, color:G.textSub, marginBottom:6 }}>Seller's Transaction Hash (optional)</div>
+                <FI value={txHash} onChange={setTxHash} placeholder="Paste TxID / transaction hash if seller provided one" style={{ fontSize:12, fontFamily:"monospace" }} />
+              </div>
+            </div>
+
+            <ErrBox msg={err} />
+            <Btn onClick={reportNotReceived} disabled={reportLoading} color={G.red} style={{ marginBottom:8 }}>
+              {reportLoading ? "Submitting..." : "Report Issue — Contact Admin"}
+            </Btn>
+            <OutlineBtn onClick={() => setBuyerConfirmStep(0)} color={G.textSub} small>
+              ← Go Back (USDT arrived)
+            </OutlineBtn>
+
+            <div style={{ marginTop:14, padding:"10px 12px", background:`${G.red}08`, border:`1px solid ${G.red}22`, borderRadius:G.rs }}>
+              <p style={{ color:G.textSub, fontSize:11, margin:0, lineHeight:1.6 }}>
+                After submitting, our admin team will receive both your and the seller's Telegram handles and will reach out to resolve this within 2 hours.
+                {" "}<a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{ color:G.gold, fontWeight:700 }}>Contact Admin directly →</a>
+              </p>
+            </div>
+          </>)}
+        </div>
+      )}
+
+      {/* Seller sees "waiting for buyer to confirm" after releasing */}
+      {isSeller && trade.status === "seller_released" && (
+        <div style={{ background:G.card, border:`1px solid ${G.green}33`, borderRadius:G.r, padding:"18px 16px", marginBottom:12 }}>
+          <div style={{ textAlign:"center" }}>
+            <style>{`@keyframes spin2{to{transform:rotate(360deg)}}`}</style>
+            <div style={{ width:44, height:44, border:`3px solid ${G.border}`, borderTop:`3px solid ${G.green}`, borderRadius:"50%", animation:"spin2 1.2s linear infinite", margin:"0 auto 12px" }} />
+            <div style={{ fontSize:14, fontWeight:800, color:G.green, marginBottom:6 }}>USDT Sent — Waiting for Buyer</div>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>
+              Your USDT release is confirmed. The buyer is checking their wallet. Trade will close once they confirm receipt.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
           COMPLETED
       ══════════════════════════════════════ */}
       {trade.status === "completed" && (
-        <div style={{ background:`linear-gradient(135deg,${G.green}0a,${G.card})`, border:`1px solid ${G.green}44`, borderRadius:G.r, padding:"20px 16px", marginBottom:12, textAlign:"center" }}>
-          <style>{`@keyframes pop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}`}</style>
-          <div style={{ width:60, height:60, borderRadius:"50%", background:`${G.green}18`, border:`2px solid ${G.green}44`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", animation:"pop 0.5s ease" }}>
-            <span style={{ fontSize:28 }}>✅</span>
-          </div>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.green, fontWeight:900, marginBottom:6 }}>Trade Completed!</div>
-          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 16px" }}>
-            {isBuyer ? `${trade.amount_usdt} USDT sent to your ${trade.network} address.` : `You received ${sellerAmount} ETB.`}
-          </p>
-          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", textAlign:"left", marginBottom:isBuyer && !rated ? 16 : 0 }}>
-            <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Trade Record</div>
-            {[
-              ["Reference", trade.trade_ref || "—"],
-              ["Amount", `${trade.amount_usdt} USDT`],
-              ["Rate", `${trade.rate_etb} ETB/USDT`],
-              ["Seller received", `${sellerAmount} ETB`],
-              ["Network", trade.network || "—"],
-              ["Buyer", trade.buyer_display_name],
-              ["Seller", trade.seller_display_name],
-              ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
-            ].map(([l, v]) => (
-              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
-                <span style={{ color:G.textSub }}>{l}</span>
-                <span style={{ color:G.text, fontWeight:600 }}>{v}</span>
-              </div>
-            ))}
-          </div>
+        <div style={{ marginBottom:12 }}>
+          <TradeCompletedBanner trade={trade} isBuyer={isBuyer} sellerAmount={sellerAmount} />
           {isBuyer && !rated && (
-            <div style={{ marginTop:16, textAlign:"left" }}>
+            <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:G.r, padding:"16px 16px", marginTop:8 }}>
               <div style={{ fontSize:13, color:G.textSub, marginBottom:10, fontWeight:700 }}>Rate your seller</div>
               <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:10 }}>
                 {[1,2,3,4,5].map(s => (
@@ -1275,7 +1673,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               </div>
             </div>
           )}
-          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"10px 0 0" }}>Thanks for rating! 🙏</p>}
+          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"10px 0 0", textAlign:"center" }}>Thanks for the rating! 🙏</p>}
         </div>
       )}
 
@@ -1331,6 +1729,46 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
             Our team will contact both parties on Telegram within 2 hours.{" "}
             <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{ color:G.gold, fontWeight:700 }}>Contact Our Team →</a>
           </p>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          USDT DISPUTE (buyer didn't receive)
+      ══════════════════════════════════════ */}
+      {trade.status === "usdt_dispute" && (
+        <div style={{ background:G.card, border:`1px solid ${G.red}44`, borderRadius:G.r, padding:"18px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:G.red, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:20 }}>🔍</span> USDT Dispute — Under Investigation
+          </div>
+          <div style={{ background:G.redBg, borderRadius:G.rs, padding:"10px 12px", marginBottom:12 }}>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.5 }}>
+              <strong style={{ color:G.red }}>Buyer reported:</strong> USDT not received after seller confirmed release.
+            </p>
+          </div>
+          <div style={{ background:G.bgDeep, borderRadius:G.rs, padding:"12px 14px", marginBottom:12 }}>
+            {[
+              ["Reference", trade.trade_ref || "—"],
+              ["Amount", `${trade.amount_usdt} USDT`],
+              ["Network", trade.network || "—"],
+              ["Buyer", trade.buyer_display_name],
+              ["Seller", trade.seller_display_name],
+              ...(trade.buyer_telegram ? [["Buyer Telegram", trade.buyer_telegram]] : []),
+              ...(trade.seller_telegram ? [["Seller Telegram", trade.seller_telegram]] : []),
+            ].map(([l, v]) => (
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
+                <span style={{ color:G.textSub }}>{l}</span>
+                <span style={{ color:G.text, fontWeight:600 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <p style={{ color:G.textSub, fontSize:12, margin:"0 0 12px", lineHeight:1.6 }}>
+            Our admin team has been notified and will contact both parties on Telegram within 2 hours to resolve this.
+          </p>
+          <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{
+            display:"block", textAlign:"center", padding:"11px",
+            background:G.goldBg, border:`1px solid ${G.gold}44`,
+            borderRadius:G.rs, color:G.gold, fontSize:13, fontWeight:700, textDecoration:"none",
+          }}>Contact Admin Directly →</a>
         </div>
       )}
 
@@ -1863,14 +2301,14 @@ function MyActivity({ user, onOpenTrade, onBack }) {
   };
 
   const filtered = trades.filter(t => {
-    if (tab === "ongoing") return ["waiting_payment", "payment_sent", "disputed"].includes(t.status);
+    if (tab === "ongoing") return ["waiting_payment", "payment_sent", "seller_released", "usdt_dispute", "disputed"].includes(t.status);
     if (tab === "completed") return t.status === "completed";
     if (tab === "cancelled") return t.status === "cancelled";
     return true;
   });
 
-  const SC = { waiting_payment:G.gold, payment_sent:G.blue, completed:G.green, disputed:G.red, cancelled:G.textSub };
-  const SL = { waiting_payment:"Waiting Payment", payment_sent:"Payment Sent", completed:"Completed", disputed:"Disputed", cancelled:"Cancelled" };
+  const SC = { waiting_payment:G.gold, payment_sent:G.blue, seller_released:G.green, completed:G.green, disputed:G.red, usdt_dispute:G.red, cancelled:G.textSub };
+  const SL = { waiting_payment:"Waiting Payment", payment_sent:"Payment Sent", seller_released:"USDT Sent", completed:"Completed", disputed:"Disputed", usdt_dispute:"USDT Dispute", cancelled:"Cancelled" };
 
   const openListings = listings.filter(l => l.status === "open");
 
@@ -1939,7 +2377,7 @@ function MyActivity({ user, onOpenTrade, onBack }) {
           <div style={{ color:G.textSub, fontSize:14 }}>No {tab} trades</div>
         </Card>
       ) : filtered.map(t => {
-        const isActive = ["waiting_payment", "payment_sent", "disputed"].includes(t.status);
+        const isActive = ["waiting_payment", "payment_sent", "seller_released", "disputed", "usdt_dispute"].includes(t.status);
         const isBuyer = t.buyer_id === user.id;
         return (
           <div key={t.id}
