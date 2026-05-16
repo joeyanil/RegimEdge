@@ -2638,25 +2638,39 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
           if (found) { sellerAccount = found.account || sellerAccount; sellerAccountName = found.name || sellerAccountName; }
         } catch {}
       }
-      const inserted = await p2pInsert("p2p_trades", {
-        listing_id:listing.id,
-        listing_amount_usdt:listing.amount_usdt,
-        buyer_id:user.id,
-        buyer_display_name:kyc?.full_name || user.name || "Buyer",
-        seller_id:listing.seller_id,
-        seller_display_name:listing.seller_display_name,
-        amount_usdt:amount,
-        rate_etb:listing.rate_etb,
-        total_etb:totalEtb,
-        platform_fee_etb:fee,
-        payment_method:chosenMethod || listing.payment_method,
-        seller_account:sellerAccount,
-        seller_account_name:sellerAccountName,
-        network,
-        buyer_usdt_address:address,
-        direction:"sell_usdt",
-        expires_at:new Date(Date.now() + 3600000).toISOString(),
-      });
+      // Generate a collision-proof trade_ref client-side to avoid the duplicate key DB error.
+      // Format: RE-<base36 timestamp>-<random 5 chars> e.g. RE-LX4K2J-A7F3K
+      const genRef = () => "RE-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 7).toUpperCase();
+      let inserted, lastErr;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          inserted = await p2pInsert("p2p_trades", {
+            trade_ref: genRef(),
+            listing_id:listing.id,
+            listing_amount_usdt:listing.amount_usdt,
+            buyer_id:user.id,
+            buyer_display_name:kyc?.full_name || user.name || "Buyer",
+            seller_id:listing.seller_id,
+            seller_display_name:listing.seller_display_name,
+            amount_usdt:amount,
+            rate_etb:listing.rate_etb,
+            total_etb:totalEtb,
+            platform_fee_etb:fee,
+            payment_method:chosenMethod || listing.payment_method,
+            seller_account:sellerAccount,
+            seller_account_name:sellerAccountName,
+            network,
+            buyer_usdt_address:address,
+            direction:"sell_usdt",
+            expires_at:new Date(Date.now() + 3600000).toISOString(),
+          });
+          break; // success — exit retry loop
+        } catch (e) {
+          lastErr = e;
+          if (!e.message?.includes("duplicate")) throw e; // only retry on duplicate key errors
+        }
+      }
+      if (!inserted) throw lastErr;
       const newTrade = Array.isArray(inserted) ? inserted[0] : inserted;
       if (!newTrade?.id) throw new Error("Trade creation failed.");
       const remaining = listing.amount_usdt - amount;
