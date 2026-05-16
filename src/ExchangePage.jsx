@@ -870,10 +870,18 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   const confirmReceived = async () => {
     setErr(""); setLoading(true);
     try {
-      const remaining = (trade.listing_amount_usdt || trade.amount_usdt) - trade.amount_usdt;
-      const minU = config?.min_usdt || 5;
+      // Reopen listing with remaining amount, or mark completed if nothing left above minimum
       if (trade.listing_id) {
-        await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, remaining >= minU ? { status:"open", amount_usdt:remaining } : { status:"completed" });
+        // Prefer the stored trade_remaining_usdt; fall back to calculating from listing fields
+        const listingRows = await p2pSelect("p2p_listings", `?id=eq.${trade.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
+        const listing = listingRows?.[0] || {};
+        const remaining = listing.trade_remaining_usdt ?? ((listing.amount_usdt || trade.amount_usdt) - trade.amount_usdt);
+        const minU = config?.min_usdt || 5;
+        if (remaining >= minU) {
+          await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"open", amount_usdt:remaining, trade_remaining_usdt:null });
+        } else {
+          await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"completed", amount_usdt:Math.max(0, remaining), trade_remaining_usdt:null });
+        }
       }
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"completed", completed_at:new Date().toISOString() });
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"✅ Buyer confirmed USDT received. Trade completed successfully!", is_system:true });
@@ -1498,11 +1506,18 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
     setErr(""); setLoading(true);
     try {
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"completed", completed_at:new Date().toISOString(), seller_confirmed_at:new Date().toISOString() });
-      // Reopen listing with decremented amount if partial, else complete
-      const remaining = (trade.listing_amount_usdt || trade.amount_usdt) - trade.amount_usdt;
-      const minU = config?.min_usdt || 5;
+      // Reopen listing with remaining amount, or mark completed if nothing left above minimum
       if (trade.listing_id) {
-        await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, remaining >= minU ? { status:"open", amount_usdt:remaining } : { status:"completed" });
+        // Prefer the stored trade_remaining_usdt; fall back to calculating from listing fields
+        const listingRows = await p2pSelect("p2p_listings", `?id=eq.${trade.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
+        const listing = listingRows?.[0] || {};
+        const remaining = listing.trade_remaining_usdt ?? ((listing.amount_usdt || trade.amount_usdt) - trade.amount_usdt);
+        const minU = config?.min_usdt || 5;
+        if (remaining >= minU) {
+          await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"open", amount_usdt:remaining, trade_remaining_usdt:null });
+        } else {
+          await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"completed", amount_usdt:Math.max(0, remaining), trade_remaining_usdt:null });
+        }
       }
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"✅ Seller confirmed payment received. USDT released to buyer. Trade completed!", is_system:true });
       await sendNotificationEmail("trade_completed", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
@@ -2292,218 +2307,6 @@ function BuyFlowModal({ listing, user, kyc, config, onConfirm, onCancel }) {
   );
 }
 
-  const fee = config?.platform_fee_etb || 50;
-  const minU = config?.min_usdt || 5;
-  const maxU = Math.min(config?.max_usdt || 500, listing.amount_usdt);
-  const amt = parseFloat(amount) || 0;
-  const sellerEtb = amt && listing.rate_etb ? Math.round(amt * listing.rate_etb) : 0;
-  const totalEtb = sellerEtb + fee;
-  const amtValid = amt >= minU && amt <= maxU;
-  const selectedNet = NETWORKS.find(n => n.id === network);
-
-  const validateAddress = (addr, net) => {
-    if (!addr.trim()) return "Address is required.";
-    if (net === "TRC20" && !addr.startsWith("T")) return "TRC20 address must start with T";
-    if (net === "BEP20" && !addr.startsWith("0x")) return "BEP20 address must start with 0x";
-    if (net === "TRC20" && addr.length !== 34) return `TRC20 address must be exactly 34 characters (yours: ${addr.length})`;
-    if (net === "BEP20" && addr.length !== 42) return `BEP20 address must be exactly 42 characters (yours: ${addr.length})`;
-    return "";
-  };
-
-  const Progress = () => (
-    <div style={{ display:"flex", alignItems:"center", marginBottom:22 }}>
-      {["Amount","Network","Address","Confirm"].map((s, i) => {
-        const idx = i + 1;
-        const done = idx < step;
-        const active = idx === step;
-        const c = done ? G.green : active ? G.gold : G.textDim;
-        return (
-          <div key={s} style={{ display:"flex", alignItems:"center", flex:1 }}>
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
-              <div style={{ width:26, height:26, borderRadius:"50%", background:done ? G.green : active ? G.gold : G.surface, border:`2px solid ${c}`, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.3s" }}>
-                {done ? <span style={{ color:"#000", fontSize:11, fontWeight:900 }}>✓</span>
-                       : <span style={{ color:active ? "#000" : G.textDim, fontSize:10, fontWeight:800 }}>{idx}</span>}
-              </div>
-              <div style={{ fontSize:8, color:c, marginTop:2, fontWeight:700 }}>{s}</div>
-            </div>
-            {i < 3 && <div style={{ flex:1, height:2, background:done ? G.green : G.border, margin:"0 3px", marginBottom:14, transition:"background 0.3s" }} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:`${G.r}px ${G.r}px 0 0`, padding:"24px 20px 44px", width:"100%", maxWidth:480, maxHeight:"94vh", overflowY:"auto" }}>
-
-        {step === 1 && <>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>How much USDT?</div>
-          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>
-            Seller has <span style={{ color:G.gold, fontWeight:700 }}>{listing.amount_usdt} USDT</span> at <span style={{ color:G.text, fontWeight:700 }}>{listing.rate_etb} ETB/USDT</span>
-          </div>
-          <Progress />
-          <div style={{ marginBottom:14 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-              <span style={{ fontSize:11, color:G.textSub }}>Enter amount (USDT)</span>
-              <span style={{ fontSize:11, color:G.textDim }}>Min {minU} · Max {maxU}</span>
-            </div>
-            <div style={{ position:"relative" }}>
-              <FI value={amount} onChange={v => setAmount(v)} placeholder={`${minU}–${maxU}`} type="number" min={minU} max={maxU} />
-              <span style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", color:G.gold, fontSize:13, fontWeight:700, pointerEvents:"none" }}>USDT</span>
-            </div>
-            {amount && !amtValid && <div style={{ color:G.red, fontSize:11, marginTop:5 }}>Enter between {minU} and {maxU} USDT</div>}
-          </div>
-          {amt > 0 && amtValid && (
-            <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"14px", marginBottom:16 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-                <span style={{ fontSize:12, color:G.textSub }}>You receive</span>
-                <span style={{ fontSize:20, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif" }}>{amt} USDT</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                <span style={{ fontSize:12, color:G.textSub }}>Pay to seller</span>
-                <span style={{ fontSize:14, fontWeight:700, color:G.green }}>{sellerEtb} ETB</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", paddingTop:8, borderTop:`1px solid ${G.border}` }}>
-                <span style={{ fontSize:12, color:G.textSub, fontWeight:700 }}>Total you pay</span>
-                <span style={{ fontSize:15, fontWeight:900, color:G.text }}>{totalEtb} ETB</span>
-              </div>
-            </div>
-          )}
-          <Btn onClick={() => setStep(2)} disabled={!amtValid}>Next — Select Network →</Btn>
-          <div style={{ height:10 }} />
-          <OutlineBtn onClick={onCancel} color={G.textSub}>Cancel</OutlineBtn>
-        </>}
-
-        {step === 2 && <>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>Select Network</div>
-          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>Which network does your USDT wallet use?</div>
-          <Progress />
-          <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:14 }}>
-            {NETWORKS.map(n => (
-              <button key={n.id} onClick={() => setNetwork(n.id)} style={{
-                background:network === n.id ? G.goldBg2 : G.surface,
-                border:`2px solid ${network === n.id ? G.gold : G.border}`,
-                borderRadius:G.r, padding:"16px 14px", cursor:"pointer", textAlign:"left", fontFamily:"inherit",
-              }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
-                  <div>
-                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                      <span style={{ fontSize:16, fontWeight:900, color:network === n.id ? G.gold : G.text }}>{n.label}</span>
-                      <span style={{ fontSize:10, color:G.textSub, background:G.bgDeep, padding:"2px 8px", borderRadius:8, border:`1px solid ${G.border}` }}>{n.chain}</span>
-                    </div>
-                    <div style={{ fontSize:12, color:G.textSub }}>{n.sub}</div>
-                  </div>
-                  <div style={{ width:22, height:22, borderRadius:"50%", border:`2px solid ${network === n.id ? G.gold : G.border}`, background:network === n.id ? G.gold : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    {network === n.id && <span style={{ color:"#000", fontSize:12, fontWeight:900 }}>✓</span>}
-                  </div>
-                </div>
-                <div style={{ fontSize:11, color:G.textDim }}>{n.fee}</div>
-              </button>
-            ))}
-          </div>
-          <div style={{ background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, padding:"10px 14px", marginBottom:14 }}>
-            <p style={{ color:G.red, fontSize:12, margin:0, fontWeight:700 }}>⚠ Wrong network = permanent loss of funds. Double-check before continuing.</p>
-          </div>
-          <Btn onClick={() => setStep(3)}>Next — Enter Address →</Btn>
-          <div style={{ height:10 }} />
-          <OutlineBtn onClick={() => setStep(1)} color={G.textSub}>← Back</OutlineBtn>
-        </>}
-
-        {step === 3 && <>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>Your USDT Address</div>
-          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>The seller will send {amt} USDT directly to this address</div>
-          <Progress />
-          <div style={{ background:G.goldBg, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"14px", marginBottom:14 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-              <span style={{ fontSize:20 }}>💡</span>
-              <div style={{ fontSize:12, fontWeight:800, color:G.gold }}>How to find your {selectedNet?.label} address</div>
-            </div>
-            <div style={{ fontSize:12, color:G.textSub, lineHeight:1.8, marginBottom:10 }}>{selectedNet?.how}</div>
-            <div style={{ background:G.surface, borderRadius:G.rs, padding:"8px 12px", display:"flex", gap:8, alignItems:"center" }}>
-              <span style={{ fontSize:16 }}>📍</span>
-              <div>
-                <div style={{ fontSize:10, color:G.textDim, marginBottom:1 }}>Address format</div>
-                <div style={{ fontSize:12, color:G.text, fontWeight:700 }}>{selectedNet?.length}</div>
-              </div>
-            </div>
-          </div>
-          <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:11, color:G.textSub, marginBottom:6 }}>Paste your {selectedNet?.label} address below</div>
-            <textarea
-              value={address}
-              onChange={e => { setAddress(e.target.value); setAddrErr(""); }}
-              placeholder={`Paste your ${network} USDT address here...`}
-              style={{
-                width:"100%", background:G.surface,
-                border:`1.5px solid ${addrErr ? G.red : address && validateAddress(address.trim(), network) === "" ? G.green : G.border}`,
-                borderRadius:G.rs, padding:"12px 14px", color:G.text, fontSize:12,
-                outline:"none", boxSizing:"border-box", fontFamily:"monospace",
-                resize:"none", minHeight:72, lineHeight:1.6,
-              }}
-            />
-            {addrErr && <div style={{ color:G.red, fontSize:11, marginTop:4 }}>{addrErr}</div>}
-            {address && !addrErr && validateAddress(address.trim(), network) === "" && (
-              <div style={{ color:G.green, fontSize:11, marginTop:4 }}>✓ Address format looks valid</div>
-            )}
-          </div>
-          <div style={{ background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, padding:"10px 14px", marginBottom:14 }}>
-            <p style={{ color:G.red, fontSize:12, margin:0 }}>Sending to a wrong address or wrong network results in permanent loss. We cannot recover funds.</p>
-          </div>
-          <Btn onClick={() => {
-            const e = validateAddress(address.trim(), network);
-            if (e) { setAddrErr(e); return; }
-            setAddrErr(""); setStep(4);
-          }} disabled={!address.trim()}>Review & Confirm →</Btn>
-          <div style={{ height:10 }} />
-          <OutlineBtn onClick={() => setStep(2)} color={G.textSub}>← Back</OutlineBtn>
-        </>}
-
-        {step === 4 && <>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.text, fontWeight:900, marginBottom:4 }}>Confirm Trade</div>
-          <div style={{ fontSize:12, color:G.textSub, marginBottom:18 }}>Review every detail before confirming — this cannot be changed</div>
-          <Progress />
-          <div style={{ background:G.surface, border:`1px solid ${G.gold}44`, borderRadius:G.r, padding:"14px 16px", marginBottom:14 }}>
-            <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Trade Summary</div>
-            {[
-              ["You Receive", `${amt} USDT`, G.gold],
-              ["Rate", `${listing.rate_etb} ETB / USDT`, G.text],
-              ["Pay Seller", `${sellerEtb} ETB`, G.green],
-              ["Total You Pay", `${totalEtb} ETB`, G.text],
-              ["Seller", listing.seller_display_name, G.text],
-              ["Payment Method", listing.payment_method, G.text],
-            ].map(([l, v, c]) => (
-              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${G.border}22`, fontSize:12 }}>
-                <span style={{ color:G.textSub }}>{l}</span>
-                <span style={{ color:c, fontWeight:700 }}>{v}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ background:G.bgDeep, border:`2px solid ${G.gold}55`, borderRadius:G.r, padding:"14px 16px", marginBottom:16 }}>
-            <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Your Receiving Details</div>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-              <div style={{ padding:"4px 12px", background:G.goldBg2, border:`1px solid ${G.gold}44`, borderRadius:20, fontSize:13, color:G.gold, fontWeight:900 }}>{network}</div>
-              <span style={{ fontSize:11, color:G.textSub }}>{selectedNet?.chain}</span>
-            </div>
-            <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px" }}>
-              <div style={{ fontSize:10, color:G.textDim, marginBottom:4 }}>Your USDT Address</div>
-              <div style={{ fontSize:12, color:G.text, fontWeight:700, wordBreak:"break-all", fontFamily:"monospace", lineHeight:1.6 }}>{address.trim()}</div>
-            </div>
-            <div style={{ marginTop:10, padding:"9px 12px", background:G.redBg, borderRadius:G.rs, border:`1px solid ${G.red}22` }}>
-              <p style={{ color:G.red, fontSize:11, margin:0, fontWeight:700 }}>This is the address the seller will send {amt} USDT to. Confirm it is correct.</p>
-            </div>
-          </div>
-          <Btn onClick={async () => { setBusy(true); try { await onConfirm({ amount:amt, network, address:address.trim() }); } catch {} finally { setBusy(false); } }} disabled={busy} color={G.green}>
-            {busy ? "Opening Trade Room..." : "✓ Confirm & Open Trade Room"}
-          </Btn>
-          <div style={{ height:10 }} />
-          <OutlineBtn onClick={() => setStep(3)} color={G.textSub}>← Edit Address</OutlineBtn>
-        </>}
-      </div>
-    </div>
-  );
-}
-
 // Cancel Trade Modal
 function CancelTradeModal({ trade, user, isBuyer, onCancelled, onClose }) {
   const BUYER_REASONS = ["Changed my mind","Cannot complete payment in time","Found a better rate","Technical issue","Other"];
@@ -2518,7 +2321,14 @@ function CancelTradeModal({ trade, user, isBuyer, onCancelled, onClose }) {
     setErr(""); setLoading(true);
     try {
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"cancelled", cancellation_reason:reason, cancelled_by:isBuyer ? "buyer" : "seller" });
-      if (trade.listing_id) await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"open" });
+      // Restore listing to open with the original amount (undo the partial deduction from this trade)
+      if (trade.listing_id) {
+        const listingRows = await p2pSelect("p2p_listings", `?id=eq.${trade.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
+        const listing = listingRows?.[0] || {};
+        // Restore the full pre-trade amount: remaining stored + what this buyer was buying
+        const restoredAmount = (listing.trade_remaining_usdt ?? 0) + trade.amount_usdt || listing.amount_usdt;
+        await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, { status:"open", amount_usdt:restoredAmount, trade_remaining_usdt:null });
+      }
       if (isBuyer) {
         try {
           const kycRows = await p2pSelect("kyc_submissions", `?user_id=eq.${trade.buyer_id}&select=cancellation_count`);
@@ -2565,14 +2375,20 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    p2pSelect("p2p_trades", "?status=eq.waiting_payment&select=id,listing_id,expires_at")
+    p2pSelect("p2p_trades", "?status=eq.waiting_payment&select=id,listing_id,expires_at,amount_usdt")
       .then(async rows => {
         const now = new Date();
         for (const t of (rows || [])) {
           if (t.expires_at && new Date(t.expires_at) < now) {
             try {
               await p2pUpdate("p2p_trades", `id=eq.${t.id}`, { status:"cancelled", cancellation_reason:"Expired", cancelled_by:"system" });
-              if (t.listing_id) await p2pUpdate("p2p_listings", `id=eq.${t.listing_id}`, { status:"open" });
+              // Restore listing to open with the correct amount (original amount = remaining + buyer's locked amount)
+              if (t.listing_id) {
+                const listingRows = await p2pSelect("p2p_listings", `?id=eq.${t.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
+                const listing = listingRows?.[0] || {};
+                const restoredAmount = (listing.trade_remaining_usdt ?? 0) + (t.amount_usdt || 0) || listing.amount_usdt;
+                await p2pUpdate("p2p_listings", `id=eq.${t.listing_id}`, { status:"open", amount_usdt:restoredAmount, trade_remaining_usdt:null });
+              }
             } catch {}
           }
         }
@@ -2593,14 +2409,25 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
     if (!listing) return;
     if (listing.seller_id === user.id) { setErr("You cannot buy your own listing."); setBuyFlowListing(null); return; }
     try {
-      const active = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&status=in.(waiting_payment,payment_sent,usdt_sent)&select=id`);
-      if (active?.length > 0) { setErr("You have an active trade. Complete or cancel it first."); setBuyFlowListing(null); return; }
+      const active = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&status=in.(waiting_payment,payment_sent,usdt_sent)&select=id,listing_id`);
+      if (active?.length > 0) {
+        // Trade already exists for this exact listing — just open it (handles double-tap / retry)
+        const existingForListing = active.find(t => t.listing_id === listing.id);
+        if (existingForListing) {
+          try {
+            const rows = await p2pSelect("p2p_trades", `?id=eq.${existingForListing.id}&select=*`);
+            if (rows?.[0]) { setBuyFlowListing(null); onOpenTrade(rows[0]); return; }
+          } catch {}
+        }
+        setErr("You have an active trade. Complete or cancel it first.");
+        setBuyFlowListing(null);
+        return;
+      }
     } catch {}
     setErr(""); setBuying(listing.id);
     try {
       const fee = config?.platform_fee_etb || 50;
       const totalEtb = Math.round(amount * listing.rate_etb);
-      // Resolve the specific payment details for the chosen method
       let sellerAccount = listing.seller_account;
       let sellerAccountName = listing.seller_account_name || "";
       if (chosenMethod && listing.payment_details) {
@@ -2610,36 +2437,45 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
           if (found) { sellerAccount = found.account || sellerAccount; sellerAccountName = found.name || sellerAccountName; }
         } catch {}
       }
-      const inserted = await p2pInsert("p2p_trades", {
-        listing_id:listing.id,
-        listing_amount_usdt:listing.amount_usdt,
-        buyer_id:user.id,
-        buyer_display_name:kyc?.full_name || user.name || "Buyer",
-        seller_id:listing.seller_id,
-        seller_display_name:listing.seller_display_name,
-        amount_usdt:amount,
-        rate_etb:listing.rate_etb,
-        total_etb:totalEtb,
-        platform_fee_etb:fee,
-        payment_method:chosenMethod || listing.payment_method,
-        seller_account:sellerAccount,
-        seller_account_name:sellerAccountName,
-        network,
-        buyer_usdt_address:address,
-        direction:"sell_usdt",
-        expires_at:new Date(Date.now() + 3600000).toISOString(),
-      });
-      const newTrade = Array.isArray(inserted) ? inserted[0] : inserted;
+
+      let newTrade = null;
+      try {
+        const inserted = await p2pInsert("p2p_trades", {
+          listing_id:listing.id,
+          listing_amount_usdt:listing.amount_usdt,
+          buyer_id:user.id,
+          buyer_display_name:kyc?.full_name || user.name || "Buyer",
+          seller_id:listing.seller_id,
+          seller_display_name:listing.seller_display_name,
+          amount_usdt:amount,
+          rate_etb:listing.rate_etb,
+          total_etb:totalEtb,
+          platform_fee_etb:fee,
+          payment_method:chosenMethod || listing.payment_method,
+          seller_account:sellerAccount,
+          seller_account_name:sellerAccountName,
+          network,
+          buyer_usdt_address:address,
+          direction:"sell_usdt",
+          expires_at:new Date(Date.now() + 3600000).toISOString(),
+        });
+        newTrade = Array.isArray(inserted) ? inserted[0] : inserted;
+      } catch (insertErr) {
+        // If duplicate key — trade was already created, find and open it
+        if (insertErr?.message?.includes("duplicate key") || insertErr?.message?.includes("unique constraint")) {
+          const existing = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&listing_id=eq.${listing.id}&order=created_at.desc&limit=1&select=*`).catch(() => []);
+          if (existing?.[0]) { setBuyFlowListing(null); onOpenTrade(existing[0]); return; }
+        }
+        throw insertErr;
+      }
+
       if (!newTrade?.id) throw new Error("Trade creation failed.");
       const remaining = listing.amount_usdt - amount;
-      const minU = config?.min_usdt || 5;
-      // KEY FIX: only close listing when remaining < min, otherwise keep it OPEN with updated amount
-      if (remaining < minU) {
-        await p2pUpdate("p2p_listings", `id=eq.${listing.id}`, { status:"taken", amount_usdt:Math.max(0, remaining) });
-      } else {
-        // Keep listing open with decremented amount so others can still buy
-        await p2pUpdate("p2p_listings", `id=eq.${listing.id}`, { amount_usdt:remaining });
-      }
+      await p2pUpdate("p2p_listings", `id=eq.${listing.id}`, {
+        status: "taken",
+        amount_usdt: listing.amount_usdt,
+        trade_remaining_usdt: remaining,
+      });
       await p2pInsert("trade_messages", { trade_id:newTrade.id, sender_id:user.id, sender_display_name:"System", message:`🔔 New trade! Buyer wants ${amount} USDT via ${network}. Payment required within 1 hour.`, is_system:true });
       await sendNotificationEmail("trade_opened", { trade_ref:newTrade.trade_ref, seller_id:listing.seller_id, buyer_id:user.id });
       setBuyFlowListing(null);
@@ -3292,7 +3128,7 @@ function SellForm({ user, kyc, config, onBack, onDone }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // EXCHANGE HUB (main dashboard after KYC approved)
 // ─────────────────────────────────────────────────────────────────────────────
-function ExchangeHub({ user, kyc, config, setScreen }) {
+function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
   const hasTrustPlus = kyc?.trust_plus;
   const [stats, setStats] = useState({ trades:0, rating:0, success:0 });
   const [globalStats, setGlobalStats] = useState({ total:0 });
@@ -3333,6 +3169,58 @@ function ExchangeHub({ user, kyc, config, setScreen }) {
         background:`linear-gradient(135deg,rgba(212,175,55,0.07) 0%,${G.bgDeep} 70%)`,
         borderBottom:`1px solid ${G.border}`, padding:"18px 18px 16px",
       }}>
+        {/* Brand logo — uses custom logoUrl if provided, otherwise the inline RegimeEdge brand mark */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="RegimeEdge"
+              style={{
+                height:32, width:"auto", objectFit:"contain",
+                filter:"drop-shadow(0 0 6px rgba(212,175,55,0.3))",
+              }}
+            />
+          ) : (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <svg width="32" height="32" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" style={{ display:"block", flexShrink:0 }}>
+                <defs>
+                  <filter id="exc-glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2" result="b"/>
+                    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                  <filter id="exc-soft" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation=".8" result="b"/>
+                    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                  <radialGradient id="exc-rg" cx="50%" cy="60%" r="50%">
+                    <stop offset="0%" stopColor="#D4AF37" stopOpacity=".14"/>
+                    <stop offset="100%" stopColor="#D4AF37" stopOpacity="0"/>
+                  </radialGradient>
+                </defs>
+                <ellipse cx="30" cy="46" rx="24" ry="3.5" fill="url(#exc-rg)"/>
+                <ellipse cx="22" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(-18,22,18.5)" filter="url(#exc-soft)"/>
+                <ellipse cx="30" cy="14" rx="3.5" ry="2.3" fill="none" stroke="#FFE57A" strokeWidth="1.7" filter="url(#exc-glow)"/>
+                <ellipse cx="38" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(18,38,18.5)" filter="url(#exc-soft)"/>
+                <path d="M13 38 Q30 10 47 38" fill="none" stroke="#D4AF37" strokeWidth=".5" strokeDasharray="1.5 3" opacity=".2" strokeLinecap="round"/>
+                <polygon points="13,31 8,34.5 8,41.5 13,45 18,41.5 18,34.5" fill="#111315" stroke="#22c55e" strokeWidth="1.6"/>
+                <circle cx="13" cy="38" r="3" fill="#22c55e" opacity=".85" filter="url(#exc-soft)"/>
+                <text x="13" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">B</text>
+                <polygon points="47,31 42,34.5 42,41.5 47,45 52,41.5 52,34.5" fill="#111315" stroke="#D4AF37" strokeWidth="1.6"/>
+                <circle cx="47" cy="38" r="3" fill="#D4AF37" opacity=".85" filter="url(#exc-soft)"/>
+                <text x="47" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">S</text>
+                <circle r="2.5" fill="#FFE57A" opacity=".9" filter="url(#exc-glow)">
+                  <animateMotion dur="2.8s" repeatCount="indefinite" calcMode="spline" keySplines="0.42 0 0.58 1" path="M13 38 Q30 10 47 38"/>
+                </circle>
+              </svg>
+              <div style={{ lineHeight:1 }}>
+                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, fontWeight:900, color:G.text, lineHeight:1 }}>
+                  Regime<span style={{ color:G.gold }}>Edge</span>
+                </div>
+                <div style={{ fontSize:8, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginTop:2 }}>Exchange</div>
+              </div>
+            </div>
+          )}
+        </div>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
           <div style={{
             width:46, height:46, borderRadius:"50%",
@@ -3935,7 +3823,7 @@ function NotLoggedIn({ onSignIn, onGuide }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
-function ExchangePage({ user, onSignIn }) {
+function ExchangePage({ user, onSignIn, logoUrl }) {
   const [kyc, setKyc] = useState(null);
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -3988,6 +3876,10 @@ function ExchangePage({ user, onSignIn }) {
   // While loading, show spinner
   if (loading) return <Spinner text="Loading exchange..." />;
 
+  // Guide is accessible to everyone — logged in or not — so check this FIRST
+  // (before the !user check, otherwise setting screen="guide" from NotLoggedIn is blocked)
+  if (screen === "guide") return <GuidePage onBack={goHub} />;
+
   // Not logged in
   if (!user?.id) return <NotLoggedIn onSignIn={onSignIn} onGuide={() => setScreen("guide")} />;
 
@@ -4009,9 +3901,6 @@ function ExchangePage({ user, onSignIn }) {
       </GlowCard>
     </div>
   );
-
-  // Guide is accessible to any logged-in user regardless of KYC status
-  if (screen === "guide") return <GuidePage onBack={goHub} />;
 
   // KYC not approved — show KYC screen
   // (handles: null/not submitted, pending, rejected, banned)
@@ -4074,7 +3963,7 @@ function ExchangePage({ user, onSignIn }) {
   if (screen === "trustPlus") return <TrustPlusScreen user={user} kyc={kyc} onBack={goHub} />;
   if (screen === "kyc") return <KYCScreen user={user} kyc={kyc} onBack={goHub} onSubmitted={() => { setKyc(p => ({ ...p, status:"pending" })); loadData(user.id); }} />;
 
-  return <ExchangeHub user={user} kyc={kyc} config={config} setScreen={setScreen} />;
+  return <ExchangeHub user={user} kyc={kyc} config={config} setScreen={setScreen} logoUrl={logoUrl} />;
 }
 
 export default ExchangePage;
