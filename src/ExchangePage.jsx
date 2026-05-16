@@ -3324,7 +3324,6 @@ function ExchangeHub({ user, kyc, config, setScreen }) {
       color:hasTrustPlus ? G.gold : G.purple,
       sc:"trustPlus",
     },
-    { icon:"bookOpen", label:"P2P Guide", sub:"How to buy & sell safely", color:"#60a5fa", sc:"guide" },
   ];
 
   return (
@@ -3437,6 +3436,37 @@ function ExchangeHub({ user, kyc, config, setScreen }) {
             </div>
           ))}
         </div>
+
+        {/* Full Guide CTA */}
+        <button
+          onClick={() => setScreen("guide")}
+          style={{
+            width:"100%", marginTop:14,
+            background:`linear-gradient(135deg,rgba(96,165,250,0.07) 0%,${G.card} 100%)`,
+            border:`1px solid rgba(96,165,250,0.25)`,
+            borderRadius:G.r, padding:"15px 16px",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            cursor:"pointer", fontFamily:"inherit",
+            boxShadow:"0 2px 12px rgba(96,165,250,0.06)",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(96,165,250,0.5)"; e.currentTarget.style.background = `linear-gradient(135deg,rgba(96,165,250,0.12) 0%,${G.card} 100%)`; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(96,165,250,0.25)"; e.currentTarget.style.background = `linear-gradient(135deg,rgba(96,165,250,0.07) 0%,${G.card} 100%)`; }}
+        >
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ width:40, height:40, borderRadius:12, background:"rgba(96,165,250,0.12)", border:"1px solid rgba(96,165,250,0.25)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <Icon name="bookOpen" size={20} color="#60a5fa" />
+            </div>
+            <div style={{ textAlign:"left" }}>
+              <div style={{ fontSize:14, fontWeight:800, color:G.text, marginBottom:2 }}>Full P2P Guide</div>
+              <div style={{ fontSize:11, color:G.textSub, lineHeight:1.3 }}>How to buy, sell, handle disputes & stay safe</div>
+            </div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"#60a5fa" }}>Read</span>
+            <span style={{ fontSize:14, color:"#60a5fa" }}>→</span>
+          </div>
+        </button>
+
       </div>
     </div>
   );
