@@ -2621,8 +2621,20 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
     if (!listing) return;
     if (listing.seller_id === user.id) { setErr("You cannot buy your own listing."); setBuyFlowListing(null); return; }
     try {
-      const active = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&status=in.(waiting_payment,payment_sent,usdt_sent)&select=id`);
-      if (active?.length > 0) { setErr("You have an active trade. Complete or cancel it first."); setBuyFlowListing(null); return; }
+      const active = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&status=in.(waiting_payment,payment_sent,usdt_sent)&select=id,listing_id`);
+      if (active?.length > 0) {
+        // If the existing trade is for THIS listing (double-tap / retry), just open it
+        const existingForListing = active.find(t => t.listing_id === listing.id);
+        if (existingForListing) {
+          try {
+            const rows = await p2pSelect("p2p_trades", `?id=eq.${existingForListing.id}&select=*`);
+            if (rows?.[0]) { setBuyFlowListing(null); onOpenTrade(rows[0]); return; }
+          } catch {}
+        }
+        setErr("You have an active trade. Complete or cancel it first.");
+        setBuyFlowListing(null);
+        return;
+      }
     } catch {}
     setErr(""); setBuying(listing.id);
     try {
@@ -2638,29 +2650,45 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
           if (found) { sellerAccount = found.account || sellerAccount; sellerAccountName = found.name || sellerAccountName; }
         } catch {}
       }
-      const inserted = await p2pInsert("p2p_trades", {
-        listing_id:listing.id,
-        listing_amount_usdt:listing.amount_usdt,
-        buyer_id:user.id,
-        buyer_display_name:kyc?.full_name || user.name || "Buyer",
-        seller_id:listing.seller_id,
-        seller_display_name:listing.seller_display_name,
-        amount_usdt:amount,
-        rate_etb:listing.rate_etb,
-        total_etb:totalEtb,
-        platform_fee_etb:fee,
-        payment_method:chosenMethod || listing.payment_method,
-        seller_account:sellerAccount,
-        seller_account_name:sellerAccountName,
-        network,
-        buyer_usdt_address:address,
-        direction:"sell_usdt",
-        expires_at:new Date(Date.now() + 3600000).toISOString(),
-      });
-      const newTrade = Array.isArray(inserted) ? inserted[0] : inserted;
+
+      let newTrade = null;
+      try {
+        const inserted = await p2pInsert("p2p_trades", {
+          listing_id:listing.id,
+          listing_amount_usdt:listing.amount_usdt,
+          buyer_id:user.id,
+          buyer_display_name:kyc?.full_name || user.name || "Buyer",
+          seller_id:listing.seller_id,
+          seller_display_name:listing.seller_display_name,
+          amount_usdt:amount,
+          rate_etb:listing.rate_etb,
+          total_etb:totalEtb,
+          platform_fee_etb:fee,
+          payment_method:chosenMethod || listing.payment_method,
+          seller_account:sellerAccount,
+          seller_account_name:sellerAccountName,
+          network,
+          buyer_usdt_address:address,
+          direction:"sell_usdt",
+          expires_at:new Date(Date.now() + 3600000).toISOString(),
+        });
+        newTrade = Array.isArray(inserted) ? inserted[0] : inserted;
+      } catch (insertErr) {
+        // Duplicate trade_ref or similar conflict — check if our trade already exists
+        const isDuplicate = insertErr?.message?.includes("duplicate key") || insertErr?.message?.includes("unique constraint");
+        if (isDuplicate) {
+          const existing = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&listing_id=eq.${listing.id}&status=in.(waiting_payment,payment_sent,usdt_sent)&order=created_at.desc&limit=1&select=*`);
+          if (existing?.[0]) {
+            setBuyFlowListing(null);
+            onOpenTrade(existing[0]);
+            return;
+          }
+        }
+        throw insertErr;
+      }
+
       if (!newTrade?.id) throw new Error("Trade creation failed.");
       const remaining = listing.amount_usdt - amount;
-      const minU = config?.min_usdt || 5;
       // Always lock the listing as "taken" while a trade is active.
       // On trade completion or cancellation it will be restored to "open"
       // with the correct remaining amount (or marked "completed" if fully sold).
