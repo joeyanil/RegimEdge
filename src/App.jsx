@@ -1474,7 +1474,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             const listing=listingRows?.[0]||{};
             const restoredAmount=(listing.trade_remaining_usdt??0)+(t.amount_usdt||0)||listing.amount_usdt;
             await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open",amount_usdt:restoredAmount,trade_remaining_usdt:null});
-          }catch(){ await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open"}); }
+          }catch(e){ await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open"}); }
         }else if(newStatus==="completed"){
           // Reopen listing with remaining amount or close it
           try{
@@ -1487,7 +1487,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             }else{
               await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"completed",amount_usdt:Math.max(0,remaining),trade_remaining_usdt:null});
             }
-          }catch(){}
+          }catch(e){}
         }
       }
       try{
