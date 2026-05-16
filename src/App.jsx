@@ -1221,62 +1221,17 @@ function AuthModal({onAuth,onClose}){
 }
 
 // ── ADMIN LOGIN GATE ─────────────────────────────────────────────────────────
-// Uses real Supabase auth so auth.uid() is set when admin queries run.
-// This allows the is_admin() RLS policies to fire and return ALL data.
-// The regular user's tokens are saved before admin signs in and restored on close.
-const ADMIN_EMAIL = "diboaniley@gmail.com";
-
 function AdminLogin({onSuccess,onClose}){
-  const[pass,setPass]=useState("");
-  const[err,setErr]=useState("");
-  const[loading,setLoading]=useState(false);
-
-  const handleEnter=async()=>{
-    if(!pass){setErr("Enter your password.");return;}
-    setLoading(true);setErr("");
-    try{
-      // Save the regular-user tokens so we can restore them when admin panel closes
-      const prevAccess=localStorage.getItem("re_access_token");
-      const prevRefresh=localStorage.getItem("re_refresh_token");
-      if(prevAccess) localStorage.setItem("re_user_access_token_backup",prevAccess);
-      if(prevRefresh) localStorage.setItem("re_user_refresh_token_backup",prevRefresh);
-      // Sign in as admin — creates a real Supabase session so auth.uid() is set
-      const d=await sbSignIn(ADMIN_EMAIL,pass);
-      if(!d?.access_token) throw new Error("Login failed.");
-      // Double-check this is actually the admin account
-      if(d.user?.email!==ADMIN_EMAIL){
-        await sbSignOut();
-        throw new Error("Not authorised.");
-      }
-      onSuccess();
-    }catch(e){
-      setErr(e.message||"Incorrect password.");
-      // Restore backed-up tokens if login failed
-      const backup=localStorage.getItem("re_user_access_token_backup");
-      const backupR=localStorage.getItem("re_user_refresh_token_backup");
-      if(backup){localStorage.setItem("re_access_token",backup);localStorage.removeItem("re_user_access_token_backup");}
-      if(backupR){localStorage.setItem("re_refresh_token",backupR);localStorage.removeItem("re_user_refresh_token_backup");}
-    }finally{setLoading(false);}
-  };
-
+  const[pass,setPass]=useState(""); const[err,setErr]=useState(false);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:250,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)"}}>
       <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:26,width:"100%",maxWidth:300}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.gold,marginBottom:4}}>Admin Access</div>
-        <div style={{fontSize:11,color:G.textSub,marginBottom:18}}>{ADMIN_EMAIL}</div>
-        <FI value={pass} onChange={v=>{setPass(v);setErr("");}} placeholder="Password" type="password"
-          style={{marginBottom:err?8:14}}/>
-        {err&&<div style={{color:G.red,fontSize:12,marginBottom:12}}>⚠ {err}</div>}
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.gold,marginBottom:18}}>Admin Access</div>
+        <FI value={pass} onChange={v=>{setPass(v);setErr(false);}} placeholder="Password" type="password" style={{marginBottom:err?8:14}}/>
+        {err&&<div style={{color:G.red,fontSize:12,marginBottom:12}}>Incorrect password.</div>}
         <div style={{display:"flex",gap:9}}>
-          <Btn variant="outline" onClick={onClose} style={{flex:1}} disabled={loading}>Cancel</Btn>
-          <Btn onClick={handleEnter} style={{flex:1}} disabled={loading}>
-            {loading?(
-              <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                <span style={{width:12,height:12,border:"2px solid #00000066",borderTopColor:"#000",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>
-                Signing in…
-              </span>
-            ):"Enter"}
-          </Btn>
+          <Btn variant="outline" onClick={onClose} style={{flex:1}}>Cancel</Btn>
+          <Btn onClick={()=>{if(pass===ADMIN_PASS)onSuccess();else setErr(true);}} style={{flex:1}}>Enter</Btn>
         </div>
       </div>
     </div>
@@ -1447,29 +1402,8 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
         ...(newStatus==="cancelled"?{cancelled_by:"admin",cancellation_reason:"Resolved by admin"}:{}),
       });
       const t=tradeList.find(x=>x.id===tradeId);
-      if(t&&t.listing_id){
-        if(newStatus==="cancelled"){
-          // Restore listing amount correctly using trade_remaining_usdt if available
-          try{
-            const listingRows=await p2pSelect("p2p_listings",`?id=eq.${t.listing_id}&select=amount_usdt,trade_remaining_usdt`);
-            const listing=listingRows?.[0]||{};
-            const restoredAmount=(listing.trade_remaining_usdt??0)+(t.amount_usdt||0)||listing.amount_usdt;
-            await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open",amount_usdt:restoredAmount,trade_remaining_usdt:null});
-          }catch(){ await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open"}); }
-        }else if(newStatus==="completed"){
-          // Reopen listing with remaining amount or close it
-          try{
-            const listingRows=await p2pSelect("p2p_listings",`?id=eq.${t.listing_id}&select=amount_usdt,trade_remaining_usdt`);
-            const listing=listingRows?.[0]||{};
-            const remaining=listing.trade_remaining_usdt??((listing.amount_usdt||t.amount_usdt)-t.amount_usdt);
-            const minU=5;
-            if(remaining>=minU){
-              await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open",amount_usdt:remaining,trade_remaining_usdt:null});
-            }else{
-              await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"completed",amount_usdt:Math.max(0,remaining),trade_remaining_usdt:null});
-            }
-          }catch(){}
-        }
+      if(t&&newStatus==="cancelled"&&t.listing_id){
+        await p2pUpdate("p2p_listings",`id=eq.${t.listing_id}`,{status:"open"}).catch(()=>{});
       }
       try{
         await p2pInsert("trade_messages",{
@@ -2454,26 +2388,6 @@ export default function App(){
     }catch{}
   };
 
-  // When admin closes the panel: sign out the admin Supabase session and
-  // restore the regular user's tokens so their session is unaffected.
-  const handleAdminClose=async()=>{
-    setShowAdmin(false);
-    try{
-      await sbSignOut(); // clears the admin JWT
-      // Restore regular user tokens from backup
-      const backup=localStorage.getItem("re_user_access_token_backup");
-      const backupR=localStorage.getItem("re_user_refresh_token_backup");
-      if(backup){
-        localStorage.setItem("re_access_token",backup);
-        localStorage.removeItem("re_user_access_token_backup");
-      }
-      if(backupR){
-        localStorage.setItem("re_refresh_token",backupR);
-        localStorage.removeItem("re_user_refresh_token_backup");
-      }
-    }catch{}
-  };
-
   const handleAuth=(u)=>{
     setUser(u);
     setShowAuth(false);
@@ -2740,7 +2654,7 @@ export default function App(){
         <div style={{minWidth:0}}>
           {/* Page — hidden while admin panel is open */}
           {showAdmin?(
-            <AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={handleAdminClose}/>
+            <AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={()=>setShowAdmin(false)}/>
           ):(
             <div className="re-page" style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
               {contentLoading&&page==="home"?(
@@ -2786,7 +2700,7 @@ export default function App(){
       )}
 
       {showAuth&&<AuthModal onAuth={handleAuth} onClose={()=>setShowAuth(false)}/>}
-      {showAdminLogin&&<AdminLogin onSuccess={()=>{setShowAdminLogin(false);setShowAdmin(true);}} onClose={()=>{setShowAdminLogin(false);handleAdminClose();}}/>}
+      {showAdminLogin&&<AdminLogin onSuccess={()=>{setShowAdminLogin(false);setShowAdmin(true);}} onClose={()=>setShowAdminLogin(false)}/>}
     </div>
   );
 }
