@@ -48,7 +48,7 @@ const INIT = {
   exchangeConfig:{
     min_rate_etb:160,
     max_rate_etb:195,
-    platform_fee_etb:75,
+    platform_fee_etb:50,
     min_usdt:5,
     max_usdt:500,
     exchange_active:true,

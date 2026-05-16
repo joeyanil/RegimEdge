@@ -437,7 +437,7 @@ function TrustPlusScreen({ user, kyc, onBack }) {
       pending: { color:G.gold, title:"Application Pending", desc:"Our team will review within 48 hours." },
       approved: { color:G.gold, title:"Trust+ Active", desc:"Your Trust+ badge is live. Buyers see it on your listings." },
       rejected: { color:G.red, title:"Application Not Approved", desc:app.rejection_reason || "Not approved. Complete more trades and re-apply." },
-      revoked: { color:G.purple, title:"Trust+ Revoked", desc:"Your Trust+ was revoked by admin." },
+      revoked: { color:G.purple, title:"Trust+ Revoked", desc:"Your Trust+ was revoked by our team." },
     };
     const s = SC[app.status] || SC.pending;
     return (
@@ -870,7 +870,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   const confirmReceived = async () => {
     setErr(""); setLoading(true);
     try {
-      const remaining = (trade.listing_amount_usdt || 0) - trade.amount_usdt;
+      const remaining = (trade.listing_amount_usdt || trade.amount_usdt) - trade.amount_usdt;
       const minU = config?.min_usdt || 5;
       if (trade.listing_id) {
         await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, remaining >= minU ? { status:"open", amount_usdt:remaining } : { status:"completed" });
@@ -1499,7 +1499,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
     try {
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"completed", completed_at:new Date().toISOString(), seller_confirmed_at:new Date().toISOString() });
       // Reopen listing with decremented amount if partial, else complete
-      const remaining = (trade.listing_amount_usdt || 0) - trade.amount_usdt;
+      const remaining = (trade.listing_amount_usdt || trade.amount_usdt) - trade.amount_usdt;
       const minU = config?.min_usdt || 5;
       if (trade.listing_id) {
         await p2pUpdate("p2p_listings", `id=eq.${trade.listing_id}`, remaining >= minU ? { status:"open", amount_usdt:remaining } : { status:"completed" });
@@ -2777,14 +2777,14 @@ function MyActivity({ user, onOpenTrade, onBack }) {
   };
 
   const filtered = trades.filter(t => {
-    if (tab === "ongoing") return ["waiting_payment", "payment_sent", "disputed"].includes(t.status);
+    if (tab === "ongoing") return ["waiting_payment", "payment_sent", "usdt_sent", "disputed"].includes(t.status);
     if (tab === "completed") return t.status === "completed";
     if (tab === "cancelled") return t.status === "cancelled";
     return true;
   });
 
-  const SC = { waiting_payment:G.gold, payment_sent:G.blue, completed:G.green, disputed:G.red, cancelled:G.textSub };
-  const SL = { waiting_payment:"Waiting Payment", payment_sent:"Payment Sent", completed:"Completed", disputed:"Disputed", cancelled:"Cancelled" };
+  const SC = { waiting_payment:G.gold, payment_sent:G.blue, usdt_sent:"#a78bfa", completed:G.green, disputed:G.red, cancelled:G.textSub };
+  const SL = { waiting_payment:"Waiting Payment", payment_sent:"Payment Sent", usdt_sent:"USDT Sent", completed:"Completed", disputed:"Disputed", cancelled:"Cancelled" };
 
   const openListings = listings.filter(l => l.status === "open");
 
@@ -2853,7 +2853,7 @@ function MyActivity({ user, onOpenTrade, onBack }) {
           <div style={{ color:G.textSub, fontSize:14 }}>No {tab} trades</div>
         </Card>
       ) : filtered.map(t => {
-        const isActive = ["waiting_payment", "payment_sent", "disputed"].includes(t.status);
+        const isActive = ["waiting_payment", "payment_sent", "usdt_sent", "disputed"].includes(t.status);
         const isBuyer = t.buyer_id === user.id;
         return (
           <div key={t.id}
@@ -3970,7 +3970,7 @@ function ExchangePage({ user, onSignIn }) {
         </div>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.gold, fontWeight:900, marginBottom:10 }}>Exchange Offline</div>
         <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, margin:0 }}>
-          The P2P exchange is temporarily unavailable. Check back soon or contact admin on Telegram.
+          The P2P exchange is temporarily unavailable. Check back soon or contact our team on Telegram.
         </p>
         <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{
           display:"inline-block", marginTop:14,
@@ -3979,6 +3979,9 @@ function ExchangePage({ user, onSignIn }) {
       </GlowCard>
     </div>
   );
+
+  // Guide is accessible to any logged-in user regardless of KYC status
+  if (screen === "guide") return <GuidePage onBack={goHub} />;
 
   // KYC not approved — show KYC screen
   // (handles: null/not submitted, pending, rejected, banned)
@@ -4013,7 +4016,6 @@ function ExchangePage({ user, onSignIn }) {
   );
 
   // Approved — route to screens
-  if (screen === "guide") return <GuidePage onBack={goHub} />;
   if (screen === "tradeRoom" && activeTrade) {
     return (
       <TradeRoom
