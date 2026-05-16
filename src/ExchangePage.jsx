@@ -2408,22 +2408,22 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
     const listing = buyFlowListing;
     if (!listing) return;
     if (listing.seller_id === user.id) { setErr("You cannot buy your own listing."); setBuyFlowListing(null); return; }
+
+    // Check for existing active trade — if one exists for this listing, just open it
     try {
       const active = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&status=in.(waiting_payment,payment_sent,usdt_sent)&select=id,listing_id`);
       if (active?.length > 0) {
-        // Trade already exists for this exact listing — just open it (handles double-tap / retry)
         const existingForListing = active.find(t => t.listing_id === listing.id);
         if (existingForListing) {
-          try {
-            const rows = await p2pSelect("p2p_trades", `?id=eq.${existingForListing.id}&select=*`);
-            if (rows?.[0]) { setBuyFlowListing(null); onOpenTrade(rows[0]); return; }
-          } catch {}
+          const rows = await p2pSelect("p2p_trades", `?id=eq.${existingForListing.id}&select=*`).catch(() => []);
+          if (rows?.[0]) { setBuyFlowListing(null); onOpenTrade(rows[0]); return; }
         }
         setErr("You have an active trade. Complete or cancel it first.");
         setBuyFlowListing(null);
         return;
       }
     } catch {}
+
     setErr(""); setBuying(listing.id);
     try {
       const fee = config?.platform_fee_etb || 50;
@@ -2461,8 +2461,8 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
         });
         newTrade = Array.isArray(inserted) ? inserted[0] : inserted;
       } catch (insertErr) {
-        // If duplicate key — trade was already created, find and open it
-        if (insertErr?.message?.includes("duplicate key") || insertErr?.message?.includes("unique constraint")) {
+        // Duplicate key = trade already created — find and open it
+        if (insertErr?.message?.includes("duplicate") || insertErr?.message?.includes("unique")) {
           const existing = await p2pSelect("p2p_trades", `?buyer_id=eq.${user.id}&listing_id=eq.${listing.id}&order=created_at.desc&limit=1&select=*`).catch(() => []);
           if (existing?.[0]) { setBuyFlowListing(null); onOpenTrade(existing[0]); return; }
         }
