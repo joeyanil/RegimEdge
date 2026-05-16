@@ -922,28 +922,39 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   };
   const [statusColor, statusLabel] = StatusMap[trade.status] || [G.textSub, trade.status];
 
-  // Proof image renderer — shows thumbnail if URL is a valid storage URL
+  // Proof image renderer — shows inline thumbnail exactly like KYC admin panel
+  const [expandedProof, setExpandedProof] = useState(null);
   const ProofImg = ({ label, url }) => {
     if (!url) return null;
-    // Detect Supabase storage URL vs error
-    const isSupabase = url.includes("supabase") || url.includes("storage");
     return (
-      <a href={url} target="_blank" rel="noreferrer" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:0, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, overflow:"hidden", textDecoration:"none" }}>
-        {isSupabase
-          ? <img src={url} alt={label} style={{ width:"100%", height:80, objectFit:"cover", display:"block" }} onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }} />
-          : null}
-        <div style={{ display:isSupabase?"none":"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:80, width:"100%" }}>
+      <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, overflow:"hidden" }}>
+        <img
+          src={url} alt={label}
+          style={{ width:"100%", maxHeight:140, objectFit:"cover", display:"block", cursor:"pointer" }}
+          onClick={() => setExpandedProof(url)}
+          onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
+        />
+        <div style={{ display:"none", flexDirection:"column", alignItems:"center", justifyContent:"center", height:80, gap:6 }}>
           <Icon name="image" size={22} color={G.textSub} />
+          <span style={{ fontSize:10, color:G.textSub }}>Image unavailable</span>
         </div>
-        <div style={{ padding:"6px 8px", textAlign:"center", fontSize:10, color:G.blue, fontWeight:700, width:"100%", boxSizing:"border-box" }}>
-          👁 View {label}
+        <div style={{ padding:"6px 10px", fontSize:10, color:G.textSub, fontWeight:600, textAlign:"center", borderTop:`1px solid ${G.border}` }}>
+          {label} — tap to expand
         </div>
-      </a>
+      </div>
     );
   };
+  // Fullscreen proof viewer
+  const ProofViewer = () => expandedProof ? (
+    <div onClick={() => setExpandedProof(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <img src={expandedProof} alt="proof" style={{ maxWidth:"100%", maxHeight:"90vh", objectFit:"contain", borderRadius:G.r }} />
+      <button onClick={() => setExpandedProof(null)} style={{ position:"absolute", top:20, right:20, background:G.surface, border:`1px solid ${G.border}`, borderRadius:"50%", width:36, height:36, cursor:"pointer", color:G.text, fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+    </div>
+  ) : null;
 
   return (
     <div style={{ padding:"16px 16px 36px", background:G.bg, minHeight:"100vh" }}>
+      <ProofViewer />
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
         @keyframes spin{to{transform:rotate(360deg)}}
@@ -951,13 +962,6 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
         @keyframes pop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
         @keyframes confetti{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(-60px) rotate(360deg);opacity:0}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes drawGoldRing{to{stroke-dashoffset:0}}
-        @keyframes goldFillFade{to{opacity:1}}
-        @keyframes drawGoldCheck{to{stroke-dashoffset:0}}
-        @keyframes goldRingGlow{0%,100%{filter:drop-shadow(0 0 5px rgba(212,175,55,0.35))}50%{filter:drop-shadow(0 0 18px rgba(212,175,55,0.85))}}
-        @keyframes goldTextFadeUp{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes goldRowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
-        @keyframes goldPillFade{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
       `}</style>
 
       {showCancelModal && (
@@ -1310,69 +1314,48 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
         </div>
       )}
 
-      {/* ══ COMPLETED — Gold Ring ══ */}
+      {/* ══ COMPLETED — Animated celebration ══ */}
       {trade.status === "completed" && (
-        <div style={{ position:"relative", background:`linear-gradient(160deg,#141000 0%,#1a1400 40%,${G.card} 100%)`, border:`1px solid ${G.gold}28`, borderRadius:G.r, padding:"36px 20px 28px", marginBottom:12, textAlign:"center", overflow:"hidden" }}>
-          {/* Radial gold wash */}
-          <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:220, height:140, background:`radial-gradient(ellipse at 50% 0%,${G.gold}0f,transparent 70%)`, pointerEvents:"none" }} />
-          {/* Gold Ring SVG */}
-          <div style={{ width:100, height:100, margin:"0 auto 24px", position:"relative" }}>
-            <svg width="100" height="100" viewBox="0 0 100 100" fill="none" overflow="visible" style={{ animation:"goldRingGlow 3s ease-in-out 2.2s infinite" }}>
-              <circle cx="50" cy="50" r="45" stroke={G.gold} strokeWidth="2.5" fill="none" strokeOpacity="0.15" />
-              <circle cx="50" cy="50" r="45" stroke={G.gold} strokeWidth="2.5" fill="none" strokeLinecap="round" transform="rotate(-90 50 50)" strokeDasharray="283" strokeDashoffset="283" style={{ animation:"drawGoldRing 1.1s cubic-bezier(0.4,0,0.2,1) 0.1s forwards" }} />
-              <circle cx="50" cy="50" r="34" fill={G.gold} fillOpacity="0.07" opacity="0" style={{ animation:"goldFillFade 0.5s ease 1.3s forwards" }} />
-              <circle cx="50" cy="50" r="34" stroke={G.gold} strokeWidth="1" fill="none" strokeOpacity="0" style={{ animation:"goldFillFade 0.4s ease 1.35s forwards" }} />
-              <polyline points="34,51 46,63 66,39" stroke={G.gold} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="42" strokeDashoffset="42" style={{ animation:"drawGoldCheck 0.5s cubic-bezier(0.4,0,0.2,1) 1.6s forwards" }} />
-            </svg>
+        <div style={{ position:"relative", background:`linear-gradient(135deg,rgba(34,197,94,0.12),${G.card} 60%)`, border:`1px solid ${G.green}55`, borderRadius:G.r, padding:"28px 20px", marginBottom:12, textAlign:"center", animation:"glow 2s ease-in-out infinite", overflow:"hidden" }}>
+          {/* Floating confetti dots */}
+          {[...Array(8)].map((_, i) => (
+            <div key={i} style={{ position:"absolute", width:6, height:6, borderRadius:"50%", background:[G.gold,G.green,G.blue,G.purple][i%4], top:`${10+i*10}%`, left:`${5+i*12}%`, animation:`confetti ${1.5+i*0.2}s ${i*0.1}s ease-out forwards`, pointerEvents:"none" }} />
+          ))}
+          {/* Green glow ring */}
+          <div style={{ width:80, height:80, borderRadius:"50%", background:`radial-gradient(circle,${G.green}22,transparent)`, border:`3px solid ${G.green}66`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", animation:"pop 0.6s ease, glow 2s 0.6s ease-in-out infinite" }}>
+            <div style={{ width:56, height:56, borderRadius:"50%", background:`linear-gradient(135deg,${G.green},#16a34a)`, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 20px ${G.green}88` }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
           </div>
-          {/* Eyebrow */}
-          <div style={{ fontSize:10, letterSpacing:3, color:G.gold, textTransform:"uppercase", marginBottom:7, opacity:0, animation:"goldTextFadeUp 0.4s ease 1.8s forwards" }}>Settlement Confirmed</div>
-          {/* Title */}
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:900, color:G.text, marginBottom:5, letterSpacing:0.3, opacity:0, animation:"goldTextFadeUp 0.5s ease 1.92s forwards" }}>Trade Complete</div>
-          {/* Amount */}
-          <div style={{ fontSize:30, fontWeight:900, color:isBuyer?G.gold:G.green, fontFamily:"monospace", letterSpacing:-1, marginBottom:4, opacity:0, animation:"goldTextFadeUp 0.5s ease 2.06s forwards" }}>
-            {isBuyer ? `${trade.amount_usdt} USDT` : `${sellerAmount} ETB`}
-          </div>
-          {/* Subtitle */}
-          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.6, margin:"0 0 24px", opacity:0, animation:"goldTextFadeUp 0.4s ease 2.18s forwards" }}>
-            {isBuyer ? `Received in your ${trade.network||"BEP20"} wallet` : "Payment received successfully"}
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:26, color:G.green, fontWeight:900, marginBottom:6, textShadow:`0 0 20px ${G.green}66` }}>Trade Completed!</div>
+          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 20px", lineHeight:1.6 }}>
+            {isBuyer ? `${trade.amount_usdt} USDT received in your ${trade.network} wallet.` : `You received ${sellerAmount} ETB successfully.`}
           </p>
-          {/* Divider */}
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, opacity:0, animation:"goldTextFadeUp 0.3s ease 2.28s forwards" }}>
-            <div style={{ flex:1, height:1, background:`linear-gradient(90deg,transparent,${G.gold}33)` }} />
-            <span style={{ fontSize:9, color:G.dim, letterSpacing:2, textTransform:"uppercase" }}>Trade Record</span>
-            <div style={{ flex:1, height:1, background:`linear-gradient(270deg,transparent,${G.gold}33)` }} />
-          </div>
-          {/* Rows */}
-          <div style={{ background:G.bgDeep, border:`1px solid ${G.gold}12`, borderRadius:G.rs, padding:"4px 0", marginBottom:rated?0:18, textAlign:"left" }}>
+          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", textAlign:"left", marginBottom:rated?0:16 }}>
+            <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Trade Record</div>
             {[
-              ["Reference",       trade.trade_ref||"—"],
-              ["Amount",          `${trade.amount_usdt} USDT`],
-              ["Rate",            `${trade.rate_etb} ETB/USDT`],
+              ["Reference", trade.trade_ref||"—"],
+              ["Amount", `${trade.amount_usdt} USDT`],
+              ["Rate", `${trade.rate_etb} ETB/USDT`],
               ["Seller received", `${sellerAmount} ETB`],
-              ["Network",         trade.network||"—"],
-              ["Buyer",           trade.buyer_display_name],
-              ["Seller",          trade.seller_display_name],
-              ["Completed",       trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
-            ].map(([l, v], i) => (
-              <div key={l} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 14px", borderBottom:i<7?`1px solid ${G.gold}0d`:"none", opacity:0, animation:`goldRowIn 0.35s ease ${2.32+i*0.07}s forwards` }}>
-                <span style={{ fontSize:11, color:G.textSub }}>{l}</span>
-                <span style={{ fontSize:11, fontWeight:700, color:l==="Seller received"?G.gold:G.text, fontFamily:l==="Reference"?"monospace":"inherit" }}>{v}</span>
+              ["Network", trade.network||"—"],
+              ["Buyer", trade.buyer_display_name],
+              ["Seller", trade.seller_display_name],
+              ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
+            ].map(([l, v]) => (
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
+                <span style={{ color:G.textSub }}>{l}</span><span style={{ color:G.text, fontWeight:600 }}>{v}</span>
               </div>
             ))}
           </div>
-          {/* Verified pill */}
-          <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:`${G.gold}10`, border:`1px solid ${G.gold}28`, borderRadius:20, padding:"5px 14px", fontSize:11, color:G.goldLight||G.gold, fontWeight:700, letterSpacing:0.8, marginBottom:rated?0:18, opacity:0, animation:`goldPillFade 0.4s ease ${2.32+8*0.07}s forwards` }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-            ON-CHAIN CONFIRMED
-          </div>
-          {/* Rating */}
           {isBuyer && !rated && (
-            <div style={{ marginTop:20, textAlign:"left" }}>
-              <div style={{ fontSize:11, color:G.textSub, marginBottom:10, fontWeight:700, letterSpacing:0.5, textTransform:"uppercase" }}>Rate your seller</div>
+            <div style={{ marginTop:16, textAlign:"left" }}>
+              <div style={{ fontSize:13, color:G.textSub, marginBottom:10, fontWeight:700 }}>Rate your seller</div>
               <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:10 }}>
                 {[1,2,3,4,5].map(s => (
-                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.15s", transform:s<=stars?"scale(1.25)":"scale(1)" }}>
+                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.1s", transform:s<=stars?"scale(1.25)":"scale(1)" }}>
                     <svg width="34" height="34" viewBox="0 0 24 24" fill={s<=stars?G.gold:"none"} stroke={s<=stars?G.gold:G.textDim} strokeWidth="1.5">
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
@@ -1386,7 +1369,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               </div>
             </div>
           )}
-          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"14px 0 0" }}>Thank you for rating!</p>}
+          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"12px 0 0" }}>Thank you for rating! 🙏</p>}
         </div>
       )}
 
@@ -1895,68 +1878,40 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           COMPLETED
       ══════════════════════════════════════ */}
       {trade.status === "completed" && (
-        <div style={{ position:"relative", background:`linear-gradient(160deg,#141000 0%,#1a1400 40%,${G.card} 100%)`, border:`1px solid ${G.gold}28`, borderRadius:G.r, padding:"36px 20px 28px", marginBottom:12, textAlign:"center", overflow:"hidden" }}>
-          {/* Radial gold wash */}
-          <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:220, height:140, background:`radial-gradient(ellipse at 50% 0%,${G.gold}0f,transparent 70%)`, pointerEvents:"none" }} />
-          {/* Gold Ring SVG */}
-          <div style={{ width:100, height:100, margin:"0 auto 24px", position:"relative" }}>
-            <svg width="100" height="100" viewBox="0 0 100 100" fill="none" overflow="visible" style={{ animation:"goldRingGlow 3s ease-in-out 2.2s infinite" }}>
-              <circle cx="50" cy="50" r="45" stroke={G.gold} strokeWidth="2.5" fill="none" strokeOpacity="0.15" />
-              <circle cx="50" cy="50" r="45" stroke={G.gold} strokeWidth="2.5" fill="none" strokeLinecap="round" transform="rotate(-90 50 50)" strokeDasharray="283" strokeDashoffset="283" style={{ animation:"drawGoldRing 1.1s cubic-bezier(0.4,0,0.2,1) 0.1s forwards" }} />
-              <circle cx="50" cy="50" r="34" fill={G.gold} fillOpacity="0.07" opacity="0" style={{ animation:"goldFillFade 0.5s ease 1.3s forwards" }} />
-              <circle cx="50" cy="50" r="34" stroke={G.gold} strokeWidth="1" fill="none" strokeOpacity="0" style={{ animation:"goldFillFade 0.4s ease 1.35s forwards" }} />
-              <polyline points="34,51 46,63 66,39" stroke={G.gold} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="42" strokeDashoffset="42" style={{ animation:"drawGoldCheck 0.5s cubic-bezier(0.4,0,0.2,1) 1.6s forwards" }} />
-            </svg>
+        <div style={{ background:`linear-gradient(135deg,${G.green}0a,${G.card})`, border:`1px solid ${G.green}44`, borderRadius:G.r, padding:"20px 16px", marginBottom:12, textAlign:"center" }}>
+          <style>{`@keyframes pop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}`}</style>
+          <div style={{ width:60, height:60, borderRadius:"50%", background:`${G.green}18`, border:`2px solid ${G.green}44`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", animation:"pop 0.5s ease" }}>
+            <span style={{ fontSize:28 }}>✅</span>
           </div>
-          {/* Eyebrow */}
-          <div style={{ fontSize:10, letterSpacing:3, color:G.gold, textTransform:"uppercase", marginBottom:7, opacity:0, animation:"goldTextFadeUp 0.4s ease 1.8s forwards" }}>Settlement Confirmed</div>
-          {/* Title */}
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:900, color:G.text, marginBottom:5, letterSpacing:0.3, opacity:0, animation:"goldTextFadeUp 0.5s ease 1.92s forwards" }}>Trade Complete</div>
-          {/* Amount */}
-          <div style={{ fontSize:30, fontWeight:900, color:isBuyer?G.gold:G.green, fontFamily:"monospace", letterSpacing:-1, marginBottom:4, opacity:0, animation:"goldTextFadeUp 0.5s ease 2.06s forwards" }}>
-            {isBuyer ? `${trade.amount_usdt} USDT` : `${sellerAmount} ETB`}
-          </div>
-          {/* Subtitle */}
-          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.6, margin:"0 0 24px", opacity:0, animation:"goldTextFadeUp 0.4s ease 2.18s forwards" }}>
-            {isBuyer ? `Received in your ${trade.network||"BEP20"} wallet` : "Payment received successfully"}
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.green, fontWeight:900, marginBottom:6 }}>Trade Completed!</div>
+          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 16px" }}>
+            {isBuyer ? `${trade.amount_usdt} USDT sent to your ${trade.network} address.` : `You received ${sellerAmount} ETB.`}
           </p>
-          {/* Divider */}
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, opacity:0, animation:"goldTextFadeUp 0.3s ease 2.28s forwards" }}>
-            <div style={{ flex:1, height:1, background:`linear-gradient(90deg,transparent,${G.gold}33)` }} />
-            <span style={{ fontSize:9, color:G.dim, letterSpacing:2, textTransform:"uppercase" }}>Trade Record</span>
-            <div style={{ flex:1, height:1, background:`linear-gradient(270deg,transparent,${G.gold}33)` }} />
-          </div>
-          {/* Rows */}
-          <div style={{ background:G.bgDeep, border:`1px solid ${G.gold}12`, borderRadius:G.rs, padding:"4px 0", marginBottom:isBuyer && !rated ? 18 : 0, textAlign:"left" }}>
+          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", textAlign:"left", marginBottom:isBuyer && !rated ? 16 : 0 }}>
+            <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Trade Record</div>
             {[
-              ["Reference",       trade.trade_ref||"—"],
-              ["Amount",          `${trade.amount_usdt} USDT`],
-              ["Rate",            `${trade.rate_etb} ETB/USDT`],
+              ["Reference", trade.trade_ref || "—"],
+              ["Amount", `${trade.amount_usdt} USDT`],
+              ["Rate", `${trade.rate_etb} ETB/USDT`],
               ["Seller received", `${sellerAmount} ETB`],
-              ["Network",         trade.network||"—"],
-              ["Buyer",           trade.buyer_display_name],
-              ["Seller",          trade.seller_display_name],
-              ["Completed",       trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
-            ].map(([l, v], i) => (
-              <div key={l} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 14px", borderBottom:i<7?`1px solid ${G.gold}0d`:"none", opacity:0, animation:`goldRowIn 0.35s ease ${2.32+i*0.07}s forwards` }}>
-                <span style={{ fontSize:11, color:G.textSub }}>{l}</span>
-                <span style={{ fontSize:11, fontWeight:700, color:l==="Seller received"?G.gold:G.text, fontFamily:l==="Reference"?"monospace":"inherit" }}>{v}</span>
+              ["Network", trade.network || "—"],
+              ["Buyer", trade.buyer_display_name],
+              ["Seller", trade.seller_display_name],
+              ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
+            ].map(([l, v]) => (
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
+                <span style={{ color:G.textSub }}>{l}</span>
+                <span style={{ color:G.text, fontWeight:600 }}>{v}</span>
               </div>
             ))}
           </div>
-          {/* Verified pill */}
-          <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:`${G.gold}10`, border:`1px solid ${G.gold}28`, borderRadius:20, padding:"5px 14px", fontSize:11, color:G.goldLight||G.gold, fontWeight:700, letterSpacing:0.8, margin:`18px 0 ${isBuyer && !rated ? 18 : 0}px`, opacity:0, animation:`goldPillFade 0.4s ease ${2.32+8*0.07}s forwards` }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-            ON-CHAIN CONFIRMED
-          </div>
-          {/* Rating */}
           {isBuyer && !rated && (
-            <div style={{ marginTop:20, textAlign:"left" }}>
-              <div style={{ fontSize:11, color:G.textSub, marginBottom:10, fontWeight:700, letterSpacing:0.5, textTransform:"uppercase" }}>Rate your seller</div>
+            <div style={{ marginTop:16, textAlign:"left" }}>
+              <div style={{ fontSize:13, color:G.textSub, marginBottom:10, fontWeight:700 }}>Rate your seller</div>
               <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:10 }}>
                 {[1,2,3,4,5].map(s => (
-                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.15s", transform:s<=stars?"scale(1.25)":"scale(1)" }}>
-                    <svg width="34" height="34" viewBox="0 0 24 24" fill={s<=stars?G.gold:"none"} stroke={s<=stars?G.gold:G.textDim} strokeWidth="1.5">
+                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.1s", transform:s <= stars ? "scale(1.2)" : "scale(1)" }}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill={s <= stars ? G.gold : "none"} stroke={s <= stars ? G.gold : G.textDim} strokeWidth="1.5">
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   </button>
@@ -1964,12 +1919,12 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               </div>
               {stars > 0 && <FI value={ratingComment} onChange={setRatingComment} placeholder="Leave a comment (optional)" style={{ marginBottom:10, fontSize:12 }} />}
               <div style={{ display:"flex", gap:8 }}>
-                <Btn onClick={submitRating} disabled={!stars||loading} small style={{ flex:1 }}>Submit Rating</Btn>
+                <Btn onClick={submitRating} disabled={!stars || loading} small style={{ flex:1 }}>Submit Rating</Btn>
                 <button onClick={() => setRated(true)} style={{ background:"none", border:"none", color:G.textSub, fontSize:12, cursor:"pointer", fontFamily:"inherit", padding:"0 14px" }}>Skip</button>
               </div>
             </div>
           )}
-          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"14px 0 0" }}>Thank you for rating!</p>}
+          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"10px 0 0" }}>Thanks for rating! 🙏</p>}
         </div>
       )}
 
@@ -3369,6 +3324,7 @@ function ExchangeHub({ user, kyc, config, setScreen }) {
       color:hasTrustPlus ? G.gold : G.purple,
       sc:"trustPlus",
     },
+    { icon:"bookOpen", label:"P2P Guide", sub:"How to buy & sell safely", color:"#60a5fa", sc:"guide" },
   ];
 
   return (
@@ -3489,7 +3445,416 @@ function ExchangeHub({ user, kyc, config, setScreen }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // NOT LOGGED IN
 // ─────────────────────────────────────────────────────────────────────────────
-function NotLoggedIn({ onSignIn }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// GUIDE PAGE — Detailed buyer & seller education
+// ─────────────────────────────────────────────────────────────────────────────
+function GuidePage({ onBack }) {
+  const [tab, setTab] = useState("buyer");
+  const [openSection, setOpenSection] = useState(0);
+
+  const AnimIcon = ({ d, color = G.gold, size = 28, bg }) => (
+    <div style={{ width:52, height:52, borderRadius:16, background:bg || `${color}18`, border:`1.5px solid ${color}44`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:`0 0 16px ${color}22` }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html:d }} />
+    </div>
+  );
+
+  const Section = ({ index, icon, iconColor, title, children }) => {
+    const open = openSection === index;
+    return (
+      <div style={{ background:G.card, border:`1px solid ${open ? (iconColor||G.gold)+"44" : G.border}`, borderRadius:G.r, marginBottom:10, overflow:"hidden", transition:"border-color 0.2s" }}>
+        <button onClick={() => setOpenSection(open ? -1 : index)} style={{ width:"100%", padding:"16px 16px", background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:14, fontFamily:"inherit", textAlign:"left" }}>
+          <AnimIcon d={icon} color={iconColor || G.gold} size={22} />
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:G.text }}>{title}</div>
+          </div>
+          <div style={{ width:24, height:24, borderRadius:"50%", background:open ? (iconColor||G.gold) : G.surface, border:`1px solid ${open ? (iconColor||G.gold) : G.border}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.2s" }}>
+            <span style={{ color:open ? "#000" : G.textSub, fontSize:12, fontWeight:900, lineHeight:1 }}>{open ? "−" : "+"}</span>
+          </div>
+        </button>
+        {open && (
+          <div style={{ padding:"0 16px 18px", borderTop:`1px solid ${G.border}` }}>
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const Step = ({ num, title, desc, color = G.gold, warning }) => (
+    <div style={{ display:"flex", gap:14, marginBottom:16 }}>
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
+        <div style={{ width:32, height:32, borderRadius:"50%", background:`${color}18`, border:`2px solid ${color}66`, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:13, color, flexShrink:0 }}>{num}</div>
+        <div style={{ width:2, flex:1, background:`${color}22`, marginTop:4, minHeight:16 }} />
+      </div>
+      <div style={{ paddingTop:6, paddingBottom:8 }}>
+        <div style={{ fontSize:13, fontWeight:800, color:G.text, marginBottom:4 }}>{title}</div>
+        <div style={{ fontSize:12, color:G.textSub, lineHeight:1.7 }}>{desc}</div>
+        {warning && <div style={{ marginTop:8, padding:"7px 10px", background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, fontSize:11, color:G.red, fontWeight:700 }}>{warning}</div>}
+      </div>
+    </div>
+  );
+
+  const Rule = ({ icon, text, color = G.text }) => (
+    <div style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:10, padding:"10px 12px", background:G.surface, borderRadius:G.rs, border:`1px solid ${G.border}` }}>
+      <span style={{ fontSize:18, flexShrink:0 }}>{icon}</span>
+      <span style={{ fontSize:12, color, lineHeight:1.6 }}>{text}</span>
+    </div>
+  );
+
+  const Tip = ({ text }) => (
+    <div style={{ display:"flex", gap:8, alignItems:"flex-start", marginBottom:8 }}>
+      <span style={{ color:G.gold, fontSize:13, flexShrink:0, marginTop:1 }}>✦</span>
+      <span style={{ fontSize:12, color:G.textSub, lineHeight:1.6 }}>{text}</span>
+    </div>
+  );
+
+  const BUYER_SECTIONS = [
+    {
+      title:"What is RegimeEdge P2P?",
+      icon:`<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`,
+      color:G.blue,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.8, marginBottom:14 }}>
+            RegimeEdge P2P is a person-to-person USDT exchange for Ethiopians. Instead of a central exchange, you trade directly with real verified sellers — paying ETB and receiving USDT instantly.
+          </p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+            {[["No middleman","Buyer & seller deal directly",G.green],["KYC protected","Both sides verified",G.gold],["Escrow logic","USDT locked until you confirm",G.blue],["Our team resolves","Disputes handled within 2h",G.purple]].map(([t,d,c]) => (
+              <div key={t} style={{ background:G.bgDeep, border:`1px solid ${c}22`, borderRadius:G.rs, padding:"10px 12px" }}>
+                <div style={{ fontSize:12, fontWeight:800, color:c, marginBottom:3 }}>{t}</div>
+                <div style={{ fontSize:11, color:G.textSub }}>{d}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.rs, padding:"10px 14px" }}>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>
+              <strong style={{ color:G.gold }}>How it works in 60 seconds:</strong> You find a seller, choose how much USDT you want, pay them ETB + a small platform fee, upload proof, and the seller releases USDT to your wallet. Done.
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Step 1 — Identity Verification (KYC)",
+      icon:`<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>`,
+      color:G.green,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>KYC is required before any trade. It protects all users and prevents fraud.</p>
+          <Step num={1} title="Prepare your ID" desc="Get a clear photo of one of: National ID, Passport, Driver's License, or Kebele ID. Both sides should be visible and not blurry." color={G.green} />
+          <Step num={2} title="Take a selfie with your ID" desc="Hold your ID next to your face. Both your face and ID text must be clearly visible. No filters." color={G.green} />
+          <Step num={3} title="Fill your details" desc="Enter your full legal name, Ethiopian phone number, and Telegram username starting with @" color={G.green} />
+          <Step num={4} title="Submit and wait" desc="Our team reviews within 24 hours. You'll get an email when approved. Once approved, you can trade." color={G.green} warning="Submitting fake documents = permanent ban and legal action." />
+        </div>
+      ),
+    },
+    {
+      title:"Step 2 — Finding the Right Listing",
+      icon:`<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>`,
+      color:G.blue,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>The listings browser shows all available USDT sellers. Here's how to read a listing:</p>
+          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.r, padding:"12px 14px", marginBottom:14 }}>
+            {[["Available","How much USDT the seller has. You can buy part of it."],["Rate","How many ETB you pay per 1 USDT. Lower = better for you."],["Min Pay","The minimum ETB you'll pay for the smallest trade allowed."],["Payment Method","Which bank or app you send money through."],["Trust+ Badge","Gold badge = verified elite seller. Most trusted, shown first."],["KYC Verified","Green badge = identity confirmed by our team."]].map(([l,d]) => (
+              <div key={l} style={{ display:"flex", gap:10, marginBottom:10, paddingBottom:10, borderBottom:`1px solid ${G.border}22` }}>
+                <div style={{ minWidth:80, fontSize:11, fontWeight:800, color:G.gold }}>{l}</div>
+                <div style={{ fontSize:12, color:G.textSub, lineHeight:1.5 }}>{d}</div>
+              </div>
+            ))}
+          </div>
+          <Tip text="Trust+ sellers are ranked first and have proven their trading history. Choose them for safest trades." />
+          <Tip text="Check the seller's completed trades count and rating before buying." />
+        </div>
+      ),
+    },
+    {
+      title:"Step 3 — The Buy Flow (Amount → Network → Address → Confirm)",
+      icon:`<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>`,
+      color:G.gold,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <Step num={1} title="Choose your amount" desc="Enter how much USDT you want to buy. Minimum 5 USDT. You'll see exactly how much ETB you'll pay — both to the seller and the platform fee." color={G.gold} />
+          <Step num={2} title="Select your network" desc="TRC20 (TRON) is the most common in Ethiopia. BEP20 (BSC) has lower fees but requires a BSC-compatible wallet. Choose the network your wallet uses." color={G.gold} warning="Wrong network = permanent loss of funds. Never change the network after confirming." />
+          <Step num={3} title="Enter your USDT address" desc="This is your wallet's deposit address for that network. Get it from Binance: Wallets → Spot → USDT → Deposit → select network → copy address." color={G.gold} />
+          <Step num={4} title="Final confirmation" desc="Review everything one last time — amount, seller, payment method, network, and your address. Once confirmed, the trade room opens and the 1-hour timer starts." color={G.gold} />
+        </div>
+      ),
+    },
+    {
+      title:"Step 4 — Making Both Payments",
+      icon:`<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>`,
+      color:G.green,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>Every trade requires <strong style={{ color:G.text }}>two separate payments</strong>:</p>
+          <div style={{ background:G.surface, border:`1px solid ${G.green}33`, borderRadius:G.r, padding:"12px 14px", marginBottom:12 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <div style={{ width:22, height:22, borderRadius:"50%", background:G.green, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900, color:"#000" }}>1</div>
+              <span style={{ fontSize:13, fontWeight:800, color:G.green }}>Payment to Seller</span>
+            </div>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.7 }}>Transfer exactly the shown ETB amount to the seller's bank account or Telebirr number shown in the trade room. Send the EXACT amount — not more, not less.</p>
+          </div>
+          <div style={{ background:G.surface, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"12px 14px", marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <div style={{ width:22, height:22, borderRadius:"50%", background:G.gold, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900, color:"#000" }}>2</div>
+              <span style={{ fontSize:13, fontWeight:800, color:G.gold }}>Platform Fee to RegimeEdge</span>
+            </div>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.7 }}>Transfer the platform fee separately to the RegimeEdge CBE or Telebirr account shown in the trade room. This is a one-time fee per trade.</p>
+          </div>
+          <Step num={1} title="Screenshot seller payment" desc="After transferring to the seller, take a screenshot of the completed transfer confirmation from your banking app. Make sure the amount, date, and recipient are visible." color={G.textSub} />
+          <Step num={2} title="Screenshot platform fee" desc="After paying the platform fee, take a screenshot of that transfer too. Both screenshots must be uploaded before the seller can release USDT." color={G.textSub} />
+          <div style={{ background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, padding:"10px 14px" }}>
+            <p style={{ color:G.red, fontSize:12, margin:0, fontWeight:700 }}>Complete both payments within 1 hour. After 1 hour, the trade expires and the listing reopens for other buyers.</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Step 5 — After Payment: Receiving USDT",
+      icon:`<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>`,
+      color:"#a78bfa",
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <Step num={1} title="Seller verifies your screenshots" desc="The seller checks both screenshots. They confirm the amounts, dates, and account details match. This usually takes a few minutes." color="#a78bfa" />
+          <Step num={2} title="Seller releases USDT" desc="Once confirmed, the seller sends USDT to your wallet address. You'll see the trade status update to 'USDT Sent'." color="#a78bfa" />
+          <Step num={3} title="Check your wallet" desc="Open Binance → Wallets → Spot → USDT → Deposit history. You should see an incoming transaction. TRC20 takes ~1 minute. BEP20 takes ~30 seconds." color="#a78bfa" />
+          <Step num={4} title="Confirm receipt" desc="Tap 'I Received the USDT' in the trade room to complete the trade. Only after your confirmation is the trade marked as completed." color="#a78bfa" />
+          <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.rs, padding:"10px 14px", marginTop:14 }}>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.7 }}>
+              <strong style={{ color:G.gold }}>Didn't receive?</strong> Wait 5–15 minutes — blockchain can be slow. If still nothing after 15 min, use the "I Did Not Receive" button in the trade room to contact the seller and our team on Telegram.
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Rules & What Gets You Banned",
+      icon:`<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
+      color:G.red,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <Rule icon="✅" text="Always pay both the seller AND the platform fee before submitting proof." />
+          <Rule icon="✅" text="Submit real, unedited screenshots. Editing or faking proof is fraud." color={G.text} />
+          <Rule icon="✅" text="Confirm receipt only after you actually see USDT in your wallet." color={G.text} />
+          <Rule icon="✅" text="Complete payment within 1 hour of opening a trade." color={G.text} />
+          <Rule icon="🚫" text="Cancelling trades repeatedly will flag your account. Too many cancellations = ban." color={G.red} />
+          <Rule icon="🚫" text="Submitting fake payment screenshots = immediate permanent ban + legal action." color={G.red} />
+          <Rule icon="🚫" text="Trying to trade outside the platform (direct deals) = no protection, no recourse." color={G.red} />
+          <Rule icon="🚫" text="Using someone else's account or KYC documents = permanent ban." color={G.red} />
+        </div>
+      ),
+    },
+  ];
+
+  const SELLER_SECTIONS = [
+    {
+      title:"Requirements to Sell",
+      icon:`<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>`,
+      color:G.green,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>To become a seller on RegimeEdge P2P you need:</p>
+          {[["KYC Approved","Your identity must be verified by our team first."],["Active Telegram","You must be reachable on Telegram for dispute resolution."],["Ethiopian bank account","At least one: CBE, Telebirr, Awash, Abyssinia, or Dashen."],["USDT in your wallet","TRC20 or BEP20 USDT ready to send when a buyer pays."]].map(([t,d]) => (
+            <div key={t} style={{ display:"flex", gap:12, marginBottom:12, padding:"10px 12px", background:G.surface, borderRadius:G.rs, border:`1px solid ${G.border}` }}>
+              <span style={{ color:G.green, fontSize:16, flexShrink:0 }}>✓</span>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:G.text, marginBottom:2 }}>{t}</div>
+                <div style={{ fontSize:12, color:G.textSub }}>{d}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      title:"Posting Your Listing",
+      icon:`<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
+      color:G.gold,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <Step num={1} title="Set your USDT amount" desc="How much USDT you want to sell in this listing. Minimum 5 USDT, maximum 500. Buyers can buy partial amounts from your listing." color={G.gold} />
+          <Step num={2} title="Set your rate" desc={`Your ETB per USDT rate. The platform allows rates within an admin-set range. A suggested midpoint rate is pre-filled for you.`} color={G.gold} />
+          <Step num={3} title="Add payment methods" desc="Select all the payment methods you accept (CBE, Telebirr, etc.) and enter the account number and holder name for each. These are saved automatically for your next listing." color={G.gold} />
+          <Step num={4} title="Post it — it's free" desc="Your listing appears immediately in the browse screen, sorted by Trust+ status then time posted. Buyers can see it and open trades." color={G.gold} />
+          <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.rs, padding:"10px 14px" }}>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>💡 Your payment accounts are saved from your last listing. Next time you post, they'll be pre-filled automatically.</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"When a Buyer Opens a Trade",
+      icon:`<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>`,
+      color:G.blue,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>When a buyer selects your listing:</p>
+          <Step num={1} title="You get a notification in trade chat" desc="A system message appears: 'New trade! Buyer wants X USDT via [network]. Payment required within 1 hour.'" color={G.blue} />
+          <Step num={2} title="Trade room opens for both of you" desc="The buyer sees payment instructions. You can see: the buyer's chosen network, their full USDT wallet address, and the exact amount to send." color={G.blue} />
+          <Step num={3} title="Partial buy — listing stays open" desc="If the buyer bought less than your full amount, your listing remains open with the remaining USDT. Other buyers can still find and buy from you." color={G.blue} />
+          <Tip text="Check your 'My Trades' tab regularly for new active trades." />
+          <Tip text="The buyer has 1 hour to pay. After that, the trade expires and your listing reopens." />
+        </div>
+      ),
+    },
+    {
+      title:"Verifying Payment Screenshots",
+      icon:`<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`,
+      color:G.gold,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>
+            When the buyer submits proof, you'll see two inline screenshots in the trade room. <strong style={{ color:G.text }}>Tap to expand.</strong> Check every detail carefully:
+          </p>
+          <div style={{ background:G.bgDeep, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"12px 14px", marginBottom:14 }}>
+            {[
+              [`Amount is EXACTLY ${`your expected ETB`}`, "Not 1 ETB less or more. Any difference = don't release.", G.green],
+              ["Date is today", "Yesterday's screenshot is not valid proof.", G.text],
+              ["Time is within the last hour", "The transfer must have happened after the trade was opened.", G.text],
+              ["Sender account/name is visible", "Cropped or blurred sender info is a red flag.", G.gold],
+              ["Platform fee screenshot is separate", "Two separate transfers — seller payment AND platform fee.", G.gold],
+              ["Screenshot looks unedited", "Watch for altered amounts, dates, or account numbers.", G.red],
+            ].map(([item, detail, c]) => (
+              <div key={item} style={{ marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${G.border}22` }}>
+                <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:3 }}>
+                  <span style={{ color:c, fontSize:13 }}>✓</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:G.text }}>{item}</span>
+                </div>
+                <div style={{ fontSize:11, color:G.textSub, marginLeft:21 }}>{detail}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, padding:"10px 14px" }}>
+            <p style={{ color:G.red, fontSize:12, margin:0, fontWeight:700 }}>If anything looks wrong — don't release. Use "Payment Incomplete — Notify Buyer" and open a dispute if they don't respond.</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Releasing USDT Safely",
+      icon:`<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>`,
+      color:G.green,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <Step num={1} title="Check your account first" desc="Open your CBE/Telebirr/bank app and confirm the ETB has actually arrived. Don't rely only on the screenshot." color={G.green} />
+          <Step num={2} title="Tick the confirmation checkbox" desc="The release button only activates after you tick 'I confirm I checked the screenshots and received the ETB.' This protects you from accidental releases." color={G.green} />
+          <Step num={3} title="Send USDT to buyer's address" desc="Copy the buyer's wallet address from the trade room. Send exactly the agreed USDT amount via the correct network (TRC20 or BEP20). Double-check the address — one wrong character = lost funds." color={G.green} warning="Never send USDT before verifying you received the ETB in your account." />
+          <Step num={4} title="Tap Release in the trade room" desc="After sending from your wallet, tap 'Release USDT to Buyer' in the trade room. The status changes to 'USDT Sent' and the buyer is notified." color={G.green} />
+          <Step num={5} title="Wait for buyer confirmation" desc="The trade completes only after the buyer confirms receipt. This protects both sides." color={G.green} />
+        </div>
+      ),
+    },
+    {
+      title:"Trust+ Badge — How to Qualify",
+      icon:`<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>`,
+      color:G.gold,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>
+            Trust+ is an elite badge that marks you as the most trusted seller. Your listings appear first in search results and buyers feel more confident trading with you.
+          </p>
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+            {[["Proven history","You must have completed real P2P trades on another platform (Binance P2P, Paxful, etc.)"],["Submit proof","Upload screenshots of your trade history showing your completed trades count."],["Sign the agreement","Agree to our elite trading standards digitally."],["Wait for review","Our team reviews your application within 48 hours."],["Badge goes live","Once approved, your listings immediately show the gold Trust+ badge at the top."]].map(([t,d],i) => (
+              <div key={t} style={{ display:"flex", gap:12, padding:"10px 12px", background:G.surface, borderRadius:G.rs, border:`1px solid ${G.border}` }}>
+                <div style={{ width:24, height:24, borderRadius:"50%", background:G.goldBg2, border:`1px solid ${G.gold}44`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900, color:G.gold, flexShrink:0 }}>{i+1}</div>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:G.text, marginBottom:2 }}>{t}</div>
+                  <div style={{ fontSize:11, color:G.textSub, lineHeight:1.5 }}>{d}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:G.redBg, border:`1px solid ${G.red}22`, borderRadius:G.rs, padding:"10px 14px" }}>
+            <p style={{ color:G.red, fontSize:12, margin:0, fontWeight:700 }}>Submitting fake screenshots for Trust+ = permanent ban. We verify all submissions.</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Dispute Handling",
+      icon:`<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`,
+      color:G.red,
+      content: (
+        <div style={{ paddingTop:14 }}>
+          <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, marginBottom:14 }}>If something goes wrong, use the dispute system — don't cancel without reason.</p>
+          <Step num={1} title="Try chat first" desc="Use the trade room chat to communicate with the buyer. Most issues resolve with clear communication." color={G.red} />
+          <Step num={2} title="Use 'Notify Buyer'" desc="If payment seems incomplete, tap 'Payment Incomplete — Notify Buyer'. They get a system message asking them to complete payment." color={G.red} />
+          <Step num={3} title="Raise a dispute" desc="If the buyer is unresponsive or payment is genuinely wrong, tap 'Raise a Dispute' and describe the issue clearly." color={G.red} />
+          <Step num={4} title="Our team contacts you" desc="We'll contact both parties on Telegram within 2 hours. Have your transaction screenshots ready." color={G.red} />
+          <Tip text="Never cancel a trade with a valid payment — that is fraud on your part." />
+          <Tip text="Our team makes the final decision. Both parties must cooperate." />
+        </div>
+      ),
+    },
+  ];
+
+  const sections = tab === "buyer" ? BUYER_SECTIONS : SELLER_SECTIONS;
+
+  return (
+    <div style={{ padding:"0 0 40px" }}>
+      <style>{`@keyframes guideGlow{0%,100%{opacity:.7}50%{opacity:1}}`}</style>
+      {/* Hero */}
+      <div style={{ background:`linear-gradient(160deg,rgba(212,175,55,0.1) 0%,${G.bgDeep} 60%)`, borderBottom:`1px solid ${G.border}`, padding:"22px 18px 20px" }}>
+        <BackBtn onClick={onBack} />
+        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:16 }}>
+          <div style={{ width:56, height:56, borderRadius:18, background:`linear-gradient(135deg,${G.gold}22,${G.gold}0a)`, border:`1.5px solid ${G.gold}44`, display:"flex", alignItems:"center", justifyContent:"center", animation:"guideGlow 2.5s ease-in-out infinite" }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize:9, color:G.textSub, letterSpacing:3, textTransform:"uppercase", marginBottom:4 }}>P2P Exchange</div>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:900, color:G.text, lineHeight:1.1 }}>Complete Guide</div>
+            <div style={{ fontSize:12, color:G.textSub, marginTop:4 }}>Everything you need to trade safely</div>
+          </div>
+        </div>
+        {/* Tab switcher */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          {[["buyer","I Want to Buy USDT",G.blue],["seller","I Want to Sell USDT",G.gold]].map(([t,label,color]) => (
+            <button key={t} onClick={() => { setTab(t); setOpenSection(0); }} style={{ padding:"12px 8px", borderRadius:G.rs, border:`1.5px solid ${tab===t ? color : G.border}`, background:tab===t ? `${color}15` : G.surface, cursor:"pointer", fontFamily:"inherit", transition:"all 0.2s" }}>
+              <div style={{ fontSize:13, fontWeight:800, color:tab===t ? color : G.textSub }}>{label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding:"18px 16px 0" }}>
+        {/* Quick stats */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:18 }}>
+          {(tab==="buyer" ? [["7 Steps","to first trade",G.gold],["1 Hour","payment window",G.blue],["2 Hours","dispute resolution",G.green]] : [["Free","to post listings",G.gold],["Auto-saved","payment accounts",G.green],["48 Hours","Trust+ review",G.purple]]).map(([v,l,c]) => (
+            <div key={v} style={{ background:G.card, border:`1px solid ${c}22`, borderRadius:G.rs, padding:"10px 8px", textAlign:"center" }}>
+              <div style={{ fontSize:14, fontWeight:900, color:c, fontFamily:"'Playfair Display',serif" }}>{v}</div>
+              <div style={{ fontSize:9, color:G.textSub, marginTop:2, lineHeight:1.3 }}>{l}</div>
+            </div>
+          ))}
+        </div>
+
+        {sections.map((s, i) => (
+          <Section key={i} index={i} icon={s.icon} iconColor={s.color} title={s.title}>
+            {s.content}
+          </Section>
+        ))}
+
+        {/* Bottom CTA */}
+        <div style={{ background:`linear-gradient(135deg,${G.goldBg2},${G.goldBg})`, border:`1px solid ${G.gold}33`, borderRadius:G.r, padding:"18px 16px", marginTop:8, textAlign:"center" }}>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.gold, fontWeight:900, marginBottom:6 }}>
+            {tab==="buyer" ? "Ready to Buy?" : "Ready to Sell?"}
+          </div>
+          <p style={{ color:G.textSub, fontSize:12, margin:"0 0 14px", lineHeight:1.6 }}>
+            {tab==="buyer" ? "Start with KYC verification, then browse listings to find your first trade." : "KYC approved? Post your first listing in under 2 minutes."}
+          </p>
+          <button onClick={onBack} style={{ background:G.gold, border:"none", borderRadius:G.rs, padding:"12px 28px", color:"#000", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"inherit", boxShadow:`0 4px 16px ${G.gold}33` }}>
+            {tab==="buyer" ? "Browse Listings →" : "Post a Listing →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotLoggedIn({ onSignIn, onGuide }) {
   return (
     <div style={{ padding:"32px 18px" }}>
       <SH label="Trusted P2P" title="RegimeEdge Exchange" sub="Ethiopia's most trusted P2P USDT exchange" />
@@ -3508,6 +3873,11 @@ function NotLoggedIn({ onSignIn }) {
             fontWeight:800, cursor:"pointer", fontFamily:"inherit",
             boxShadow:"0 4px 16px rgba(212,175,55,0.3)",
           }}>Sign In / Create Account</button>
+        )}
+        {onGuide && (
+          <button onClick={onGuide} style={{ marginTop:10, width:"100%", background:"none", border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"11px 0", color:G.textSub, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+            📖 Read the Full P2P Guide
+          </button>
         )}
       </GlowCard>
 
@@ -3589,7 +3959,7 @@ function ExchangePage({ user, onSignIn }) {
   if (loading) return <Spinner text="Loading exchange..." />;
 
   // Not logged in
-  if (!user?.id) return <NotLoggedIn onSignIn={onSignIn} />;
+  if (!user?.id) return <NotLoggedIn onSignIn={onSignIn} onGuide={() => setScreen("guide")} />;
 
   // Exchange paused
   if (config && config.exchange_active === false) return (
@@ -3643,6 +4013,7 @@ function ExchangePage({ user, onSignIn }) {
   );
 
   // Approved — route to screens
+  if (screen === "guide") return <GuidePage onBack={goHub} />;
   if (screen === "tradeRoom" && activeTrade) {
     return (
       <TradeRoom

@@ -2446,8 +2446,92 @@ export default function App(){
 
       {/* Header */}
       <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(22,24,29,0.97)",backdropFilter:"blur(14px)",borderBottom:`1px solid ${G.border}`,padding:"0 18px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54}}>
-        <button onClick={()=>nav("home")} style={{background:"none",border:"none",cursor:"pointer",padding:0}}>
-          <span style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:G.text}}>Regime<span style={{color:G.gold}}>Edge</span></span>
+        <button onClick={()=>nav("home")} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:10}}>
+          {/* Sovereign Bridge Logo — Regime Edge */}
+          <svg width="36" height="36" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" style={{display:"block",flexShrink:0}}>
+            <defs>
+              <filter id="sbglow-nav" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="2" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <filter id="sbsoft-nav" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation=".8" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <radialGradient id="sb-rg-nav" cx="50%" cy="60%" r="50%">
+                <stop offset="0%" stopColor="#D4AF37" stopOpacity=".14"/>
+                <stop offset="100%" stopColor="#D4AF37" stopOpacity="0"/>
+              </radialGradient>
+            </defs>
+            <style>{`
+              @keyframes sb-hexL-n{0%,100%{opacity:.9;filter:drop-shadow(0 0 2px #22c55e)}50%{opacity:.6;filter:drop-shadow(0 0 5px #22c55e)}}
+              @keyframes sb-hexR-n{0%,100%{opacity:.6;filter:drop-shadow(0 0 2px #D4AF37)}50%{opacity:.9;filter:drop-shadow(0 0 6px #FFE57A)}}
+              @keyframes sb-l1-n{0%,100%{opacity:.35}20%,40%{opacity:1}}
+              @keyframes sb-l2-n{0%,100%{opacity:.35}30%,50%{opacity:1}}
+              @keyframes sb-l3-n{0%,100%{opacity:.35}40%,60%{opacity:1}}
+              @keyframes sb-l4-n{0%,100%{opacity:.35}50%,70%{opacity:1}}
+              @keyframes sb-l5-n{0%,100%{opacity:.35}60%,80%{opacity:1}}
+              @keyframes sb-cr-n{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+              @keyframes sb-j-n{0%,100%{r:1.2;opacity:.5}50%{r:1.7;opacity:1}}
+              .sb-hL-n{animation:sb-hexL-n 2.8s ease-in-out infinite}
+              .sb-hR-n{animation:sb-hexR-n 2.8s ease-in-out infinite}
+              .sb-l1-n{animation:sb-l1-n 2.8s ease-in-out infinite}
+              .sb-l2-n{animation:sb-l2-n 2.8s ease-in-out infinite}
+              .sb-l3-n{animation:sb-l3-n 2.8s ease-in-out infinite}
+              .sb-l4-n{animation:sb-l4-n 2.8s ease-in-out infinite}
+              .sb-l5-n{animation:sb-l5-n 2.8s ease-in-out infinite}
+              .sb-cr-n{animation:sb-cr-n 3.2s ease-in-out infinite}
+              .sb-j-n{animation:sb-j-n 2.2s ease-in-out infinite}
+            `}</style>
+            <ellipse cx="30" cy="46" rx="24" ry="3.5" fill="url(#sb-rg-nav)"/>
+            <g className="sb-l1-n">
+              <ellipse cx="16" cy="28" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(-38,16,28)" filter="url(#sbsoft-nav)"/>
+              <ellipse cx="16" cy="28" rx="1.2" ry=".7" fill="#D4AF37" opacity=".4" transform="rotate(-38,16,28)"/>
+            </g>
+            <g className="sb-l2-n">
+              <ellipse cx="22" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(-18,22,18.5)" filter="url(#sbsoft-nav)"/>
+              <ellipse cx="22" cy="18.5" rx="1.2" ry=".7" fill="#D4AF37" opacity=".4" transform="rotate(-18,22,18.5)"/>
+            </g>
+            <g className="sb-l3-n">
+              <ellipse cx="30" cy="14" rx="3.5" ry="2.3" fill="none" stroke="#FFE57A" strokeWidth="1.7" filter="url(#sbglow-nav)"/>
+              <ellipse cx="30" cy="14" rx="1.5" ry="1" fill="#FFE57A" opacity=".7"/>
+            </g>
+            <g className="sb-l4-n">
+              <ellipse cx="38" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(18,38,18.5)" filter="url(#sbsoft-nav)"/>
+              <ellipse cx="38" cy="18.5" rx="1.2" ry=".7" fill="#D4AF37" opacity=".4" transform="rotate(18,38,18.5)"/>
+            </g>
+            <g className="sb-l5-n">
+              <ellipse cx="44" cy="28" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(38,44,28)" filter="url(#sbsoft-nav)"/>
+              <ellipse cx="44" cy="28" rx="1.2" ry=".7" fill="#D4AF37" opacity=".4" transform="rotate(38,44,28)"/>
+            </g>
+            <path d="M13 38 Q30 10 47 38" fill="none" stroke="#D4AF37" strokeWidth=".5" strokeDasharray="1.5 3" opacity=".2" strokeLinecap="round"/>
+            <g className="sb-cr-n" filter="url(#sbglow-nav)">
+              <polygon points="30,5 27.5,9 30,8 32.5,9" fill="rgba(212,175,55,.15)" stroke="#D4AF37" strokeWidth="1.1" strokeLinejoin="round"/>
+              <circle className="sb-j-n" cx="30" cy="5" r="1.2" fill="#FFE57A"/>
+              <circle className="sb-j-n" cx="27.5" cy="9" r=".8" fill="#FFE57A" style={{animationDelay:".4s"}}/>
+              <circle className="sb-j-n" cx="32.5" cy="9" r=".8" fill="#FFE57A" style={{animationDelay:".8s"}}/>
+            </g>
+            <g className="sb-hL-n">
+              <polygon points="13,31 8,34.5 8,41.5 13,45 18,41.5 18,34.5" fill="#111315" stroke="#22c55e" strokeWidth="1.6"/>
+              <polygon points="13,33.5 9.5,35.7 9.5,40.3 13,42.5 16.5,40.3 16.5,35.7" fill="#22c55e" opacity=".2"/>
+              <circle cx="13" cy="38" r="3" fill="#22c55e" opacity=".85" filter="url(#sbsoft-nav)"/>
+              <text x="13" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">B</text>
+            </g>
+            <g className="sb-hR-n">
+              <polygon points="47,31 42,34.5 42,41.5 47,45 52,41.5 52,34.5" fill="#111315" stroke="#D4AF37" strokeWidth="1.6"/>
+              <polygon points="47,33.5 43.5,35.7 43.5,40.3 47,42.5 50.5,40.3 50.5,35.7" fill="#D4AF37" opacity=".2"/>
+              <circle cx="47" cy="38" r="3" fill="#D4AF37" opacity=".85" filter="url(#sbsoft-nav)"/>
+              <text x="47" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">S</text>
+            </g>
+            <circle r="2.5" fill="#FFE57A" opacity=".9" filter="url(#sbglow-nav)">
+              <animateMotion dur="2.8s" repeatCount="indefinite" calcMode="spline" keySplines="0.42 0 0.58 1" path="M13 38 Q30 10 47 38"/>
+            </circle>
+            <line x1="4" y1="47" x2="56" y2="47" stroke="#D4AF37" strokeWidth=".4" opacity=".15"/>
+          </svg>
+          <div style={{display:"flex",flexDirection:"column",lineHeight:1}}>
+            <span style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:900,color:G.text,lineHeight:1}}>Regime<span style={{color:G.gold}}>Edge</span></span>
+            <span style={{fontSize:8,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginTop:2}}>Exchange</span>
+          </div>
         </button>
         <div style={{display:"flex",gap:9,alignItems:"center",position:"relative"}}>
           {user?(
