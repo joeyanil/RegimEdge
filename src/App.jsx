@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import ExchangePage from "./ExchangePage";
 import { TerminalFull, TerminalPage } from "./TerminalFull";
 import {
-  p2pSelect, p2pInsert, p2pUpdate,
+  p2pSelect, p2pInsert, p2pUpdate, p2pUpsert,
   sendNotificationEmail,
   Icon, P2P_TEXT,
 } from "./p2pHelpers.jsx";
@@ -1402,6 +1402,25 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
     setKycBusy(b=>({...b,[id]:true}));
     try{
       await p2pUpdate("kyc_submissions",`id=eq.${id}`,{status,reviewed_at:new Date().toISOString(),reviewed_by:"Admin",...extra});
+      // ── Auto-sync KYC → profiles on approval ──
+      if(status==="approved"){
+        try{
+          const kycRow=kycList.find(r=>r.id===id);
+          if(kycRow?.user_id){
+            await p2pUpsert("profiles",{
+              id:kycRow.user_id,
+              full_name:kycRow.full_name||null,
+              phone:kycRow.phone||null,
+              telegram:kycRow.telegram||null,
+              id_type:kycRow.id_type||null,
+              gender:kycRow.gender||null,
+              date_of_birth:kycRow.date_of_birth||null,
+              kyc_verified:true,
+              kyc_verified_at:new Date().toISOString(),
+            });
+          }
+        }catch(syncErr){console.warn("Profile sync failed:",syncErr.message);}
+      }
       setKycList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setExpanded(null);
     }catch(e){alert("Error: "+e.message);}
@@ -1999,51 +2018,89 @@ function MenuIcon({open}){
 }
 
 // ── PROFILE PAGE ─────────────────────────────────────────────────────────────
-function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
-  const[tab,setTab]=useState(initTab||"profile");
-  // Sync if initTab changes (e.g. navigated from Security dropdown)
-  useEffect(()=>{ if(initTab) setTab(initTab); },[initTab]);
-  const[username,setUsername]=useState(user?.name||"");
-  const[phone,setPhone]=useState("");
-  const[saving,setSaving]=useState(false);
+// Lock icon SVG — used for verified identity rows
+const LockIcon=({size=11,color=G.gold})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{display:"inline-block",flexShrink:0}}>
+    <rect x="3" y="11" width="18" height="11" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+);
+const ShieldIcon=({size=14,color=G.green})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{display:"inline-block",flexShrink:0}}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <polyline points="9 12 11 14 15 10"/>
+  </svg>
+);
 
-  // Load existing profile data (phone, username) from Supabase on mount
+function useAnimatedCount(target,duration=900){
+  const[val,setVal]=useState(0);
+  useEffect(()=>{
+    if(target===null||target===undefined){setVal(null);return;}
+    const num=parseFloat(target);
+    if(isNaN(num)){setVal(target);return;}
+    const steps=40;
+    const inc=num/steps;
+    let cur=0;
+    const id=setInterval(()=>{
+      cur=Math.min(cur+inc,num);
+      setVal(Math.round(cur*10)/10);
+      if(cur>=num)clearInterval(id);
+    },duration/steps);
+    return()=>clearInterval(id);
+  },[target]);
+  return val;
+}
+
+function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
+  const[tab,setTab]=useState(initTab||"profile");
+  useEffect(()=>{ if(initTab) setTab(initTab); },[initTab]);
+
+  // Profile + KYC + trust data
+  const[profile,setProfile]=useState(null);
+  const[kycStatus,setKycStatus]=useState(null); // raw kyc_submissions row
+  const[trustStatus,setTrustStatus]=useState(null);
   const[tradeStats,setTradeStats]=useState({total:null,completed:null,rating:null});
+  const[dataLoaded,setDataLoaded]=useState(false);
+
   useEffect(()=>{
     if(!user?.id) return;
     (async()=>{
       try{
         const token=localStorage.getItem("re_access_token");
         const headers={"apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token||SUPABASE_ANON_KEY}`};
-        // Profile data
-        const res=await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=username,phone`,{headers});
-        if(res.ok){
-          const rows=await res.json();
-          if(rows?.[0]){
-            if(rows[0].username) setUsername(rows[0].username);
-            if(rows[0].phone) setPhone(rows[0].phone);
-          }
-        }
-        // Trade stats — total and completed
-        const trRes=await fetch(`${SUPABASE_URL}/rest/v1/p2p_trades?or=(buyer_id.eq.${user.id},seller_id.eq.${user.id})&select=id,status`,{headers});
+        const [profRes,kycRes,tpRes,trRes]=await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=*`,{headers}),
+          fetch(`${SUPABASE_URL}/rest/v1/kyc_submissions?user_id=eq.${user.id}&select=*&order=submitted_at.desc&limit=1`,{headers}),
+          fetch(`${SUPABASE_URL}/rest/v1/trust_plus_applications?user_id=eq.${user.id}&select=status&order=submitted_at.desc&limit=1`,{headers}),
+          fetch(`${SUPABASE_URL}/rest/v1/p2p_trades?or=(buyer_id.eq.${user.id},seller_id.eq.${user.id})&select=id,status`,{headers}),
+        ]);
+        if(profRes.ok){ const rows=await profRes.json(); if(rows?.[0]) setProfile(rows[0]); }
+        if(kycRes.ok){ const rows=await kycRes.json(); if(rows?.[0]) setKycStatus(rows[0]); }
+        if(tpRes.ok){ const rows=await tpRes.json(); if(rows?.[0]) setTrustStatus(rows[0]); }
         if(trRes.ok){
           const trades=await trRes.json();
           const total=trades.length;
           const completed=trades.filter(t=>t.status==="completed").length;
-          // Rating
           let rating=null;
           const rRes=await fetch(`${SUPABASE_URL}/rest/v1/trade_ratings?seller_id=eq.${user.id}&select=stars`,{headers});
           if(rRes.ok){
             const ratings=await rRes.json();
-            if(ratings.length>0) rating=(ratings.reduce((sum,r)=>sum+r.stars,0)/ratings.length).toFixed(1);
+            if(ratings.length>0) rating=parseFloat((ratings.reduce((s,r)=>s+r.stars,0)/ratings.length).toFixed(1));
           }
           setTradeStats({total,completed,rating});
         }
-      }catch{}
+      }catch(e){console.warn("Profile load:",e.message);}
+      finally{setDataLoaded(true);}
     })();
   },[user?.id]);
+
+  const[username,setUsername]=useState(user?.name||"");
+  useEffect(()=>{ if(profile?.username) setUsername(profile.username); },[profile]);
+
+  const[saving,setSaving]=useState(false);
   const[msg,setMsg]=useState("");
   const[err,setErr]=useState("");
+  const[saveBtnGlow,setSaveBtnGlow]=useState(false);
   const[newPass,setNewPass]=useState("");
   const[confirmPass,setConfirmPass]=useState("");
   const[passMsg,setPassMsg]=useState("");
@@ -2051,41 +2108,45 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
   const[passLoading,setPassLoading]=useState(false);
   const[deleteConfirm,setDeleteConfirm]=useState(false);
 
+  // Animated stat counters
+  const animTrades=useAnimatedCount(tradeStats.total);
+  const animSuccess=useAnimatedCount(tradeStats.total&&tradeStats.completed!==null?Math.round((tradeStats.completed/tradeStats.total)*100):null);
+  const animRating=useAnimatedCount(tradeStats.rating);
+
   if(!user) return(
     <div style={{padding:"48px 22px",textAlign:"center"}}>
-      <div style={{width:64,height:64,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <div style={{animation:"slideUp 0.5s ease both"}}>
+        <div style={{width:72,height:72,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        </div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,color:G.text,marginBottom:10,fontWeight:900}}>Your Profile</div>
+        <p style={{color:G.textSub,fontSize:14,lineHeight:1.7,marginBottom:28}}>Sign in to view your verified identity, trade stats, and account settings.</p>
+        <button onClick={onSignIn} style={{background:G.gold,border:"none",borderRadius:G.rs,padding:"14px 32px",color:"#000",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 6px 24px rgba(212,175,55,0.25)"}}>Sign In / Create Account</button>
       </div>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,color:G.text,marginBottom:10,fontWeight:900}}>Your Profile</div>
-      <p style={{color:G.textSub,fontSize:14,lineHeight:1.7,marginBottom:28}}>Sign in to view and manage your account, track your history, and access member features.</p>
-      <button onClick={onSignIn} style={{background:G.gold,border:"none",borderRadius:G.rs,padding:"14px 32px",color:"#000",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 6px 24px rgba(212,175,55,0.25)"}}>Sign In / Create Account</button>
     </div>
   );
 
+  const isKycVerified = profile?.kyc_verified===true;
   const joinedDate = user.created_at
     ? new Date(user.created_at).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})
     : "Recently joined";
+  const displayName = isKycVerified&&profile?.full_name ? profile.full_name : ("@"+(username||user.name||"User"));
+  const avatarLetter = (isKycVerified&&profile?.full_name ? profile.full_name : (username||user.name||"U"))[0].toUpperCase();
 
   const saveProfile=async()=>{
     if(!username.trim()||username.trim().length<3){setErr("Username must be at least 3 characters.");return;}
     if(!/^[a-zA-Z0-9_]+$/.test(username.trim())){setErr("Only letters, numbers, underscores.");return;}
-    if(phone&&!/^\+?[\d\s\-]{7,15}$/.test(phone.trim())){setErr("Enter a valid phone number or leave blank.");return;}
     setSaving(true); setErr(""); setMsg("");
     try {
       const token=localStorage.getItem("re_access_token");
-      // Upsert: creates or updates the profile row in one call
       const res=await fetch(`${SUPABASE_URL}/rest/v1/profiles`,{
         method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "apikey":SUPABASE_ANON_KEY,
-          "Authorization":`Bearer ${token}`,
-          "Prefer":"resolution=merge-duplicates,return=minimal"
-        },
-        body:JSON.stringify({id:user.id,email:user.email,username:username.trim(),phone:phone.trim()||null})
+        headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token}`,"Prefer":"resolution=merge-duplicates,return=minimal"},
+        body:JSON.stringify({id:user.id,email:user.email,username:username.trim()})
       });
       if(!res.ok){ const d=await res.json().catch(()=>({})); throw new Error(d.message||"Save failed"); }
-      setMsg("Profile updated!");
+      setMsg("Username updated!"); setSaveBtnGlow(true); setTimeout(()=>setSaveBtnGlow(false),1800);
     } catch(e){ setErr(e.message||"Failed to update. Try again."); }
     finally{ setSaving(false); }
   };
@@ -2111,30 +2172,67 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
   const TABS=[["profile","Profile"],["security","Security"]];
 
   return(
-    <div style={{padding:"32px 22px"}}>
-      {/* Header */}
-      <div style={{marginBottom:28}}>
-        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:8}}>Account</div>
-        <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:26,color:G.text,margin:0,fontWeight:900}}>My Profile</h2>
+    <div style={{padding:"0 0 40px"}}>
+      <style>{`
+        @keyframes avatarSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes verifiedPulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)}60%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}
+        @keyframes ckDraw{from{stroke-dashoffset:20}to{stroke-dashoffset:0}}
+        @keyframes rowSlide{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes saveGlow{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}50%{box-shadow:0 0 22px rgba(34,197,94,0.4)}}
+        @keyframes countUp{from{opacity:0.4}to{opacity:1}}
+      `}</style>
+
+      {/* ① HERO BANNER */}
+      <div style={{background:`linear-gradient(160deg,${G.gold}0f 0%,${G.bgDeep} 55%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px",animation:"slideUp 0.4s ease both"}}>
+        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:16}}>Account</div>
+        <div style={{display:"flex",alignItems:"center",gap:18,marginBottom:18}}>
+          {/* Spinning gradient avatar ring */}
+          <div style={{position:"relative",flexShrink:0,width:72,height:72}}>
+            <div style={{position:"absolute",inset:-3,borderRadius:"50%",background:`conic-gradient(${G.gold},${G.goldLight},transparent,${G.gold})`,animation:"avatarSpin 6s linear infinite"}}/>
+            <div style={{position:"absolute",inset:0,borderRadius:"50%",background:G.bgDeep}}/>
+            <div style={{position:"absolute",inset:2,borderRadius:"50%",background:`radial-gradient(circle at 35% 35%,${G.gold}55,${G.gold}18)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.gold,fontWeight:900,lineHeight:1}}>{avatarLetter}</span>
+            </div>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
+              <span style={{fontFamily:"'Playfair Display',serif",fontSize:19,color:G.text,fontWeight:900,lineHeight:1.1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{displayName}</span>
+              {isKycVerified&&(
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:20,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.35)",animation:"verifiedPulse 2.5s ease-in-out infinite",fontSize:9,fontWeight:800,color:G.green,letterSpacing:0.8,textTransform:"uppercase",flexShrink:0}}>
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={G.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" strokeDasharray="20" strokeDashoffset="20" style={{animation:"ckDraw 0.5s 0.2s ease forwards"}}/></svg>
+                  KYC Verified
+                </span>
+              )}
+              {trustStatus?.status==="approved"&&<TrustBadge size={15}/>}
+            </div>
+            {isKycVerified&&profile?.full_name&&(
+              <div style={{fontSize:12,color:G.textSub,marginBottom:2}}>@{username||user.name}</div>
+            )}
+            <div style={{fontSize:11,color:G.textDim}}>Member since {joinedDate}</div>
+          </div>
+          <span style={{padding:"4px 11px",borderRadius:20,border:`1px solid ${G.green}44`,color:G.green,fontSize:10,fontWeight:700,background:G.greenBg,flexShrink:0}}>ACTIVE</span>
+        </div>
       </div>
 
-      {/* Avatar + name banner */}
-      <div style={{background:`linear-gradient(135deg,${G.gold}0a 0%,${G.card} 60%)`,border:`1px solid ${G.gold}33`,borderRadius:G.r,padding:"22px 20px",marginBottom:20,display:"flex",alignItems:"center",gap:16}}>
-        <div style={{width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${G.gold}44,${G.gold}22)`,border:`2px solid ${G.gold}55`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          <span style={{fontFamily:"'Playfair Display',serif",fontSize:24,color:G.gold,fontWeight:900}}>{(user.name||"U")[0].toUpperCase()}</span>
-        </div>
-        <div style={{minWidth:0}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:G.text,fontWeight:900,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>@{user.name}</div>
-          <div style={{fontSize:12,color:G.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
-          <div style={{fontSize:10,color:G.textDim,marginTop:3}}>{joinedDate}</div>
-        </div>
-        <div style={{marginLeft:"auto",flexShrink:0}}>
-          <span style={{display:"inline-block",padding:"4px 10px",borderRadius:20,border:`1px solid ${G.green}44`,color:G.green,fontSize:10,fontWeight:700,background:G.greenBg}}>ACTIVE</span>
-        </div>
+      <div style={{padding:"20px 22px 0"}}>
+
+      {/* ② TRADE STATS ROW */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:18,animation:"slideUp 0.4s 0.08s ease both"}}>
+        {[
+          [animTrades,"TRADES",G.blue,"borderTop:`3px solid ${G.blue}`"],
+          [animSuccess!==null&&tradeStats.total?`${animSuccess}%`:animSuccess,"SUCCESS",G.green,""],
+          [animRating!==null?`${animRating}★`:animRating,"RATING",G.gold,""],
+        ].map(([v,l,c],i)=>(
+          <div key={l} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"14px 8px",textAlign:"center",borderTop:`3px solid ${c}44`,boxShadow:`inset 0 1px 0 ${c}22`,animation:"countUp 0.6s ease both",animationDelay:`${i*120}ms`}}>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,color:c,lineHeight:1,marginBottom:5}}>{v!==null&&v!==undefined&&v!==""?v:"—"}</div>
+            <div style={{fontSize:9,color:G.textSub,letterSpacing:2}}>{l}</div>
+          </div>
+        ))}
       </div>
 
       {/* Tab switcher */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:22}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
         {TABS.map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{padding:"11px 0",border:`1px solid ${tab===id?G.gold+"55":G.border}`,borderRadius:G.rs,background:tab===id?G.goldBg:"none",color:tab===id?G.gold:G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s"}}>{label}</button>
         ))}
@@ -2143,47 +2241,110 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
       {/* ── PROFILE TAB ── */}
       {tab==="profile"&&(
         <div>
-          {/* Stats row */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:20}}>
-            {[
-              [tradeStats.total!==null?String(tradeStats.total):"—","Trades",G.blue],
-              [tradeStats.completed!==null&&tradeStats.total?`${Math.round((tradeStats.completed/tradeStats.total)*100)}%`:"—","Success",G.green],
-              [tradeStats.rating!==null?`${tradeStats.rating}★`:"—","Rating",G.gold],
-            ].map(([v,l,c])=>(
-              <div key={l} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 10px",textAlign:"center"}}>
-                <div style={{fontSize:15,fontWeight:800,color:c,marginBottom:3}}>{v}</div>
-                <div style={{fontSize:9,color:G.textSub,letterSpacing:0.5}}>{l}</div>
-              </div>
-            ))}
-          </div>
 
-          {/* Account info */}
-          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16}}>
+          {/* ③ VERIFIED IDENTITY SECTION */}
+          {isKycVerified?(
+            <div style={{position:"relative",background:G.bgDeep,border:`1px solid ${G.gold}44`,borderLeft:`3px solid ${G.gold}`,borderRadius:G.r,padding:"18px 18px 14px",marginBottom:16,overflow:"hidden",animation:"slideUp 0.4s 0.16s ease both"}}>
+              {/* Watermark */}
+              <div style={{position:"absolute",top:16,right:-10,fontSize:46,fontWeight:900,color:G.gold,opacity:0.04,letterSpacing:2,transform:"rotate(-8deg)",pointerEvents:"none",userSelect:"none"}}>VERIFIED</div>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+                <ShieldIcon size={14} color={G.green}/>
+                <span style={{fontSize:10,color:G.green,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Verified Identity</span>
+              </div>
+              {[
+                ["Full Name",profile?.full_name],
+                ["Phone",profile?.phone],
+                ["Telegram",profile?.telegram],
+                ["ID Type",profile?.id_type],
+                ["Gender",profile?.gender],
+                ["Date of Birth",profile?.date_of_birth?new Date(profile.date_of_birth+"T00:00:00").toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}):null],
+                ["KYC Verified On",profile?.kyc_verified_at?new Date(profile.kyc_verified_at).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}):null],
+              ].map(([l,v],i)=>(
+                <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${G.border}22`,animation:"rowSlide 0.4s ease both",animationDelay:`${0.18+i*0.06}s`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <LockIcon size={10} color={G.gold}/>
+                    <span style={{fontSize:11,color:G.textSub}}>{l}</span>
+                  </div>
+                  <span style={{fontSize:12,color:G.text,fontWeight:700,textAlign:"right",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v||"—"}</span>
+                </div>
+              ))}
+            </div>
+          ):(
+            <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16,textAlign:"center",animation:"slideUp 0.4s 0.16s ease both"}}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={G.textDim} strokeWidth="1.5" style={{marginBottom:10}}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <div style={{fontSize:13,color:G.textSub,marginBottom:14,lineHeight:1.6}}>Complete KYC verification to display your verified identity here.</div>
+              <button onClick={()=>onNavigate&&onNavigate("exchange")} style={{background:G.gold,border:"none",borderRadius:G.rs,padding:"11px 24px",color:"#000",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>Start Verification</button>
+            </div>
+          )}
+
+          {/* ④ ACCOUNT INFO */}
+          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16,animation:"slideUp 0.4s 0.24s ease both"}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Account Information</div>
-            {[["Email",user.email],["User ID",user.id?user.id.slice(0,16)+"…":"—"],["Joined",joinedDate],["Auth","Email & Password"]].map(([l,v])=>(
-              <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${G.border}`}}>
+            {[["Email",user.email],["User ID",user.id?user.id.slice(0,18)+"…":"—"],["Joined",joinedDate],["Auth","Email & Password"]].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${G.border}`}}>
                 <span style={{fontSize:12,color:G.textSub}}>{l}</span>
-                <span style={{fontSize:12,color:G.text,fontWeight:600,maxWidth:180,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</span>
+                <span style={{fontSize:12,color:G.text,fontWeight:600,maxWidth:195,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</span>
               </div>
             ))}
           </div>
 
-          {/* Edit profile */}
-          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16}}>
+          {/* ⑤ EDIT PROFILE — username only (KYC fields are locked) */}
+          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16,animation:"slideUp 0.4s 0.32s ease both"}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Edit Profile</div>
             {msg&&<div style={{color:G.green,fontSize:12,padding:"9px 12px",background:G.greenBg,border:`1px solid ${G.green}33`,borderRadius:8,marginBottom:12}}>✓ {msg}</div>}
             {err&&<div style={{color:G.red,fontSize:12,padding:"9px 12px",background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:8,marginBottom:12}}>⚠ {err}</div>}
             <div style={{fontSize:11,color:G.textSub,marginBottom:6}}>Username</div>
-            <FI value={username} onChange={v=>{setUsername(v);setErr("");setMsg("");}} placeholder="Username" style={{marginBottom:12}}/>
-            <div style={{fontSize:11,color:G.textSub,marginBottom:6}}>Phone Number <span style={{color:G.textDim}}>(optional)</span></div>
-            <FI value={phone} onChange={v=>{setPhone(v);setErr("");}} placeholder="+251 9XX XXX XXX" style={{marginBottom:12}}/>
-            <button onClick={saveProfile} disabled={saving} style={{width:"100%",padding:13,background:saving?"none":G.gold,border:saving?`1px solid ${G.gold}44`:"none",borderRadius:G.rs,color:saving?G.gold:"#000",fontSize:13,fontWeight:800,cursor:saving?"not-allowed":"pointer",fontFamily:"inherit",transition:"all 0.2s"}}>
-              {saving?"Saving…":"Save Profile"}
+            <FI value={username} onChange={v=>{setUsername(v);setErr("");setMsg("");}} placeholder="Username" style={{marginBottom:14}}/>
+            {isKycVerified&&(
+              <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.rs,marginBottom:14,fontSize:11,color:G.textSub}}>
+                <LockIcon size={10} color={G.gold}/>
+                Name, phone, and ID details are locked after KYC approval.
+              </div>
+            )}
+            <button
+              onClick={saveProfile} disabled={saving}
+              style={{width:"100%",padding:13,background:saving?"none":saveBtnGlow?G.green:G.gold,border:saving?`1px solid ${G.gold}44`:"none",borderRadius:G.rs,color:saving?G.gold:"#000",fontSize:13,fontWeight:800,cursor:saving?"not-allowed":"pointer",fontFamily:"inherit",transition:"all 0.35s",boxShadow:saveBtnGlow?"0 0 22px rgba(34,197,94,0.45)":"none"}}
+              onMouseEnter={e=>{if(!saving)e.currentTarget.style.boxShadow="0 0 20px rgba(212,175,55,0.4)";}}
+              onMouseLeave={e=>{if(!saving&&!saveBtnGlow)e.currentTarget.style.boxShadow="none";}}>
+              {saving?"Saving…":"Save Username"}
             </button>
           </div>
 
-          {/* EA Terminal access — shows real approval status */}
-          <div style={{background:`linear-gradient(135deg,#a78bfa0a,${G.card})`,border:`1px solid ${isApproved?"#a78bfa55":"#a78bfa22"}`,borderRadius:G.r,padding:18,marginBottom:20}}>
+          {/* ⑥ TRUST+ CARD — only if KYC verified */}
+          {isKycVerified&&(
+            <div style={{animation:"slideUp 0.4s 0.4s ease both",marginBottom:16}}>
+              {trustStatus?.status==="approved"?(
+                <div style={{background:`linear-gradient(135deg,${G.gold}12,${G.card})`,border:`1px solid ${G.gold}55`,borderRadius:G.r,padding:18,display:"flex",alignItems:"center",gap:14,boxShadow:`0 0 24px rgba(212,175,55,0.12)`}}>
+                  <TrustBadge size={28}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>Trust+</div>
+                    <div style={{fontSize:14,fontWeight:800,color:G.text}}>Trust+ Active</div>
+                    <div style={{fontSize:11,color:G.textSub}}>Elite badge displayed on all your listings</div>
+                  </div>
+                </div>
+              ):trustStatus?.status==="pending"?(
+                <div style={{background:G.card,border:`1px solid ${G.gold}33`,borderRadius:G.r,padding:18,display:"flex",alignItems:"center",gap:14}}>
+                  <TrustBadge size={24}/>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:700,color:G.text,marginBottom:2}}>Application Under Review</div>
+                    <div style={{fontSize:11,color:G.textSub}}>Our team will respond within 48 hours</div>
+                  </div>
+                </div>
+              ):(
+                <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:10,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Trust+</div>
+                    <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:2}}>Apply for Trust+ Badge</div>
+                    <div style={{fontSize:11,color:G.textSub}}>Prove your trading history — earn elite status</div>
+                  </div>
+                  <button onClick={()=>onNavigate&&onNavigate("exchange")} style={{background:G.goldBg2,border:`1px solid ${G.gold}55`,borderRadius:G.rs,padding:"9px 14px",color:G.gold,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>Apply →</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ⑦ EDGE TERMINAL CARD */}
+          <div style={{background:`linear-gradient(135deg,#a78bfa0a,${G.card})`,border:`1px solid ${isApproved?"#a78bfa55":"#a78bfa22"}`,borderRadius:G.r,padding:18,marginBottom:16,animation:"slideUp 0.4s 0.48s ease both"}}>
             <div style={{fontSize:10,color:"#a78bfa",letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>EdgeTerminal Access</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -2191,27 +2352,26 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
                 <div style={{fontSize:11,color:G.textSub}}>{isApproved?"Approved — access granted":"Requires admin approval"}</div>
               </div>
               {isApproved?(
-                <span style={{padding:"5px 12px",borderRadius:20,background:"rgba(167,139,250,0.12)",border:"1px solid #a78bfa44",color:"#a78bfa",fontSize:10,fontWeight:700}}>APPROVED ✓</span>
+                <span style={{padding:"5px 12px",borderRadius:20,background:"rgba(167,139,250,0.12)",border:"1px solid #a78bfa44",color:"#a78bfa",fontSize:10,fontWeight:700}}>APPROVED</span>
               ):(
                 <span style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${G.textSub}33`,color:G.textSub,fontSize:10,fontWeight:700}}>PENDING</span>
               )}
             </div>
             {!isApproved&&(
-              <a href={ADMIN_TG} target="_blank" rel="noreferrer" style={{display:"block",marginTop:12,padding:"9px 14px",background:"none",border:`1px solid ${"#a78bfa"}33`,borderRadius:G.rs,color:"#a78bfa",fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>
+              <a href={ADMIN_TG} target="_blank" rel="noreferrer" style={{display:"block",marginTop:12,padding:"9px 14px",background:"none",border:"1px solid #a78bfa33",borderRadius:G.rs,color:"#a78bfa",fontSize:11,fontWeight:700,textAlign:"center",textDecoration:"none"}}>
                 Request Access on Telegram →
               </a>
             )}
           </div>
 
           {/* Sign out */}
-          <button onClick={onLogout} style={{width:"100%",padding:14,background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.rs,color:G.red,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Sign Out</button>
+          <button onClick={onLogout} style={{width:"100%",padding:14,background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.rs,color:G.red,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:"slideUp 0.4s 0.56s ease both"}}>Sign Out</button>
         </div>
       )}
 
       {/* ── SECURITY TAB ── */}
       {tab==="security"&&(
         <div>
-          {/* Change password */}
           <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Change Password</div>
             {passMsg&&<div style={{color:G.green,fontSize:12,padding:"9px 12px",background:G.greenBg,border:`1px solid ${G.green}33`,borderRadius:8,marginBottom:12}}>✓ {passMsg}</div>}
@@ -2223,7 +2383,6 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
             </button>
           </div>
 
-          {/* Security info */}
           <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:18,marginBottom:16}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Security Info</div>
             {[["Password","Hashed & encrypted"],["Sessions","Token-based (JWT)"],["Data storage","Supabase (EU Frankfurt)"],["Auth provider","Supabase Auth"]].map(([l,v])=>(
@@ -2234,7 +2393,6 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
             ))}
           </div>
 
-          {/* Delete account */}
           <div style={{background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.r,padding:18}}>
             <div style={{fontSize:10,color:G.red,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Danger Zone</div>
             <p style={{color:G.textSub,fontSize:12,lineHeight:1.7,marginBottom:14}}>Deleting your account is permanent and cannot be undone. All your data will be removed.</p>
@@ -2242,7 +2400,7 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
               <button onClick={()=>setDeleteConfirm(true)} style={{width:"100%",padding:12,background:"none",border:`1px solid ${G.red}55`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Delete My Account</button>
             ):(
               <div>
-                <div style={{fontSize:12,color:G.red,marginBottom:12,fontWeight:700}}>⚠ Are you sure? This cannot be undone.</div>
+                <div style={{fontSize:12,color:G.red,marginBottom:12,fontWeight:700}}>Are you sure? This cannot be undone.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                   <button onClick={()=>setDeleteConfirm(false)} style={{padding:12,background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
                   <button onClick={async()=>{
@@ -2262,6 +2420,8 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab}){
           </div>
         </div>
       )}
+
+      </div>
     </div>
   );
 }
@@ -2511,7 +2671,7 @@ export default function App(){
     archive:<ArchivePage st={st}/>,
     terminal:<TerminalPage st={st} user={user} isApproved={isApproved}/>,
     strategy:<StrategyPage/>,
-    profile:<ProfilePage user={user} onLogout={handleLogout} onSignIn={()=>setShowAuth(true)} isApproved={isApproved} initTab={profileInitTab}/>,
+    profile:<ProfilePage user={user} onLogout={handleLogout} onSignIn={()=>setShowAuth(true)} isApproved={isApproved} initTab={profileInitTab} onNavigate={nav}/>,
   };
 
   return(

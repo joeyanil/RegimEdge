@@ -255,9 +255,12 @@ const preRead = async (e, setter, setPreview) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const ID_TYPES = ["National ID", "Passport", "Driver's License", "Kebele ID"];
 
+const GENDER_OPTIONS = ["Male", "Female", "Prefer not to say"];
+
 function KYCScreen({ user, kyc, onSubmitted, onBack }) {
   const [form, setForm] = useState({
     full_name: "", phone: "", telegram: "", id_type: ID_TYPES[0],
+    gender: "", date_of_birth: "",
   });
   const [idFile, setIdFile] = useState(null);
   const [selfieFile, setSelfieFile] = useState(null);
@@ -308,6 +311,19 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
     if (!form.full_name.trim() || !form.phone.trim() || !form.telegram.trim()) {
       setErr("Please fill in all fields."); return;
     }
+    if (!form.gender) {
+      setErr("Please select your gender."); return;
+    }
+    if (!form.date_of_birth) {
+      setErr("Please enter your date of birth."); return;
+    }
+    // Age validation — must be 18+
+    const dob = new Date(form.date_of_birth);
+    const today = new Date();
+    const age = today.getFullYear() - dob.getFullYear() - (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0);
+    if (age < 18) {
+      setErr("You must be at least 18 years old to use the exchange."); return;
+    }
     if (!idFile || !selfieFile) {
       setErr("Please upload both your ID photo and selfie."); return;
     }
@@ -322,6 +338,7 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
         user_id:user.id, full_name:form.full_name.trim(),
         phone:form.phone.trim(), telegram:form.telegram.trim(),
         id_type:form.id_type, id_photo_url:idUrl, selfie_url:selfieUrl,
+        gender:form.gender, date_of_birth:form.date_of_birth,
         status:"pending",
       });
       await sendNotificationEmail("kyc_submitted", { user_id:user.id, email:user.email, full_name:form.full_name });
@@ -333,7 +350,7 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
     }
   };
 
-  const canSubmit = form.full_name.trim() && form.phone.trim() && form.telegram.trim() && idFile && selfieFile;
+  const canSubmit = form.full_name.trim() && form.phone.trim() && form.telegram.trim() && form.gender && form.date_of_birth && idFile && selfieFile;
 
   return (
     <div style={{ padding:"28px 18px" }}>
@@ -382,6 +399,46 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
                 </button>
               ))}
             </div>
+          </div>
+
+          <Divider />
+
+          {/* Gender */}
+          <div>
+            <div style={{ fontSize:11, color:G.textSub, marginBottom:8 }}>Gender <span style={{ color:G.red, fontSize:10 }}>*</span></div>
+            <div style={{ display:"flex", gap:8 }}>
+              {GENDER_OPTIONS.map(g => (
+                <button key={g} onClick={() => setF("gender")(g)} style={{
+                  flex:1, padding:"10px 6px", borderRadius:G.rs,
+                  border:`1px solid ${form.gender === g ? G.gold : G.border}`,
+                  background:form.gender === g ? G.goldBg : "transparent",
+                  color:form.gender === g ? G.gold : G.textSub,
+                  fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+                }}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Date of Birth */}
+          <div>
+            <div style={{ fontSize:11, color:G.textSub, marginBottom:5 }}>
+              Date of Birth <span style={{ color:G.red, fontSize:10 }}>*</span>
+              <span style={{ color:G.textDim, marginLeft:6, fontSize:10 }}>(Must be 18+)</span>
+            </div>
+            <input
+              type="date"
+              value={form.date_of_birth}
+              onChange={e => setF("date_of_birth")(e.target.value)}
+              max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split("T")[0]}
+              style={{
+                width:"100%", background:G.surface, border:`1px solid ${G.border}`,
+                borderRadius:G.rs, padding:"12px 14px", color:form.date_of_birth ? G.text : G.textSub,
+                fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit",
+                colorScheme:"dark",
+              }}
+            />
           </div>
 
           <Divider />
@@ -886,6 +943,31 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"completed", completed_at:new Date().toISOString() });
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"✅ Buyer confirmed USDT received. Trade completed successfully!", is_system:true });
       await sendNotificationEmail("trade_completed", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
+
+      // ── Recalculate and push seller stats to all their open/taken listings ──
+      try {
+        const sellerId = trade.seller_id;
+        if (sellerId) {
+          const [completedTrades, allTrades, ratings] = await Promise.all([
+            p2pSelect("p2p_trades", `?seller_id=eq.${sellerId}&status=eq.completed&select=id`),
+            p2pSelect("p2p_trades", `?seller_id=eq.${sellerId}&status=not.eq.waiting_payment&select=id`),
+            p2pSelect("trade_ratings", `?seller_id=eq.${sellerId}&select=stars`),
+          ]);
+          const completedCount = completedTrades?.length || 0;
+          const totalCount = allTrades?.length || 0;
+          const successRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+          let sellerRating = 0;
+          if (ratings?.length > 0) {
+            sellerRating = parseFloat((ratings.reduce((s, r) => s + r.stars, 0) / ratings.length).toFixed(1));
+          }
+          await p2pUpdate("p2p_listings", `seller_id=eq.${sellerId}&status=in.(open,taken)`, {
+            seller_completed_trades: completedCount,
+            seller_success_rate: successRate,
+            seller_rating: sellerRating,
+          });
+        }
+      } catch {} // don't block trade completion if stats update fails
+
       await refreshTrade();
     } catch (e) { setErr(e.message || "Failed. Try again."); }
     finally { setLoading(false); }
