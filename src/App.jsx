@@ -2404,6 +2404,36 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
             </div>
           )}
 
+          {/* ⑥b CONNECT TELEGRAM — only for KYC-approved users */}
+          {isKycVerified&&(
+            <div style={{animation:"slideUp 0.4s 0.44s ease both",marginBottom:16}}>
+              <a
+                href={`http://t.me/RegimeEdge1_bot?start=${user?.id}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display:"flex",alignItems:"center",gap:14,textDecoration:"none",
+                  background:"rgba(0,136,204,0.07)",
+                  border:"1px solid rgba(0,136,204,0.35)",
+                  borderLeft:"4px solid #29b6f6",
+                  borderRadius:G.r, padding:18,
+                  boxShadow:"0 0 20px rgba(0,136,204,0.06)",
+                  cursor:"pointer",
+                }}
+              >
+                <div style={{flexShrink:0,width:38,height:38,borderRadius:"50%",background:"rgba(0,136,204,0.12)",border:"1px solid rgba(0,136,204,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+                  ✈
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:10,color:"#29b6f6",letterSpacing:2,textTransform:"uppercase",marginBottom:3,fontWeight:800}}>Notifications</div>
+                  <div style={{fontSize:13,color:G.text,fontWeight:800,marginBottom:2}}>Connect Telegram</div>
+                  <div style={{fontSize:11,color:G.textSub,lineHeight:1.5}}>Receive trade alerts &amp; KYC updates instantly</div>
+                </div>
+                <span style={{color:"#29b6f6",fontSize:16,fontWeight:700,flexShrink:0}}>→</span>
+              </a>
+            </div>
+          )}
+
           {/* ⑦ EDGE TERMINAL CARD */}
           <div style={{background:`linear-gradient(135deg,#a78bfa0a,${G.card})`,border:`1px solid ${isApproved?"#a78bfa55":"#a78bfa22"}`,borderRadius:G.r,padding:18,marginBottom:16,animation:"slideUp 0.4s 0.48s ease both"}}>
             <div style={{fontSize:10,color:"#a78bfa",letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>EdgeTerminal Access</div>

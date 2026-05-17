@@ -306,6 +306,7 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
   const [selfiePreview, setSelfiePreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [tgConnected, setTgConnected] = useState(false);
   const idRef = useRef();
   const selfieRef = useRef();
   const setF = k => v => setForm(f => ({ ...f, [k]: v }));
@@ -389,7 +390,7 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
     }
   };
 
-  const canSubmit = form.full_name.trim() && form.phone.trim() && form.telegram.trim() && form.gender && form.date_of_birth && idFile && selfieFile;
+  const canSubmit = form.full_name.trim() && form.phone.trim() && form.telegram.trim() && form.gender && form.date_of_birth && idFile && selfieFile && tgConnected;
 
   return (
     <div style={{ padding:"28px 18px" }}>
@@ -495,6 +496,56 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
       </Card>
 
       <ErrBox msg={err} />
+
+      {/* ── TELEGRAM CONNECTION — REQUIRED ── */}
+      <div style={{
+        background:"#131509",
+        border:`1px solid ${G.gold}55`,
+        borderLeft:`4px solid ${G.gold}`,
+        borderRadius:G.r,
+        padding:"18px 16px",
+        marginBottom:14,
+        boxShadow:`0 0 24px rgba(212,175,55,0.08)`,
+      }}>
+        <div style={{ fontSize:9, color:G.gold, letterSpacing:3, textTransform:"uppercase", fontWeight:800, marginBottom:8 }}>
+          Required — Notifications
+        </div>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:G.text, fontWeight:900, marginBottom:8, lineHeight:1.3 }}>
+          Connect Telegram Before Submitting
+        </div>
+        <p style={{ color:G.textSub, fontSize:12, margin:"0 0 14px", lineHeight:1.7 }}>
+          You must connect Telegram to receive your verification result and trade alerts. Without this your account will have no notifications.
+        </p>
+        <a
+          href={`http://t.me/RegimeEdge1_bot?start=${user?.id}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => {}}
+          style={{
+            display:"block", width:"100%", boxSizing:"border-box",
+            padding:"13px 18px", background:G.gold, border:"none",
+            borderRadius:G.rs, color:"#000", fontSize:13,
+            fontWeight:800, cursor:"pointer", fontFamily:"inherit",
+            textAlign:"center", textDecoration:"none",
+            boxShadow:`0 4px 18px rgba(212,175,55,0.35)`,
+            marginBottom:14,
+          }}
+        >
+          ✈ Open Telegram &amp; Start Bot
+        </a>
+        <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer" }}>
+          <input
+            type="checkbox"
+            checked={tgConnected}
+            onChange={e => setTgConnected(e.target.checked)}
+            style={{ marginTop:2, accentColor:G.gold, width:16, height:16, flexShrink:0, cursor:"pointer" }}
+          />
+          <span style={{ fontSize:12, color:G.textSub, lineHeight:1.5 }}>
+            I have opened Telegram and started the bot
+          </span>
+        </label>
+      </div>
+
       <Btn onClick={handleSubmit} disabled={loading || !canSubmit}>
         {loading ? "Uploading & Submitting..." : "Submit for Verification"}
       </Btn>
