@@ -1366,6 +1366,84 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
         </div>
       )}
 
+      {/* ══ SELLER: usdt_sent — waiting for buyer confirmation ══ */}
+      {isSeller && trade.status === "usdt_sent" && (
+        <div style={{ background:G.card, border:`1px solid ${G.purple}44`, borderRadius:G.r, padding:"18px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:G.purple, marginBottom:8, display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:20 }}>⏳</span> Waiting for Buyer to Confirm Receipt
+          </div>
+          <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>You released the USDT. Waiting for buyer to confirm receipt in their wallet.</p>
+        </div>
+      )}
+
+      {/* ══ BUYER: usdt_sent — confirm wallet receipt ══ */}
+      {isBuyer && trade.status === "usdt_sent" && (
+        <div style={{ background:G.card, border:`1px solid ${G.gold}44`, borderRadius:G.r, padding:"18px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:G.gold, marginBottom:4, display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:22 }}>💸</span> Seller Released USDT — Check Your Wallet
+          </div>
+          <p style={{ color:G.textSub, fontSize:12, margin:"0 0 16px", lineHeight:1.6 }}>
+            The seller has sent {trade.amount_usdt} USDT to your {trade.network} address. Check your wallet now to confirm receipt.
+          </p>
+
+          {/* How to check guide */}
+          <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.r, padding:"12px 14px", marginBottom:14 }}>
+            <div style={{ fontSize:10, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>How to check your {trade.network} wallet</div>
+            {(trade.network === "BEP20" ? [
+              "1. Open Binance app",
+              "2. Tap Wallets → Spot",
+              "3. Search USDT — check your balance",
+              "4. Tap USDT → Deposit history to see the incoming transfer",
+              `5. Confirm you received ${trade.amount_usdt} USDT via BEP20`,
+            ] : [
+              "1. Open Binance app",
+              "2. Tap Wallets → Spot",
+              "3. Search USDT — check your balance",
+              "4. Tap USDT → Deposit history to see the incoming transfer",
+              `5. Confirm you received ${trade.amount_usdt} USDT via TRC20`,
+            ]).map((step, i) => (
+              <div key={i} style={{ display:"flex", gap:8, marginBottom:6 }}>
+                <span style={{ color:G.gold, fontSize:11, flexShrink:0 }}>{step.split(".")[0]}.</span>
+                <span style={{ color:G.textSub, fontSize:12, lineHeight:1.4 }}>{step.split(".").slice(1).join(".").trim()}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"10px 12px", marginBottom:14 }}>
+            <div style={{ fontSize:10, color:G.textDim, marginBottom:3 }}>Your receiving address</div>
+            <div style={{ fontSize:12, color:G.text, fontFamily:"monospace", wordBreak:"break-all", fontWeight:700 }}>{trade.buyer_usdt_address || "—"}</div>
+          </div>
+
+          {!buyerNotReceived ? (<>
+            <Btn onClick={confirmReceived} disabled={loading} color={G.green}>
+              {loading ? "Confirming..." : "✓ I Received the USDT — Complete Trade"}
+            </Btn>
+            <div style={{ height:8 }} />
+            <OutlineBtn onClick={() => setBuyerNotReceived(true)} color={G.red}>
+              ✗ I Did Not Receive the USDT
+            </OutlineBtn>
+          </>) : (
+            <div style={{ background:G.redBg, border:`1px solid ${G.red}33`, borderRadius:G.r, padding:"14px 14px" }}>
+              <div style={{ fontSize:13, fontWeight:800, color:G.red, marginBottom:10 }}>Did Not Receive USDT</div>
+              <p style={{ color:G.textSub, fontSize:12, margin:"0 0 12px", lineHeight:1.6 }}>
+                Please wait 5–15 minutes — blockchain transactions can be delayed. If you still don't receive after waiting, contact both the seller and our team directly on Telegram.
+              </p>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {trade.seller_telegram && (
+                  <a href={`https://t.me/${trade.seller_telegram.replace("@","")}`} target="_blank" rel="noreferrer" style={{ display:"block", padding:"10px 0", background:"rgba(0,136,204,0.08)", border:"1px solid rgba(0,136,204,0.3)", borderRadius:G.rs, color:"#29b6f6", fontSize:12, fontWeight:700, textAlign:"center", textDecoration:"none" }}>
+                    Contact Seller on Telegram
+                  </a>
+                )}
+                <a href="https://t.me/RegimeEdge_Admin" target="_blank" rel="noreferrer" style={{ display:"block", padding:"10px 0", background:G.goldBg, border:`1px solid ${G.gold}44`, borderRadius:G.rs, color:G.gold, fontSize:12, fontWeight:700, textAlign:"center", textDecoration:"none" }}>
+                  Contact Our Team on Telegram
+                </a>
+                <OutlineBtn onClick={() => setBuyerNotReceived(false)} color={G.textSub} small>← Back</OutlineBtn>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ══════════════════════════════════════
           COMPLETED
       ══════════════════════════════════════ */}
