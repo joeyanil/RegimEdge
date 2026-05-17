@@ -1451,6 +1451,10 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               kyc_verified:true,
               kyc_verified_at:new Date().toISOString(),
             });
+            await sendNotificationEmail("kyc_approved",{
+              email:kycRow.email,
+              full_name:kycRow.full_name||"there",
+            });
           }
         }catch(syncErr){console.warn("Profile sync failed:",syncErr.message);}
       }

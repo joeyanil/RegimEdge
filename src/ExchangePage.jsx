@@ -377,6 +377,7 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
         phone:form.phone.trim(), telegram:form.telegram.trim(),
         id_type:form.id_type, id_photo_url:idUrl, selfie_url:selfieUrl,
         gender:form.gender, date_of_birth:form.date_of_birth,
+        email:user.email,
         status:"pending",
       });
       await sendNotificationEmail("kyc_submitted", { user_id:user.id, email:user.email, full_name:form.full_name });
