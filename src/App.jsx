@@ -1402,7 +1402,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
     setKycBusy(b=>({...b,[id]:true}));
     try{
       await p2pUpdate("kyc_submissions",`id=eq.${id}`,{status,reviewed_at:new Date().toISOString(),reviewed_by:"Admin",...extra});
-      // ── Auto-sync KYC → profiles on approval ──
+      // ── Auto-sync KYC → profiles on approval or revoke ──
       if(status==="approved"){
         try{
           const kycRow=kycList.find(r=>r.id===id);
@@ -1420,6 +1420,18 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             });
           }
         }catch(syncErr){console.warn("Profile sync failed:",syncErr.message);}
+      }
+      // ── Revoke: clear kyc_verified on profiles table ──
+      if(status==="revoked"){
+        try{
+          const kycRow=kycList.find(r=>r.id===id);
+          if(kycRow?.user_id){
+            await p2pUpdate("profiles",`id=eq.${kycRow.user_id}`,{
+              kyc_verified:false,
+              kyc_verified_at:null,
+            });
+          }
+        }catch(syncErr){console.warn("Profile revoke sync failed:",syncErr.message);}
       }
       setKycList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setExpanded(null);
@@ -1701,7 +1713,15 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                   {/* Actions */}
                   <div style={{marginTop:13,display:"flex",flexDirection:"column",gap:8}}>
                     {k.status!=="approved"&&<button disabled={busy} onClick={()=>kycAction(k.id,"approved")} style={{width:"100%",padding:11,background:G.greenBg,border:`1px solid ${G.green}`,borderRadius:G.rs,color:G.green,fontSize:13,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>{busy?"Saving...":"✓ Approve — Grant Exchange Access"}</button>}
-                    {k.status==="approved"&&<div style={{padding:8,background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs,fontSize:12,color:G.green,textAlign:"center",fontWeight:700}}>✓ Already Approved</div>}
+                    {k.status==="approved"&&<>
+                      <div style={{padding:"8px 12px",background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs,fontSize:12,color:G.green,textAlign:"center",fontWeight:700}}>✓ Currently Approved</div>
+                      <button disabled={busy} onClick={()=>{
+                        if(!window.confirm(`Revoke KYC for ${k.full_name}? This removes their exchange access immediately.`)) return;
+                        kycAction(k.id,"revoked",{rejection_reason:"KYC revoked by admin"});
+                      }} style={{width:"100%",padding:10,background:"rgba(239,68,68,0.06)",border:`1px solid ${G.red}55`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>
+                        {busy?"Revoking...":"⊘ Revoke KYC — Remove Exchange Access"}
+                      </button>
+                    </>}
                     {k.status!=="rejected"&&<div>
                       <input value={rejInput[k.id]||""} onChange={e=>setRejInput(r=>({...r,[k.id]:e.target.value}))} placeholder="Rejection reason (required)..." style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"9px 11px",color:G.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:6}}/>
                       <button disabled={busy||!rejInput[k.id]?.trim()} onClick={()=>kycAction(k.id,"rejected",{rejection_reason:rejInput[k.id]})} style={{width:"100%",padding:10,background:G.redBg,border:`1px solid ${G.red}`,borderRadius:G.rs,color:G.red,fontSize:13,fontWeight:800,cursor:(busy||!rejInput[k.id]?.trim())?"not-allowed":"pointer",fontFamily:"inherit",opacity:(busy||!rejInput[k.id]?.trim())?0.4:1}}>✕ Reject</button>

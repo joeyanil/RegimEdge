@@ -2493,31 +2493,31 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <svg width="32" height="32" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" style={{ display:"block", flexShrink:0 }}>
                 <defs>
-                  <filter id="exc-glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <filter id="exhub-glow" x="-50%" y="-50%" width="200%" height="200%">
                     <feGaussianBlur stdDeviation="2" result="b"/>
                     <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
                   </filter>
-                  <filter id="exc-soft" x="-20%" y="-20%" width="140%" height="140%">
+                  <filter id="exhub-soft" x="-20%" y="-20%" width="140%" height="140%">
                     <feGaussianBlur stdDeviation=".8" result="b"/>
                     <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
                   </filter>
-                  <radialGradient id="exc-rg" cx="50%" cy="60%" r="50%">
+                  <radialGradient id="exhub-rg" cx="50%" cy="60%" r="50%">
                     <stop offset="0%" stopColor="#D4AF37" stopOpacity=".14"/>
                     <stop offset="100%" stopColor="#D4AF37" stopOpacity="0"/>
                   </radialGradient>
                 </defs>
-                <ellipse cx="30" cy="46" rx="24" ry="3.5" fill="url(#exc-rg)"/>
-                <ellipse cx="22" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(-18,22,18.5)" filter="url(#exc-soft)"/>
-                <ellipse cx="30" cy="14" rx="3.5" ry="2.3" fill="none" stroke="#FFE57A" strokeWidth="1.7" filter="url(#exc-glow)"/>
-                <ellipse cx="38" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(18,38,18.5)" filter="url(#exc-soft)"/>
+                <ellipse cx="30" cy="46" rx="24" ry="3.5" fill="url(#exhub-rg)"/>
+                <ellipse cx="22" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(-18,22,18.5)" filter="url(#exhub-soft)"/>
+                <ellipse cx="30" cy="14" rx="3.5" ry="2.3" fill="none" stroke="#FFE57A" strokeWidth="1.7" filter="url(#exhub-glow)"/>
+                <ellipse cx="38" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(18,38,18.5)" filter="url(#exhub-soft)"/>
                 <path d="M13 38 Q30 10 47 38" fill="none" stroke="#D4AF37" strokeWidth=".5" strokeDasharray="1.5 3" opacity=".2" strokeLinecap="round"/>
                 <polygon points="13,31 8,34.5 8,41.5 13,45 18,41.5 18,34.5" fill="#111315" stroke="#22c55e" strokeWidth="1.6"/>
-                <circle cx="13" cy="38" r="3" fill="#22c55e" opacity=".85" filter="url(#exc-soft)"/>
+                <circle cx="13" cy="38" r="3" fill="#22c55e" opacity=".85" filter="url(#exhub-soft)"/>
                 <text x="13" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">B</text>
                 <polygon points="47,31 42,34.5 42,41.5 47,45 52,41.5 52,34.5" fill="#111315" stroke="#D4AF37" strokeWidth="1.6"/>
-                <circle cx="47" cy="38" r="3" fill="#D4AF37" opacity=".85" filter="url(#exc-soft)"/>
+                <circle cx="47" cy="38" r="3" fill="#D4AF37" opacity=".85" filter="url(#exhub-soft)"/>
                 <text x="47" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">S</text>
-                <circle r="2.5" fill="#FFE57A" opacity=".9" filter="url(#exc-glow)">
+                <circle r="2.5" fill="#FFE57A" opacity=".9" filter="url(#exhub-glow)">
                   <animateMotion dur="2.8s" repeatCount="indefinite" calcMode="spline" keySplines="0.42 0 0.58 1" path="M13 38 Q30 10 47 38"/>
                 </circle>
               </svg>
