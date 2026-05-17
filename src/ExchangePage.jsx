@@ -8,6 +8,23 @@ import {
 const _SB_URL  = "https://gongzbdpfbxkaypfwkht.supabase.co";
 const _SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdvbmd6YmRwZmJ4a2F5cGZ3a2h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQzOTEsImV4cCI6MjA5Mzc2MDM5MX0.OReRufSVbPVSKOzXCad-qfoitnbwYe8mCNW1fIdYVdo";
 
+// ── Telegram notification helper ─────────────────────────────────────────────
+// Calls send-tg-notification Edge Function. Silent fail — never blocks trade actions.
+const sendTgNotification = async (event, data) => {
+  try {
+    const token = localStorage.getItem("re_access_token") || _SB_ANON;
+    await fetch(`${_SB_URL}/functions/v1/send-tg-notification`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+        "apikey": _SB_ANON,
+      },
+      body: JSON.stringify({ event, data }),
+    });
+  } catch { /* intentional silent fail */ }
+};
+
 /**
  * getSignedUrl — generates a 1-hour signed URL for any Supabase Storage object.
  * Works for both private buckets (payment-proofs, kyc-docs) and public buckets.
@@ -306,7 +323,6 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
   const [selfiePreview, setSelfiePreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [tgConnected, setTgConnected] = useState(false);
   const idRef = useRef();
   const selfieRef = useRef();
   const setF = k => v => setForm(f => ({ ...f, [k]: v }));
@@ -390,7 +406,7 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
     }
   };
 
-  const canSubmit = form.full_name.trim() && form.phone.trim() && form.telegram.trim() && form.gender && form.date_of_birth && idFile && selfieFile && tgConnected;
+  const canSubmit = form.full_name.trim() && form.phone.trim() && form.telegram.trim() && form.gender && form.date_of_birth && idFile && selfieFile;
 
   return (
     <div style={{ padding:"28px 18px" }}>
@@ -496,56 +512,6 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
       </Card>
 
       <ErrBox msg={err} />
-
-      {/* ── TELEGRAM CONNECTION — REQUIRED ── */}
-      <div style={{
-        background:"#131509",
-        border:`1px solid ${G.gold}55`,
-        borderLeft:`4px solid ${G.gold}`,
-        borderRadius:G.r,
-        padding:"18px 16px",
-        marginBottom:14,
-        boxShadow:`0 0 24px rgba(212,175,55,0.08)`,
-      }}>
-        <div style={{ fontSize:9, color:G.gold, letterSpacing:3, textTransform:"uppercase", fontWeight:800, marginBottom:8 }}>
-          Required — Notifications
-        </div>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:G.text, fontWeight:900, marginBottom:8, lineHeight:1.3 }}>
-          Connect Telegram Before Submitting
-        </div>
-        <p style={{ color:G.textSub, fontSize:12, margin:"0 0 14px", lineHeight:1.7 }}>
-          You must connect Telegram to receive your verification result and trade alerts. Without this your account will have no notifications.
-        </p>
-        <a
-          href={`http://t.me/RegimeEdge1_bot?start=${user?.id}`}
-          target="_blank"
-          rel="noreferrer"
-          onClick={() => {}}
-          style={{
-            display:"block", width:"100%", boxSizing:"border-box",
-            padding:"13px 18px", background:G.gold, border:"none",
-            borderRadius:G.rs, color:"#000", fontSize:13,
-            fontWeight:800, cursor:"pointer", fontFamily:"inherit",
-            textAlign:"center", textDecoration:"none",
-            boxShadow:`0 4px 18px rgba(212,175,55,0.35)`,
-            marginBottom:14,
-          }}
-        >
-          ✈ Open Telegram &amp; Start Bot
-        </a>
-        <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer" }}>
-          <input
-            type="checkbox"
-            checked={tgConnected}
-            onChange={e => setTgConnected(e.target.checked)}
-            style={{ marginTop:2, accentColor:G.gold, width:16, height:16, flexShrink:0, cursor:"pointer" }}
-          />
-          <span style={{ fontSize:12, color:G.textSub, lineHeight:1.5 }}>
-            I have opened Telegram and started the bot
-          </span>
-        </label>
-      </div>
-
       <Btn onClick={handleSubmit} disabled={loading || !canSubmit}>
         {loading ? "Uploading & Submitting..." : "Submit for Verification"}
       </Btn>
@@ -1079,6 +1045,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       });
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"📸 Buyer submitted payment proof. Seller: open each screenshot, verify the amount, date, and time before releasing.", is_system:true });
       await sendNotificationEmail("buyer_paid", { trade_ref:trade.trade_ref, seller_id:trade.seller_id });
+      sendTgNotification("buyer_paid", { trade_ref:trade.trade_ref, seller_id:trade.seller_id, buyer_id:trade.buyer_id });
       await refreshTrade();
     } catch (e) { setErr(e.message || "Something went wrong."); }
     finally { setLoading(false); }
@@ -1093,6 +1060,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       });
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"💸 Seller has released USDT. Buyer: check your wallet and confirm receipt to complete the trade.", is_system:true });
       await sendNotificationEmail("usdt_released", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
+      sendTgNotification("usdt_released", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
       await refreshTrade();
     } catch (e) { setErr(e.message || "Failed. Try again."); }
     finally { setLoading(false); }
@@ -1118,6 +1086,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"completed", completed_at:new Date().toISOString() });
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:"✅ Buyer confirmed USDT received. Trade completed successfully!", is_system:true });
       await sendNotificationEmail("trade_completed", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
+      sendTgNotification("trade_completed", { trade_ref:trade.trade_ref, buyer_id:trade.buyer_id, seller_id:trade.seller_id });
 
       // ── Recalculate and push seller stats to all their open/taken listings ──
       try {
@@ -1155,6 +1124,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       await p2pUpdate("p2p_trades", `id=eq.${trade.id}`, { status:"disputed", dispute_reason:disputeReason.trim(), disputed_at:new Date().toISOString() });
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:`⚠️ Dispute raised: ${disputeReason.trim()} — Our team will contact both parties on Telegram within 2 hours.`, is_system:true });
       await sendNotificationEmail("dispute_raised", { trade_ref:trade.trade_ref, dispute_reason:disputeReason.trim(), buyer_id:trade.buyer_id, seller_id:trade.seller_id });
+      sendTgNotification("dispute_raised", { trade_ref:trade.trade_ref, dispute_reason:disputeReason.trim(), buyer_id:trade.buyer_id, seller_id:trade.seller_id });
       setShowDispute(false); await refreshTrade();
     } catch (e) { setErr(e.message || "Failed."); }
     finally { setLoading(false); }
@@ -1174,6 +1144,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       await p2pInsert("trade_ratings", { trade_id:trade.id, buyer_id:user.id, seller_id:trade.seller_id, stars, comment:ratingComment.trim() || null });
       setRated(true);
       await sendNotificationEmail("rating_received", { seller_id:trade.seller_id, stars, trade_ref:trade.trade_ref });
+      sendTgNotification("rating_received", { trade_ref:trade.trade_ref, seller_id:trade.seller_id, stars, comment:ratingComment.trim() || null });
     } catch {} finally { setLoading(false); }
   };
 
@@ -2056,6 +2027,7 @@ function CancelTradeModal({ trade, user, isBuyer, onCancelled, onClose }) {
       }
       await p2pInsert("trade_messages", { trade_id:trade.id, sender_id:user.id, sender_display_name:"System", message:`Trade cancelled by ${isBuyer ? "buyer" : "seller"}: ${reason}`, is_system:true });
       await sendNotificationEmail("trade_cancelled", { trade_ref:trade.trade_ref, reason, cancelled_by:isBuyer ? "buyer" : "seller" });
+      sendTgNotification("trade_cancelled", { trade_ref:trade.trade_ref, reason, cancelled_by:isBuyer ? "buyer" : "seller", buyer_id:trade.buyer_id, seller_id:trade.seller_id });
       onCancelled();
     } catch (e) { setErr(e.message || "Failed to cancel. Try again."); }
     finally { setLoading(false); }
@@ -2189,6 +2161,7 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
       });
       await p2pInsert("trade_messages", { trade_id:newTrade.id, sender_id:user.id, sender_display_name:"System", message:`🔔 New trade! Buyer wants ${amount} USDT via ${network}. Payment required within 1 hour.`, is_system:true });
       await sendNotificationEmail("trade_opened", { trade_ref:newTrade.trade_ref, seller_id:listing.seller_id, buyer_id:user.id });
+      sendTgNotification("trade_opened", { trade_ref:newTrade.trade_ref, seller_id:listing.seller_id, buyer_id:user.id, amount_usdt:amount, total_etb:totalEtb, payment_method:chosenMethod || listing.payment_method });
       setBuyFlowListing(null);
       onOpenTrade(newTrade);
     } catch (e) { setErr(e.message); }
