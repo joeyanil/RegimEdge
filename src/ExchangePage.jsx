@@ -4,6 +4,44 @@ import {
   Icon, P2P_TEXT,
 } from "./p2pHelpers.jsx";
 
+// ── Supabase config (mirrors App.jsx) ────────────────────────────────────────
+const _SB_URL  = "https://gongzbdpfbxkaypfwkht.supabase.co";
+const _SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdvbmd6YmRwZmJ4a2F5cGZ3a2h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQzOTEsImV4cCI6MjA5Mzc2MDM5MX0.OReRufSVbPVSKOzXCad-qfoitnbwYe8mCNW1fIdYVdo";
+
+/**
+ * getSignedUrl — generates a 1-hour signed URL for any Supabase Storage object.
+ * Works for both private buckets (payment-proofs, kyc-docs) and public buckets.
+ * Falls back to the raw URL if signing fails (so public buckets still work).
+ */
+const getSignedUrl = async (rawUrl, bucket) => {
+  if (!rawUrl) return null;
+  // Extract the file path from a full Supabase storage URL
+  let filePath = rawUrl;
+  const markers = [
+    `/storage/v1/object/public/${bucket}/`,
+    `/storage/v1/object/${bucket}/`,
+    `/storage/v1/object/sign/${bucket}/`,
+  ];
+  for (const m of markers) {
+    if (rawUrl.includes(m)) { filePath = rawUrl.split(m)[1].split("?")[0]; break; }
+  }
+  try {
+    const token = localStorage.getItem("re_access_token") || _SB_ANON;
+    const res = await fetch(`${_SB_URL}/storage/v1/object/sign/${bucket}/${filePath}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": _SB_ANON,
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+    if (!res.ok) return rawUrl; // fall back to raw URL (works if bucket is public)
+    const data = await res.json();
+    return data?.signedURL ? `${_SB_URL}/storage/v1${data.signedURL}` : rawUrl;
+  } catch { return rawUrl; }
+};
+
 // ── Design tokens (mirror App.jsx exactly) ───────────────────────────────────
 const G = {
   bg:"#16181D", bgDeep:"#111315", surface:"#1B1E24", card:"#1F2229",
@@ -825,6 +863,35 @@ function TradeChat({ trade, user }) {
   );
 }
 
+// Buyer's proof thumbnail — resolves signed URL then opens in a new tab
+function BuyerProofLink({ label, rawUrl }) {
+  const [signedUrl, setSignedUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!rawUrl) { setLoading(false); return; }
+    getSignedUrl(rawUrl, "payment-proofs")
+      .then(url => { if (url) setSignedUrl(url); })
+      .finally(() => setLoading(false));
+  }, [rawUrl]);
+
+  if (loading) return (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 0", color:G.textSub, fontSize:11, fontWeight:700 }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ width:16, height:16, border:`2px solid ${G.border}`, borderTop:`2px solid ${G.blue}`, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
+      {label}
+    </div>
+  );
+
+  return (
+    <a href={signedUrl || rawUrl} target="_blank" rel="noreferrer"
+      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 0", color:G.blue, fontSize:11, fontWeight:700, textDecoration:"none" }}>
+      <Icon name="eye" size={16} color={G.blue} />
+      {label}
+    </a>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TRADE ROOM
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1012,28 +1079,59 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   };
   const [statusColor, statusLabel] = StatusMap[trade.status] || [G.textSub, trade.status];
 
-  // Proof image renderer — shows inline thumbnail exactly like KYC admin panel
+  // Proof image renderer — fetches a signed URL so private-bucket images load correctly
   const [expandedProof, setExpandedProof] = useState(null);
+
+  // Inner component that resolves the signed URL before rendering
   const ProofImg = ({ label, url }) => {
+    const [signedUrl, setSignedUrl] = useState(null);
+    const [imgLoading, setImgLoading] = useState(true);
+    const [imgFailed, setImgFailed] = useState(false);
+
+    useEffect(() => {
+      if (!url) { setImgLoading(false); setImgFailed(true); return; }
+      setImgLoading(true); setImgFailed(false);
+      getSignedUrl(url, "payment-proofs")
+        .then(signed => {
+          if (signed) setSignedUrl(signed);
+          else setImgFailed(true);
+        })
+        .catch(() => setImgFailed(true))
+        .finally(() => setImgLoading(false));
+    }, [url]);
+
     if (!url) return null;
+
     return (
       <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, overflow:"hidden" }}>
-        <img
-          src={url} alt={label}
-          style={{ width:"100%", maxHeight:140, objectFit:"cover", display:"block", cursor:"pointer" }}
-          onClick={() => setExpandedProof(url)}
-          onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
-        />
-        <div style={{ display:"none", flexDirection:"column", alignItems:"center", justifyContent:"center", height:80, gap:6 }}>
-          <Icon name="image" size={22} color={G.textSub} />
-          <span style={{ fontSize:10, color:G.textSub }}>Image unavailable</span>
-        </div>
+        {imgLoading && (
+          <div style={{ height:140, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            <div style={{ width:22, height:22, border:`2px solid ${G.border}`, borderTop:`2px solid ${G.gold}`, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
+            <span style={{ fontSize:10, color:G.textSub }}>Loading image...</span>
+          </div>
+        )}
+        {!imgLoading && imgFailed && (
+          <div style={{ height:80, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <Icon name="image" size={22} color={G.textSub} />
+            <span style={{ fontSize:10, color:G.textSub }}>Image unavailable</span>
+          </div>
+        )}
+        {!imgLoading && !imgFailed && signedUrl && (
+          <img
+            src={signedUrl} alt={label}
+            style={{ width:"100%", maxHeight:140, objectFit:"cover", display:"block", cursor:"pointer" }}
+            onClick={() => setExpandedProof(signedUrl)}
+            onError={() => setImgFailed(true)}
+          />
+        )}
         <div style={{ padding:"6px 10px", fontSize:10, color:G.textSub, fontWeight:600, textAlign:"center", borderTop:`1px solid ${G.border}` }}>
           {label} — tap to expand
         </div>
       </div>
     );
   };
+
   // Fullscreen proof viewer
   const ProofViewer = () => expandedProof ? (
     <div onClick={() => setExpandedProof(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -1269,11 +1367,8 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           </div>
           {(trade.payment_proof_url || trade.payment_proof_url_2) && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-              {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([,u]) => u).map(([label, url]) => (
-                <a key={label} href={url} target="_blank" rel="noreferrer" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 0", color:G.blue, fontSize:11, fontWeight:700, textDecoration:"none" }}>
-                  <Icon name="eye" size={16} color={G.blue} />
-                  {label}
-                </a>
+              {[[`Seller payment`, trade.payment_proof_url], [`Platform fee`, trade.payment_proof_url_2]].filter(([,u]) => u).map(([label, url]) => (
+                <BuyerProofLink key={label} label={label} rawUrl={url} />
               ))}
             </div>
           )}
