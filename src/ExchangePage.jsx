@@ -3141,9 +3141,9 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
   // Track last-fetched user id to detect stale cache issues
   const fetchedForRef = useRef(null);
 
-  const loadData = useCallback(async (uid) => {
+  const loadData = useCallback(async (uid, silent = false) => {
     if (!uid) { setLoading(false); return; }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [kycRows, cfgRows] = await Promise.all([
         p2pSelect("kyc_submissions", `?user_id=eq.${uid}&select=*`),
@@ -3170,10 +3170,9 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
     }
   }, [user?.id, loadData]);
 
-  // Also re-fetch on mount even if user.id hasn't changed
-  // This fixes the "forgets they're verified after navigation" bug
+  // On mount: fetch if not already fetched for this user (covers navigation back to exchange)
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && fetchedForRef.current !== user.id) {
       loadData(user.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3182,15 +3181,15 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
   // Poll every 30s to pick up admin changes (revoke, ban, etc.) without page reload
   useEffect(() => {
     if (!user?.id) return;
-    const id = setInterval(() => loadData(user.id), 30000);
+    const id = setInterval(() => loadData(user.id, true), 30000);
     return () => clearInterval(id);
   }, [user?.id, loadData]);
 
   const openTrade = trade => { setActiveTrade(trade); setScreen("tradeRoom"); };
   const goHub = () => { setScreen("hub"); setActiveTrade(null); };
 
-  // While loading, show spinner
-  if (loading) return <Spinner text="Loading exchange..." />;
+  // While loading for the first time (no data yet), show spinner
+  if (loading && kyc === null && config === null) return <Spinner text="Loading exchange..." />;
 
   // Guide is accessible to everyone — logged in or not — so check this FIRST
   // (before the !user check, otherwise setting screen="guide" from NotLoggedIn is blocked)

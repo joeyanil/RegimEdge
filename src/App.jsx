@@ -2640,10 +2640,11 @@ export default function App(){
   },[]);
 
   // Re-check EA approval when user or approved list changes
+  const eaApprovedUsers = st.eaApprovedUsers;
   useEffect(()=>{
-    if(user?.id) checkApproval(user.id, user.email, st.eaApprovedUsers||[]).then(setIsApproved);
+    if(user?.id) checkApproval(user.id, user.email, eaApprovedUsers||[]).then(setIsApproved);
     else setIsApproved(false);
-  },[user?.id, JSON.stringify(st.eaApprovedUsers)]);
+  },[user?.id, eaApprovedUsers]);
 
   const handleLogout=async()=>{
     await sbSignOut();
