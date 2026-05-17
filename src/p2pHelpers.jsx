@@ -371,7 +371,7 @@ function Icon({ name, size = 20, color = "currentColor", strokeWidth = 1.5, styl
   );
 }
 
-// ── Bilingual Text ────────────────────────────────────────────────────────────
+// ── UI Text (English only — Amharic removed) ──────────────────────────────────
 
 const P2P_TEXT = {
   en: {
@@ -512,144 +512,6 @@ const P2P_TEXT = {
     trading_name: "Trading Display Name",
     trading_name_note: "This is what other traders see. Your legal name is private.",
   },
-  am: {
-    // General
-    title: "ሬጂም ኤጅ ልውውጥ",
-    subtitle: "የኢትዮጵያ እጅግ አስተማማኝ P2P USDT ልውውጥ",
-    verified: "የተረጋገጠ",
-    unverified: "ያልተረጋገጠ",
-    loading: "እየጫነ ነው...",
-    error: "ችግር ተፈጥሯል። እንደገና ሞክር።",
-    back: "← ተመለስ",
-    cancel: "ሰርዝ",
-    confirm: "አረጋግጥ",
-    save: "አስቀምጥ",
-    submit: "አስገባ",
-    close: "ዝጋ",
-
-    // KYC
-    kyc_title: "ማንነትህን አረጋግጥ",
-    kyc_subtitle: "በ RegimeEdge ልውውጥ ለመግዛት ወይም ለመሸጥ ያስፈልጋል",
-    kyc_warning: "ማንነትህ በደህና ይቀመጣል። ሐሰተኛ ማስረጃ ቀርቦ ከተገኘ ቋሚ እገዳ እና የህግ እርምጃ ይወሰዳል።",
-    kyc_fullname: "ሙሉ የህግ ስም",
-    kyc_phone: "ስልክ ቁጥር (ለምሳሌ 0912345678)",
-    kyc_telegram: "የቴሌግራም ስም (ለምሳሌ @YourName)",
-    kyc_id_type: "የምስክር ወረቀት ዓይነት",
-    kyc_id_photo: "የምስክር ወረቀት — ፊት ፎቶ",
-    kyc_selfie: "ምስክር ወረቀቱን ይዘህ ሴልፊ",
-    kyc_upload_id: "የምስክር ወረቀት ፎቶ አስገባ",
-    kyc_upload_selfie: "ሴልፊ አስገባ",
-    kyc_submit: "ለማረጋገጥ አስገባ",
-    kyc_pending_title: "ማረጋገጫ በጥበቃ ላይ",
-    kyc_pending_desc: "ሰነዶችህ ተቀብለናል። አስተዳዳሪ በ24 ሰዓት ውስጥ ይገምግማል። ሲጸድቅ ኢሜይል ይደርስሃል።",
-    kyc_approved: "ማንነት ተረጋግጧል",
-    kyc_rejected: "ማረጋገጫ ተቀባይነት አላገኘም",
-
-    // Listings
-    listings_title: "የሚገኝ USDT",
-    listings_empty: "አሁን ምንም ዝርዝር የለም። ለመሸጥ ቀዳሚ ሁን።",
-    sell_usdt: "USDT ሸጥ",
-    buy_now: "አሁን ግዛ",
-    usdt_amount: "የ USDT መጠን",
-    rate: "ምጣኔ (1 USDT ለ ETB)",
-    payment_method: "የክፍያ ዘዴ",
-    your_account: "የሒሳብ ቁጥርህ",
-    post_listing: "ዝርዝር አስቀምጥ — ነፃ",
-    listing_posted: "ዝርዝርህ ቀጥታ ነው!",
-    my_trades: "ንግዶቼ",
-
-    // Trade room
-    trade_room: "የንግድ ክፍል",
-    waiting_payment: "ክፍያ እየጠበቀ ነው",
-    payment_sent: "ክፍያ ተልኳል",
-    confirmed: "ተረጋግጧል",
-    completed: "ተጠናቋል",
-    disputed: "አለመግባባት",
-    cancelled: "ተሰርዟል",
-    pay_seller: "ክፍያ 1 — ለሻጩ ክፈል",
-    pay_fee: "ክፍያ 2 — የ RegimeEdge ክፍያ",
-    upload_proof: "የክፍያ ቅጽበታዊ ገጽ እይታ አስገባ",
-    i_have_paid: "ሁለቱንም ከፍያለሁ",
-    release_usdt: "USDT ለገዢው ለቀቅ",
-    raise_dispute: "አለመግባባት አቅርብ",
-    dispute_title: "አለመግባባት አቅርብ",
-    dispute_reason: "ችግሩን በዝርዝር ግለጽ...",
-    dispute_submitted: "አለመግባባት ቀርቧል። አስተዳዳሪ ሁለቱ ወገኖች ቴሌግራም ላይ በ2 ሰዓት ውስጥ ያገናኛል።",
-    trade_expired: "ይህ ንግድ ጊዜው አልፏል።",
-    trade_complete_title: "ንግድ ተጠናቋል!",
-    rate_seller: "ሻጩን ደረጃ ስጥ",
-    time_remaining: "ለክፍያ የቀረ ጊዜ",
-    expired: "ጊዜ አልፏል",
-    notify_buyer: "ገዢን አሳውቅ — ክፍያ አልተጠናቀቀም",
-    cancel_trade: "ይህን ንግድ ሰርዝ",
-
-    // Chat
-    chat_title: "የንግድ ውይይት",
-    chat_monitored: "መልዕክቶች ይቆጣጠራሉ",
-    chat_placeholder: "መልዕክት ጻፍ...",
-    send: "ላክ",
-
-    // Fee info
-    fee_label: "የ RegimeEdge የልውውጥ ክፍያ",
-    fee_amount: "75 ETB",
-    fee_desc: "ለ RegimeEdge አስተዳዳሪ የሚከፈል",
-    admin_cbe: "የአስተዳዳሪ CBE ሒሳብ",
-    admin_telebirr: "የአስተዳዳሪ ቴሌብር",
-    you_pay_total: "ትከፍላለህ",
-    to_seller: "ለሻጩ",
-    platform_fee: "የመድረክ ክፍያ",
-
-    // Rules
-    rules_title: "የልውውጥ ደንቦች",
-    rule_time: "የክፍያ ጊዜ ገደብ: 1 ሰዓት",
-    rule_min_max: "የንግድ መጠን: $5 – $500 USDT",
-    rule_fee: "የመድረክ ክፍያ: 75 ETB (ገዢ ይከፍላል)",
-    rule_ban: "አጭበርባሪዎች: ቋሚ እገዳ + የህግ እርምጃ",
-    rule_kyc: "ሁለቱም ገዢ እና ሻጭ ማረጋገጥ አለባቸው",
-
-    // Trust
-    trust_title: "ለምን RegimeEdge ልውውጥን ታምናለህ?",
-    trust_1: "ሁሉም ነጋዴ በእውነተኛ ብሔራዊ ምስክር ወረቀት ተረጋግጧል",
-    trust_2: "የንግድ ውይይት ለደህንነት ይቆጣጠራል",
-    trust_3: "ዜሮ ታጋሽነት — አጭበርባሪዎች በህግ ሪፖርት ይደረጋሉ",
-    trust_4: "75 ETB ክፍያ ንግድ ሲጠናቀቅ ብቻ",
-    trust_5: "ከማንኛውም ንግድ በፊት የሻጭ መልካም ስም ይታያል",
-
-    // Trust+
-    trust_plus: "ትረስት+",
-    trust_plus_desc: "የተረጋገጠ ልዩ ነጋዴ — የቀድሞ የንግድ ታሪክ አስረድቷል",
-    trust_plus_cta: "በቴሌግራም Trust+ ለማግኘት",
-    trust_plus_how: "አስተዳዳሪን በቴሌግራም ያግኙ እና ከማንኛውም P2P መድረክ የንግድ ታሪክዎን ያሳዩ።",
-    trust_plus_qualify: "Trust+ ለማግኘት ብቁ ነህ!",
-    trust_plus_qualify_desc: "5 ንግዶችን ያለ አለመግባባት ጨርሰሃል። ልዩ Trust+ ደረጃ ለማግኘት አመልክት።",
-    trust_plus_apply: "Trust+ ለማግኘት አመልክት",
-    trust_plus_progress: "የ Trust+ እድገትህ",
-    trust_plus_need_trades: "ንግዶች ያስፈልጋሉ",
-    trust_plus_pending: "Trust+ ማመልከቻ በጥበቃ ላይ",
-    trust_plus_pending_desc: "አስተዳዳሪ በ48 ሰዓት ውስጥ ይገምግማል።",
-    trust_plus_approved: "Trust+ ንቁ ነው",
-    trust_plus_rejected: "ማመልከቻ አልተቀበለም",
-    trust_plus_revoked: "Trust+ ተሰርዟል",
-    agreement_title: "የንግድ ኃላፊነት ስምምነት",
-    agreement_checkbox: "ከላይ ያሉትን ውሎች አንብቤ እስማማለሁ",
-    agreement_sign: "ለዲጂታል ፊርማ ሙሉ የህግ ስምህን ጻፍ",
-    step_proof: "የእንቅስቃሴ ማስረጃ",
-    step_agreement: "የህግ ስምምነት",
-    step_review: "ይገምግሙ እና ያስገቡ",
-    upload_screenshot: "ቅጽበታዊ ገጽ እይታ አስገባ",
-    platform_name: "የመድረክ ስም (ለምሳሌ Binance P2P)",
-    claimed_trades: "የተጠናቀቁ ንግዶች ቁጥር",
-
-    // Profile
-    total_trades: "ጠቅላላ ንግዶች",
-    completion_rate: "የማጠናቀቅ መጣኔ",
-    avg_release: "አማካይ ጊዜ",
-    star_rating: "የኮከብ ደረጃ",
-    no_reviews: "ምንም ግምገማ የለም",
-    exchange_tab: "ልውውጥ",
-    trading_name: "የንግድ ስም",
-    trading_name_note: "ሌሎች ነጋዴዎች የሚያዩት ይህ ነው። የህግ ስምህ ምሥጢር ነው።",
-  },
 };
 
 // ── Exports ───────────────────────────────────────────────────────────────────
@@ -666,5 +528,6 @@ export {
   sendNotificationEmail,
   ICONS,
   Icon,
-  P2P_TEXT,
+  // P2P_TEXT kept defined above for reference but not exported —
+  // ExchangePage is now fully hardcoded English (no lang switcher).
 };

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   p2pSelect, p2pInsert, p2pUpsert, p2pUpdate, p2pUpload, sendNotificationEmail,
-  Icon, P2P_TEXT,
+  Icon,
 } from "./p2pHelpers.jsx";
 
 // ── Supabase config (mirrors App.jsx) ────────────────────────────────────────
