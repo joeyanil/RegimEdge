@@ -1051,6 +1051,16 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
         />
       )}
 
+      <ProofViewer />
+      <style>{`
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(34,197,94,0.3)}50%{box-shadow:0 0 40px rgba(34,197,94,0.6),0 0 60px rgba(34,197,94,0.2)}}
+        @keyframes pop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+        @keyframes confetti{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(-60px) rotate(360deg);opacity:0}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+      `}</style>
+
       <BackBtn onClick={onBack} />
 
       {/* ── HEADER CARD ── */}
@@ -1323,12 +1333,8 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           {/* Proof thumbnails */}
           {(trade.payment_proof_url || trade.payment_proof_url_2) && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
-              {[["Seller payment", trade.payment_proof_url], ["Platform fee", trade.payment_proof_url_2]].filter(([,u]) => u).map(([label, url]) => (
-                <a key={label} href={url} target="_blank" rel="noreferrer" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"14px 0", color:G.blue, fontSize:11, fontWeight:700, textDecoration:"none" }}>
-                  <Icon name="eye" size={18} color={G.blue} />
-                  View {label}
-                </a>
-              ))}
+              <ProofImg label="Seller payment" url={trade.payment_proof_url} />
+              <ProofImg label="Platform fee" url={trade.payment_proof_url_2} />
             </div>
           )}
           <div style={{ background:G.surface, borderRadius:G.rs, padding:"10px 12px", marginBottom:12 }}>
@@ -1447,31 +1453,39 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
       {/* ══════════════════════════════════════
           COMPLETED
       ══════════════════════════════════════ */}
+      {/* ══ COMPLETED — Animated celebration ══ */}
       {trade.status === "completed" && (
-        <div style={{ background:`linear-gradient(135deg,${G.green}0a,${G.card})`, border:`1px solid ${G.green}44`, borderRadius:G.r, padding:"20px 16px", marginBottom:12, textAlign:"center" }}>
-          <style>{`@keyframes pop{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}`}</style>
-          <div style={{ width:60, height:60, borderRadius:"50%", background:`${G.green}18`, border:`2px solid ${G.green}44`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", animation:"pop 0.5s ease" }}>
-            <span style={{ fontSize:28 }}>✅</span>
+        <div style={{ position:"relative", background:`linear-gradient(135deg,rgba(34,197,94,0.12),${G.card} 60%)`, border:`1px solid ${G.green}55`, borderRadius:G.r, padding:"28px 20px", marginBottom:12, textAlign:"center", animation:"glow 2s ease-in-out infinite", overflow:"hidden" }}>
+          {/* Floating confetti dots */}
+          {[...Array(8)].map((_, i) => (
+            <div key={i} style={{ position:"absolute", width:6, height:6, borderRadius:"50%", background:[G.gold,G.green,G.blue,G.purple][i%4], top:`${10+i*10}%`, left:`${5+i*12}%`, animation:`confetti ${1.5+i*0.2}s ${i*0.1}s ease-out forwards`, pointerEvents:"none" }} />
+          ))}
+          {/* Green glow ring */}
+          <div style={{ width:80, height:80, borderRadius:"50%", background:`radial-gradient(circle,${G.green}22,transparent)`, border:`3px solid ${G.green}66`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", animation:"pop 0.6s ease, glow 2s 0.6s ease-in-out infinite" }}>
+            <div style={{ width:56, height:56, borderRadius:"50%", background:`linear-gradient(135deg,${G.green},#16a34a)`, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 20px ${G.green}88` }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
           </div>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.green, fontWeight:900, marginBottom:6 }}>Trade Completed!</div>
-          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 16px" }}>
-            {isBuyer ? `${trade.amount_usdt} USDT sent to your ${trade.network} address.` : `You received ${sellerAmount} ETB.`}
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:26, color:G.green, fontWeight:900, marginBottom:6, textShadow:`0 0 20px ${G.green}66` }}>Trade Completed!</div>
+          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 20px", lineHeight:1.6 }}>
+            {isBuyer ? `${trade.amount_usdt} USDT received in your ${trade.network} wallet.` : `You received ${sellerAmount} ETB successfully.`}
           </p>
-          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", textAlign:"left", marginBottom:isBuyer && !rated ? 16 : 0 }}>
+          <div style={{ background:G.bgDeep, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", textAlign:"left", marginBottom:rated?0:16 }}>
             <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>Trade Record</div>
             {[
-              ["Reference", trade.trade_ref || "—"],
+              ["Reference", trade.trade_ref||"—"],
               ["Amount", `${trade.amount_usdt} USDT`],
               ["Rate", `${trade.rate_etb} ETB/USDT`],
               ["Seller received", `${sellerAmount} ETB`],
-              ["Network", trade.network || "—"],
+              ["Network", trade.network||"—"],
               ["Buyer", trade.buyer_display_name],
               ["Seller", trade.seller_display_name],
               ["Completed", trade.completed_at ? new Date(trade.completed_at).toLocaleString("en-GB") : "—"],
             ].map(([l, v]) => (
               <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${G.border}22`, fontSize:11 }}>
-                <span style={{ color:G.textSub }}>{l}</span>
-                <span style={{ color:G.text, fontWeight:600 }}>{v}</span>
+                <span style={{ color:G.textSub }}>{l}</span><span style={{ color:G.text, fontWeight:600 }}>{v}</span>
               </div>
             ))}
           </div>
@@ -1480,8 +1494,8 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               <div style={{ fontSize:13, color:G.textSub, marginBottom:10, fontWeight:700 }}>Rate your seller</div>
               <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:10 }}>
                 {[1,2,3,4,5].map(s => (
-                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.1s", transform:s <= stars ? "scale(1.2)" : "scale(1)" }}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill={s <= stars ? G.gold : "none"} stroke={s <= stars ? G.gold : G.textDim} strokeWidth="1.5">
+                  <button key={s} onClick={() => setStars(s)} style={{ background:"none", border:"none", cursor:"pointer", padding:4, transition:"transform 0.1s", transform:s<=stars?"scale(1.25)":"scale(1)" }}>
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill={s<=stars?G.gold:"none"} stroke={s<=stars?G.gold:G.textDim} strokeWidth="1.5">
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   </button>
@@ -1489,12 +1503,12 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               </div>
               {stars > 0 && <FI value={ratingComment} onChange={setRatingComment} placeholder="Leave a comment (optional)" style={{ marginBottom:10, fontSize:12 }} />}
               <div style={{ display:"flex", gap:8 }}>
-                <Btn onClick={submitRating} disabled={!stars || loading} small style={{ flex:1 }}>Submit Rating</Btn>
+                <Btn onClick={submitRating} disabled={!stars||loading} small style={{ flex:1 }}>Submit Rating</Btn>
                 <button onClick={() => setRated(true)} style={{ background:"none", border:"none", color:G.textSub, fontSize:12, cursor:"pointer", fontFamily:"inherit", padding:"0 14px" }}>Skip</button>
               </div>
             </div>
           )}
-          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"10px 0 0" }}>Thanks for rating! 🙏</p>}
+          {rated && <p style={{ color:G.textSub, fontSize:13, margin:"12px 0 0" }}>Thank you for rating! 🙏</p>}
         </div>
       )}
 
