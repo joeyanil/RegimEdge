@@ -1452,11 +1452,25 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               kyc_verified_at:new Date().toISOString(),
             });
             await sendNotificationEmail("kyc_approved",{
+              user_id:kycRow.user_id,
               email:kycRow.email,
               full_name:kycRow.full_name||"there",
             });
           }
         }catch(syncErr){console.warn("Profile sync failed:",syncErr.message);}
+      }
+
+      if(status==="rejected"){
+        try{
+          const kycRow=kycList.find(r=>r.id===id);
+          if(kycRow?.user_id){
+            await sendNotificationEmail("kyc_rejected",{
+              user_id:kycRow.user_id,
+              full_name:kycRow.full_name||"there",
+              rejection_reason:extra.rejection_reason||"Documents did not meet requirements",
+            });
+          }
+        }catch(e){console.warn("KYC rejected notify failed:",e.message);}
       }
 
       setKycList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
