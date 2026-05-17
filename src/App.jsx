@@ -1401,8 +1401,41 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const kycAction=async(id,status,extra={})=>{
     setKycBusy(b=>({...b,[id]:true}));
     try{
+
+      // ── REVOKE: handled separately — resets to "rejected" so user can reapply ──
+      if(status==="revoked"){
+        const kycRow=kycList.find(r=>r.id===id);
+        const rejMsg="Your KYC was revoked by admin. Please resubmit your documents to regain access.";
+        // 1. Reset kyc_submissions to "rejected" so KYC form reappears for user
+        await p2pUpdate("kyc_submissions",`id=eq.${id}`,{
+          status:"rejected",
+          reviewed_at:new Date().toISOString(),
+          reviewed_by:"Admin",
+          rejection_reason:rejMsg,
+        });
+        // 2. Clear kyc_verified on profiles so badge disappears immediately
+        if(kycRow?.user_id){
+          try{
+            await p2pUpdate("profiles",`id=eq.${kycRow.user_id}`,{
+              kyc_verified:false,
+              kyc_verified_at:null,
+              full_name:null,
+              phone:null,
+              telegram:null,
+              id_type:null,
+            });
+          }catch(e){console.warn("Profile clear failed:",e.message);}
+        }
+        setKycList(l=>l.map(r=>r.id===id?{...r,status:"rejected",rejection_reason:rejMsg}:r));
+        setExpanded(null);
+        alert("\u2713 KYC revoked. User must reapply.");
+        return;
+      }
+
+      // ── All other statuses: approved, rejected, banned ──
       await p2pUpdate("kyc_submissions",`id=eq.${id}`,{status,reviewed_at:new Date().toISOString(),reviewed_by:"Admin",...extra});
-      // ── Auto-sync KYC → profiles on approval or revoke ──
+
+      // Sync profiles table on approval
       if(status==="approved"){
         try{
           const kycRow=kycList.find(r=>r.id===id);
@@ -1421,21 +1454,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           }
         }catch(syncErr){console.warn("Profile sync failed:",syncErr.message);}
       }
-      // ── Revoke: reset to rejected so user can reapply, clear kyc_verified on profiles ──
-      if(status==="revoked"){
-        try{
-          const kycRow=kycList.find(r=>r.id===id);
-          if(kycRow?.user_id){
-            await p2pUpdate("profiles",`id=eq.${kycRow.user_id}`,{
-              kyc_verified:false,
-              kyc_verified_at:null,
-            });
-          }
-        }catch(syncErr){console.warn("Profile revoke sync failed:",syncErr.message);}
-        // Override status to "rejected" in DB so user sees the reapply form
-        status = "rejected";
-        await p2pUpdate("kyc_submissions",`id=eq.${id}`,{status:"rejected", reviewed_at:new Date().toISOString(), reviewed_by:"Admin", rejection_reason: extra.revoke_reason || "Your KYC was revoked by admin. Please reapply with correct documents."});
-      }
+
       setKycList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setExpanded(null);
     }catch(e){alert("Error: "+e.message);}
