@@ -863,6 +863,62 @@ function TradeChat({ trade, user }) {
   );
 }
 
+// Proof image — top-level so React never remounts it on parent re-renders
+function ProofImg({ label, url, onExpand }) {
+  const [signedUrl, setSignedUrl] = useState(null);
+  const [imgLoading, setImgLoading] = useState(true);
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    if (!url) { setImgLoading(false); setImgFailed(true); return; }
+    setImgLoading(true); setImgFailed(false);
+    getSignedUrl(url, "payment-proofs")
+      .then(signed => { if (signed) setSignedUrl(signed); else setImgFailed(true); })
+      .catch(() => setImgFailed(true))
+      .finally(() => setImgLoading(false));
+  }, [url]);
+
+  if (!url) return null;
+  return (
+    <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, overflow:"hidden" }}>
+      {imgLoading && (
+        <div style={{ height:140, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
+          <div style={{ width:22, height:22, border:`2px solid ${G.border}`, borderTop:`2px solid ${G.gold}`, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
+          <span style={{ fontSize:10, color:G.textSub }}>Loading image...</span>
+        </div>
+      )}
+      {!imgLoading && imgFailed && (
+        <div style={{ height:80, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6 }}>
+          <Icon name="image" size={22} color={G.textSub} />
+          <span style={{ fontSize:10, color:G.textSub }}>Image unavailable</span>
+        </div>
+      )}
+      {!imgLoading && !imgFailed && signedUrl && (
+        <img
+          src={signedUrl} alt={label}
+          style={{ width:"100%", maxHeight:140, objectFit:"cover", display:"block", cursor:"pointer" }}
+          onClick={() => onExpand?.(signedUrl)}
+          onError={() => setImgFailed(true)}
+        />
+      )}
+      <div style={{ padding:"6px 10px", fontSize:10, color:G.textSub, fontWeight:600, textAlign:"center", borderTop:`1px solid ${G.border}` }}>
+        {label} — tap to expand
+      </div>
+    </div>
+  );
+}
+
+// Fullscreen proof viewer — top-level for same reason
+function ProofViewer({ url, onClose }) {
+  if (!url) return null;
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <img src={url} alt="proof" style={{ maxWidth:"100%", maxHeight:"90vh", objectFit:"contain", borderRadius:G.r }} />
+      <button onClick={onClose} style={{ position:"absolute", top:20, right:20, background:G.surface, border:`1px solid ${G.border}`, borderRadius:"50%", width:36, height:36, cursor:"pointer", color:G.text, fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+    </div>
+  );
+}
+
 // Buyer's proof thumbnail — resolves signed URL then opens in a new tab
 function BuyerProofLink({ label, rawUrl }) {
   const [signedUrl, setSignedUrl] = useState(null);
@@ -1082,64 +1138,6 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
   // Proof image renderer — fetches a signed URL so private-bucket images load correctly
   const [expandedProof, setExpandedProof] = useState(null);
 
-  // Inner component that resolves the signed URL before rendering
-  const ProofImg = ({ label, url }) => {
-    const [signedUrl, setSignedUrl] = useState(null);
-    const [imgLoading, setImgLoading] = useState(true);
-    const [imgFailed, setImgFailed] = useState(false);
-
-    useEffect(() => {
-      if (!url) { setImgLoading(false); setImgFailed(true); return; }
-      setImgLoading(true); setImgFailed(false);
-      getSignedUrl(url, "payment-proofs")
-        .then(signed => {
-          if (signed) setSignedUrl(signed);
-          else setImgFailed(true);
-        })
-        .catch(() => setImgFailed(true))
-        .finally(() => setImgLoading(false));
-    }, [url]);
-
-    if (!url) return null;
-
-    return (
-      <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, overflow:"hidden" }}>
-        {imgLoading && (
-          <div style={{ height:140, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
-            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-            <div style={{ width:22, height:22, border:`2px solid ${G.border}`, borderTop:`2px solid ${G.gold}`, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
-            <span style={{ fontSize:10, color:G.textSub }}>Loading image...</span>
-          </div>
-        )}
-        {!imgLoading && imgFailed && (
-          <div style={{ height:80, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6 }}>
-            <Icon name="image" size={22} color={G.textSub} />
-            <span style={{ fontSize:10, color:G.textSub }}>Image unavailable</span>
-          </div>
-        )}
-        {!imgLoading && !imgFailed && signedUrl && (
-          <img
-            src={signedUrl} alt={label}
-            style={{ width:"100%", maxHeight:140, objectFit:"cover", display:"block", cursor:"pointer" }}
-            onClick={() => setExpandedProof(signedUrl)}
-            onError={() => setImgFailed(true)}
-          />
-        )}
-        <div style={{ padding:"6px 10px", fontSize:10, color:G.textSub, fontWeight:600, textAlign:"center", borderTop:`1px solid ${G.border}` }}>
-          {label} — tap to expand
-        </div>
-      </div>
-    );
-  };
-
-  // Fullscreen proof viewer
-  const ProofViewer = () => expandedProof ? (
-    <div onClick={() => setExpandedProof(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <img src={expandedProof} alt="proof" style={{ maxWidth:"100%", maxHeight:"90vh", objectFit:"contain", borderRadius:G.r }} />
-      <button onClick={() => setExpandedProof(null)} style={{ position:"absolute", top:20, right:20, background:G.surface, border:`1px solid ${G.border}`, borderRadius:"50%", width:36, height:36, cursor:"pointer", color:G.text, fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-    </div>
-  ) : null;
-
   return (
     <div style={{ padding:"16px 16px 36px", background:G.bg, minHeight:"100vh" }}>
       {showCancelModal && (
@@ -1149,7 +1147,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
         />
       )}
 
-      <ProofViewer />
+      <ProofViewer url={expandedProof} onClose={() => setExpandedProof(null)} />
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
         @keyframes spin{to{transform:rotate(360deg)}}
@@ -1428,8 +1426,8 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           {/* Proof thumbnails */}
           {(trade.payment_proof_url || trade.payment_proof_url_2) && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
-              <ProofImg label="Seller payment" url={trade.payment_proof_url} />
-              <ProofImg label="Platform fee" url={trade.payment_proof_url_2} />
+              <ProofImg label="Seller payment" url={trade.payment_proof_url} onExpand={setExpandedProof} />
+              <ProofImg label="Platform fee" url={trade.payment_proof_url_2} onExpand={setExpandedProof} />
             </div>
           )}
           <div style={{ background:G.surface, borderRadius:G.rs, padding:"10px 12px", marginBottom:12 }}>
