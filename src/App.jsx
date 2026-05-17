@@ -2169,12 +2169,13 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
     </div>
   );
 
-  const isKycVerified = profile?.kyc_verified===true;
+  const isKycVerified = profile?.kyc_verified===true || kycStatus?.status==="approved";
   const joinedDate = user.created_at
     ? new Date(user.created_at).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})
     : "Recently joined";
-  const displayName = isKycVerified&&profile?.full_name ? profile.full_name : ("@"+(username||user.name||"User"));
-  const avatarLetter = (isKycVerified&&profile?.full_name ? profile.full_name : (username||user.name||"U"))[0].toUpperCase();
+  const _verifiedName = (isKycVerified&&(profile?.full_name||kycStatus?.full_name)) ? (profile?.full_name||kycStatus?.full_name) : null;
+  const displayName = _verifiedName || ("@"+(username||user.name||"User"));
+  const avatarLetter = (_verifiedName || username||user.name||"U")[0].toUpperCase();
 
   const saveProfile=async()=>{
     if(!username.trim()||username.trim().length<3){setErr("Username must be at least 3 characters.");return;}
@@ -2294,13 +2295,13 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
                 <span style={{fontSize:10,color:G.green,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Verified Identity</span>
               </div>
               {[
-                ["Full Name",profile?.full_name],
-                ["Phone",profile?.phone],
-                ["Telegram",profile?.telegram],
-                ["ID Type",profile?.id_type],
-                ["Gender",profile?.gender],
-                ["Date of Birth",profile?.date_of_birth?new Date(profile.date_of_birth+"T00:00:00").toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}):null],
-                ["KYC Verified On",profile?.kyc_verified_at?new Date(profile.kyc_verified_at).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}):null],
+                ["Full Name",profile?.full_name||kycStatus?.full_name],
+                ["Phone",profile?.phone||kycStatus?.phone],
+                ["Telegram",profile?.telegram||kycStatus?.telegram],
+                ["ID Type",profile?.id_type||kycStatus?.id_type],
+                ["Gender",profile?.gender||kycStatus?.gender],
+                ["Date of Birth",(profile?.date_of_birth||kycStatus?.date_of_birth)?new Date((profile?.date_of_birth||kycStatus?.date_of_birth)+"T00:00:00").toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}):null],
+                ["KYC Verified On",(profile?.kyc_verified_at||kycStatus?.reviewed_at)?new Date(profile?.kyc_verified_at||kycStatus?.reviewed_at).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}):null],
               ].map(([l,v],i)=>(
                 <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${G.border}22`,animation:"rowSlide 0.4s ease both",animationDelay:`${0.18+i*0.06}s`}}>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -2640,11 +2641,10 @@ export default function App(){
   },[]);
 
   // Re-check EA approval when user or approved list changes
-  const eaApprovedUsers = st.eaApprovedUsers;
   useEffect(()=>{
-    if(user?.id) checkApproval(user.id, user.email, eaApprovedUsers||[]).then(setIsApproved);
+    if(user?.id) checkApproval(user.id, user.email, st.eaApprovedUsers||[]).then(setIsApproved);
     else setIsApproved(false);
-  },[user?.id, eaApprovedUsers]);
+  },[user?.id, JSON.stringify(st.eaApprovedUsers)]);
 
   const handleLogout=async()=>{
     await sbSignOut();
