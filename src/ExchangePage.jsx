@@ -3179,6 +3179,13 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Poll every 30s to pick up admin changes (revoke, ban, etc.) without page reload
+  useEffect(() => {
+    if (!user?.id) return;
+    const id = setInterval(() => loadData(user.id), 30000);
+    return () => clearInterval(id);
+  }, [user?.id, loadData]);
+
   const openTrade = trade => { setActiveTrade(trade); setScreen("tradeRoom"); };
   const goHub = () => { setScreen("hub"); setActiveTrade(null); };
 

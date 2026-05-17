@@ -1421,7 +1421,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           }
         }catch(syncErr){console.warn("Profile sync failed:",syncErr.message);}
       }
-      // ── Revoke: clear kyc_verified on profiles table ──
+      // ── Revoke: reset to rejected so user can reapply, clear kyc_verified on profiles ──
       if(status==="revoked"){
         try{
           const kycRow=kycList.find(r=>r.id===id);
@@ -1432,6 +1432,9 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             });
           }
         }catch(syncErr){console.warn("Profile revoke sync failed:",syncErr.message);}
+        // Override status to "rejected" in DB so user sees the reapply form
+        status = "rejected";
+        await p2pUpdate("kyc_submissions",`id=eq.${id}`,{status:"rejected", reviewed_at:new Date().toISOString(), reviewed_by:"Admin", rejection_reason: extra.revoke_reason || "Your KYC was revoked by admin. Please reapply with correct documents."});
       }
       setKycList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setExpanded(null);
@@ -1716,10 +1719,10 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                     {k.status==="approved"&&<>
                       <div style={{padding:"8px 12px",background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs,fontSize:12,color:G.green,textAlign:"center",fontWeight:700}}>✓ Currently Approved</div>
                       <button disabled={busy} onClick={()=>{
-                        if(!window.confirm(`Revoke KYC for ${k.full_name}? This removes their exchange access immediately.`)) return;
-                        kycAction(k.id,"revoked",{rejection_reason:"KYC revoked by admin"});
+                        if(!window.confirm(`Revoke KYC for ${k.full_name}? They will be able to reapply.`)) return;
+                        kycAction(k.id,"revoked",{revoke_reason:"KYC revoked by admin", rejection_reason:null});
                       }} style={{width:"100%",padding:10,background:"rgba(239,68,68,0.06)",border:`1px solid ${G.red}55`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>
-                        {busy?"Revoking...":"⊘ Revoke KYC — Remove Exchange Access"}
+                        {busy?"Revoking...":"⊘ Revoke KYC — User Must Reapply"}
                       </button>
                     </>}
                     {k.status!=="rejected"&&<div>
