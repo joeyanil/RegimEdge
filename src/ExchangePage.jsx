@@ -1098,7 +1098,7 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           if (ratings?.length > 0) {
             sellerRating = parseFloat((ratings.reduce((s, r) => s + r.stars, 0) / ratings.length).toFixed(1));
           }
-          await p2pUpdate("p2p_listings", `seller_id=eq.${sellerId}&status=in.(open,taken)`, {
+          await p2pUpdate("p2p_listings", `seller_id=eq.${sellerId}&status=in.(open,taken,completed)`, {
             seller_completed_trades: completedCount,
             seller_success_rate: successRate,
             seller_rating: sellerRating,
@@ -2133,30 +2133,72 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
   const [buyFlowListing, setBuyFlowListing] = useState(null);
   const [buying, setBuying] = useState(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    p2pSelect("p2p_trades", "?status=eq.waiting_payment&select=id,listing_id,expires_at,amount_usdt")
-      .then(async rows => {
-        const now = new Date();
-        for (const t of (rows || [])) {
-          if (t.expires_at && new Date(t.expires_at) < now) {
-            try {
-              await p2pUpdate("p2p_trades", `id=eq.${t.id}`, { status:"cancelled", cancellation_reason:"Expired", cancelled_by:"system" });
-              // Restore listing to open with the correct amount (original amount = remaining + buyer's locked amount)
-              if (t.listing_id) {
-                const listingRows = await p2pSelect("p2p_listings", `?id=eq.${t.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
-                const listing = listingRows?.[0] || {};
-                const restoredAmount = (listing.trade_remaining_usdt ?? 0) + (t.amount_usdt || 0) || listing.amount_usdt;
-                await p2pUpdate("p2p_listings", `id=eq.${t.listing_id}`, { status:"open", amount_usdt:restoredAmount, trade_remaining_usdt:null });
-              }
-            } catch {}
-          }
+    try {
+      // 1. Expire stale waiting_payment trades
+      const pendingRows = await p2pSelect("p2p_trades", "?status=eq.waiting_payment&select=id,listing_id,expires_at,amount_usdt").catch(() => []);
+      const now = new Date();
+      for (const t of (pendingRows || [])) {
+        if (t.expires_at && new Date(t.expires_at) < now) {
+          try {
+            await p2pUpdate("p2p_trades", `id=eq.${t.id}`, { status:"cancelled", cancellation_reason:"Expired", cancelled_by:"system" });
+            if (t.listing_id) {
+              const listingRows = await p2pSelect("p2p_listings", `?id=eq.${t.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
+              const listing = listingRows?.[0] || {};
+              const restoredAmount = (listing.trade_remaining_usdt ?? 0) + (t.amount_usdt || 0) || listing.amount_usdt;
+              await p2pUpdate("p2p_listings", `id=eq.${t.listing_id}`, { status:"open", amount_usdt:restoredAmount, trade_remaining_usdt:null });
+            }
+          } catch {}
         }
-      }).catch(() => {}).finally(() => {
-        p2pSelect("p2p_listings", "?status=eq.open&order=seller_trust_plus.desc,created_at.asc&select=*")
-          .then(setListings).catch(() => setListings([])).finally(() => setLoading(false));
-      });
-  }, []);
+      }
+
+      // 2. Fetch all open listings
+      let fetchedListings = await p2pSelect("p2p_listings", "?status=eq.open&order=seller_trust_plus.desc,created_at.asc&select=*").catch(() => []);
+
+      // 3. For the current user's own listings, always fetch & apply fresh stats so
+      //    the listing card never shows stale trade count / success rate / rating.
+      //    This covers the case where new trades complete (e.g. as buyer) without
+      //    triggering the seller listing stats update path.
+      const ownListings = (fetchedListings || []).filter(l => l.seller_id === user?.id);
+      if (ownListings.length > 0 && user?.id) {
+        try {
+          const [sellerTrades, ratings] = await Promise.all([
+            p2pSelect("p2p_trades", `?seller_id=eq.${user.id}&status=not.eq.waiting_payment&select=id,status`),
+            p2pSelect("trade_ratings", `?seller_id=eq.${user.id}&select=stars`),
+          ]);
+          const completedCount = (sellerTrades || []).filter(t => t.status === "completed").length;
+          const totalCount = (sellerTrades || []).length;
+          const successRate = totalCount > 0 ? Math.round(completedCount / totalCount * 100) : 0;
+          const avgRating = (ratings || []).length > 0
+            ? parseFloat(((ratings || []).reduce((s, r) => s + r.stars, 0) / ratings.length).toFixed(1))
+            : 0;
+
+          // Apply fresh stats to own listings in local state
+          fetchedListings = (fetchedListings || []).map(l =>
+            l.seller_id === user.id
+              ? { ...l, seller_completed_trades: completedCount, seller_success_rate: successRate, ...(avgRating > 0 ? { seller_rating: avgRating } : {}) }
+              : l
+          );
+
+          // Persist the refreshed stats back to the DB so other users also see fresh data
+          for (const l of ownListings) {
+            p2pUpdate("p2p_listings", `id=eq.${l.id}`, {
+              seller_completed_trades: completedCount,
+              seller_success_rate: successRate,
+              ...(avgRating > 0 ? { seller_rating: avgRating } : {}),
+            }).catch(() => {});
+          }
+        } catch { /* non-blocking: listing still shows even if stats refresh fails */ }
+      }
+
+      setListings(fetchedListings || []);
+    } catch {
+      setListings([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     load();
@@ -2831,16 +2873,21 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
   useEffect(() => {
     if (!user?.id) return;
     Promise.all([
+      // All trades (buyer + seller) — for "My Trades" total count
       p2pSelect("p2p_trades", `?or=(buyer_id.eq.${user.id},seller_id.eq.${user.id})&select=id,status`),
+      // Seller-only trades (non-pending) — for success rate matching listing stats
+      p2pSelect("p2p_trades", `?seller_id=eq.${user.id}&status=not.eq.waiting_payment&select=id,status`),
       p2pSelect("trade_ratings", `?seller_id=eq.${user.id}&select=stars`),
       p2pSelect("p2p_trades", "?status=eq.completed&select=id"),
-    ]).then(([trds, ratings, allCompleted]) => {
-      const completed = trds.filter(t => t.status === "completed").length;
-      const disputed = trds.filter(t => t.status === "disputed").length;
-      const successRate = completed + disputed > 0 ? Math.round(completed / (completed + disputed) * 100) : 0;
+    ]).then(([allTrds, sellerTrds, ratings, allCompleted]) => {
+      // Success rate: seller-completed / seller-total (matches listing cards & profile formula)
+      const sellerCompleted = (sellerTrds || []).filter(t => t.status === "completed").length;
+      const sellerTotal = (sellerTrds || []).length;
+      const successRate = sellerTotal > 0 ? Math.round(sellerCompleted / sellerTotal * 100) : 0;
       const avgRating = ratings.length > 0 ? +(ratings.reduce((s, r) => s + r.stars, 0) / ratings.length).toFixed(1) : 0;
-      setStats({ trades:trds.length, rating:avgRating, success:successRate });
-      setGlobalStats({ total:(allCompleted || []).length });
+      // "My Trades" shows all trades across both buyer and seller roles
+      setStats({ trades: (allTrds || []).length, rating: avgRating, success: successRate });
+      setGlobalStats({ total: (allCompleted || []).length });
     }).catch(() => {});
   }, [user?.id]);
 

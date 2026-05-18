@@ -2118,14 +2118,23 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
         if(trRes.ok){
           const trades=await trRes.json();
           const total=trades.length;
-          const completed=trades.filter(t=>t.status==="completed").length;
+          // Fetch seller-specific trades for success rate (matches listing card formula)
+          const token2=localStorage.getItem("re_access_token");
+          const sellerRes=await fetch(`${SUPABASE_URL}/rest/v1/p2p_trades?seller_id=eq.${user.id}&status=not.eq.waiting_payment&select=id,status`,{headers:{"apikey":SUPABASE_ANON_KEY,"Authorization":`Bearer ${token2||SUPABASE_ANON_KEY}`}});
+          let sellerCompleted=0, sellerTotal=0;
+          if(sellerRes.ok){
+            const sellerTrades=await sellerRes.json();
+            sellerCompleted=sellerTrades.filter(t=>t.status==="completed").length;
+            sellerTotal=sellerTrades.length;
+          }
           let rating=null;
           const rRes=await fetch(`${SUPABASE_URL}/rest/v1/trade_ratings?seller_id=eq.${user.id}&select=stars`,{headers});
           if(rRes.ok){
             const ratings=await rRes.json();
             if(ratings.length>0) rating=parseFloat((ratings.reduce((s,r)=>s+r.stars,0)/ratings.length).toFixed(1));
           }
-          setTradeStats({total,completed,rating});
+          // total = all trades (buyer+seller), completed/sellerTotal = seller success rate (matches listing)
+          setTradeStats({total, completed:sellerCompleted, sellerTotal, rating});
         }
       }catch(e){console.warn("Profile load:",e.message);}
       finally{setDataLoaded(true);}
@@ -2148,7 +2157,14 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
 
   // Animated stat counters
   const animTrades=useAnimatedCount(tradeStats.total);
-  const animSuccess=useAnimatedCount(tradeStats.total&&tradeStats.completed!==null?Math.round((tradeStats.completed/tradeStats.total)*100):null);
+  // Success rate uses seller-specific denominator (sellerTotal) to match listing card stats
+  const animSuccess=useAnimatedCount(
+    tradeStats.sellerTotal > 0
+      ? Math.round((tradeStats.completed / tradeStats.sellerTotal) * 100)
+      : tradeStats.total && tradeStats.completed !== null
+        ? Math.round((tradeStats.completed / tradeStats.total) * 100)
+        : null
+  );
   const animRating=useAnimatedCount(tradeStats.rating);
 
   if(!user) return(
