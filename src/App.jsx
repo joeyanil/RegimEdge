@@ -6,7 +6,7 @@ import {
   sendNotificationEmail,
   Icon, P2P_TEXT,
 } from "./p2pHelpers.jsx";
-import { G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div } from "./theme.js";
+import { G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div } from "./theme.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 
 // ── TOKENS: imported from ./theme.js (G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div) ──
