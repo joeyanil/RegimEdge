@@ -3,7 +3,7 @@ import {
   p2pSelect, p2pInsert, p2pUpsert, p2pUpdate, p2pUpload, sendNotificationEmail,
   Icon,
 } from "./p2pHelpers.jsx";
-import { G, Card, GlowCard, Btn, Badge, FI, SH, OutlineBtn, Spinner, ErrBox, OkBox, BackBtn, StatPill } from "./theme.js";
+import { G, Card, GlowCard, Btn, Badge, FI, SH, OutlineBtn, Spinner, ErrBox, OkBox, BackBtn, StatPill } from "./theme.jsx";
 
 // ── Supabase config (mirrors App.jsx) ────────────────────────────────────────
 const _SB_URL  = "https://gongzbdpfbxkaypfwkht.supabase.co";
