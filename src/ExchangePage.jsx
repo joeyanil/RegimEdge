@@ -199,9 +199,41 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [tgConnected, setTgConnected] = useState(false);
+  const [tgPolling, setTgPolling] = useState(false);
+  const [tgBotOpened, setTgBotOpened] = useState(false);
+  const tgPollRef = useRef(null);
   const idRef = useRef();
   const selfieRef = useRef();
   const setF = k => v => setForm(f => ({ ...f, [k]: v }));
+
+  // Poll profiles table every 3s to check if telegram_chat_id was saved by the bot
+  const startTgPolling = () => {
+    if (tgPollRef.current) return; // already polling
+    setTgPolling(true);
+    tgPollRef.current = setInterval(async () => {
+      try {
+        const token = localStorage.getItem("re_access_token") || _SB_ANON;
+        const res = await fetch(
+          `${_SB_URL}/rest/v1/profiles?id=eq.${user?.id}&select=telegram_chat_id`,
+          { headers: { "apikey": _SB_ANON, "Authorization": `Bearer ${token}` } }
+        );
+        const rows = await res.json();
+        if (rows?.[0]?.telegram_chat_id) {
+          setTgConnected(true);
+          setTgPolling(false);
+          clearInterval(tgPollRef.current);
+          tgPollRef.current = null;
+        }
+      } catch { /* silent */ }
+    }, 3000);
+  };
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (tgPollRef.current) clearInterval(tgPollRef.current);
+    };
+  }, []);
 
   // Already pending
   if (kyc?.status === "pending") return (
@@ -391,49 +423,86 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
       {/* ── REQUIRED: Connect Telegram ── */}
       <div style={{
         background:"#0d1208",
-        border:`1px solid ${G.gold}55`,
-        borderLeft:`4px solid ${G.gold}`,
+        border:`1.5px solid ${tgConnected ? G.green : G.gold}55`,
+        borderLeft:`4px solid ${tgConnected ? G.green : G.gold}`,
         borderRadius:G.r,
         padding:"18px 16px",
         marginBottom:14,
-        boxShadow:`0 0 24px rgba(212,175,55,0.07)`,
+        boxShadow:`0 0 24px ${tgConnected ? "rgba(34,197,94,0.08)" : "rgba(212,175,55,0.07)"}`,
+        transition:"all 0.4s ease",
       }}>
-        <div style={{ fontSize:9, color:G.gold, letterSpacing:3, textTransform:"uppercase", fontWeight:800, marginBottom:8 }}>
-          Required — Notifications
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+          <div style={{ fontSize:9, color:tgConnected ? G.green : G.gold, letterSpacing:3, textTransform:"uppercase", fontWeight:800 }}>
+            Required — Notifications
+          </div>
+          {/* Live status badge */}
+          {tgConnected ? (
+            <div style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 10px", background:"rgba(34,197,94,0.12)", border:`1px solid ${G.green}44`, borderRadius:20 }}>
+              <div style={{ width:6, height:6, borderRadius:"50%", background:G.green }} />
+              <span style={{ fontSize:10, color:G.green, fontWeight:800 }}>Connected</span>
+            </div>
+          ) : tgPolling ? (
+            <div style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 10px", background:"rgba(212,175,55,0.08)", border:`1px solid ${G.gold}33`, borderRadius:20 }}>
+              <style>{`@keyframes tgSpin{to{transform:rotate(360deg)}}`}</style>
+              <div style={{ width:10, height:10, border:`2px solid ${G.gold}33`, borderTop:`2px solid ${G.gold}`, borderRadius:"50%", animation:"tgSpin 0.8s linear infinite" }} />
+              <span style={{ fontSize:10, color:G.gold, fontWeight:700 }}>Verifying...</span>
+            </div>
+          ) : null}
         </div>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:G.text, fontWeight:900, marginBottom:8, lineHeight:1.3 }}>
-          Connect Telegram Before Submitting
+
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:tgConnected ? G.green : G.text, fontWeight:900, marginBottom:8, lineHeight:1.3 }}>
+          {tgConnected ? "✓ Telegram Connected!" : "Connect Telegram Before Submitting"}
         </div>
-        <p style={{ color:G.textSub, fontSize:12, margin:"0 0 14px", lineHeight:1.7 }}>
-          You must connect Telegram to receive your KYC result, trade alerts, and all account updates. Without this your account will have no notifications.
-        </p>
-        <a
-          href={`https://t.me/RegimeEdge1_bot?start=${user?.id}`}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            display:"block", width:"100%", boxSizing:"border-box",
-            padding:"13px 18px", background:G.gold, border:"none",
-            borderRadius:G.rs, color:"#000", fontSize:13,
-            fontWeight:800, cursor:"pointer", fontFamily:"inherit",
-            textAlign:"center", textDecoration:"none",
-            boxShadow:`0 4px 18px rgba(212,175,55,0.35)`,
-            marginBottom:14,
-          }}
-        >
-          ✈ Open Telegram &amp; Start Bot
-        </a>
-        <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer" }}>
-          <input
-            type="checkbox"
-            checked={tgConnected}
-            onChange={e => setTgConnected(e.target.checked)}
-            style={{ marginTop:2, accentColor:G.gold, width:16, height:16, flexShrink:0, cursor:"pointer" }}
-          />
-          <span style={{ fontSize:12, color:G.textSub, lineHeight:1.5 }}>
-            I have opened Telegram and started the bot
-          </span>
-        </label>
+
+        {!tgConnected && (
+          <p style={{ color:G.textSub, fontSize:12, margin:"0 0 14px", lineHeight:1.7 }}>
+            You must connect Telegram to receive your KYC result, trade alerts, and all account updates. Without this your account will have no notifications.
+          </p>
+        )}
+
+        {tgConnected ? (
+          <div style={{ padding:"10px 14px", background:"rgba(34,197,94,0.08)", border:`1px solid ${G.green}22`, borderRadius:G.rs, fontSize:12, color:G.textSub, lineHeight:1.6 }}>
+            Your Telegram account is linked. You will receive your KYC result and all trade alerts directly in Telegram.
+          </div>
+        ) : (
+          <>
+            <a
+              href={`https://t.me/RegimeEdge1_bot?start=${user?.id}`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => {
+                setTgBotOpened(true);
+                startTgPolling();
+              }}
+              style={{
+                display:"block", width:"100%", boxSizing:"border-box",
+                padding:"13px 18px",
+                background: tgBotOpened ? "rgba(212,175,55,0.15)" : G.gold,
+                border: tgBotOpened ? `1px solid ${G.gold}55` : "none",
+                borderRadius:G.rs,
+                color: tgBotOpened ? G.gold : "#000",
+                fontSize:13, fontWeight:800, cursor:"pointer",
+                fontFamily:"inherit", textAlign:"center", textDecoration:"none",
+                boxShadow: tgBotOpened ? "none" : `0 4px 18px rgba(212,175,55,0.35)`,
+                marginBottom: tgBotOpened ? 12 : 0,
+                transition:"all 0.3s",
+              }}
+            >
+              {tgBotOpened ? "✈ Opened — tap again if needed" : "✈ Open Telegram & Start Bot"}
+            </a>
+
+            {tgBotOpened && (
+              <div style={{ padding:"10px 12px", background:"rgba(212,175,55,0.06)", border:`1px solid ${G.gold}22`, borderRadius:G.rs, fontSize:11, color:G.textSub, lineHeight:1.7 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                  <style>{`@keyframes tgSpin{to{transform:rotate(360deg)}}`}</style>
+                  <div style={{ width:10, height:10, border:`2px solid ${G.gold}33`, borderTop:`2px solid ${G.gold}`, borderRadius:"50%", animation:"tgSpin 0.8s linear infinite", flexShrink:0 }} />
+                  <span style={{ color:G.gold, fontWeight:700, fontSize:11 }}>Waiting for confirmation...</span>
+                </div>
+                In Telegram, press <strong style={{ color:G.text }}>START</strong> or send <strong style={{ color:G.text }}>/start</strong> to the bot. This page will update automatically.
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <ErrBox msg={err} />
