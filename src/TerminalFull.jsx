@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { G, Card, GlowCard, SH } from "./theme.js";
+import { G, Card, GlowCard, SH } from "./theme.jsx";
 
 // ── Design tokens + Card, GlowCard, SH: imported from ./theme.js ──────────────
 
