@@ -13,6 +13,19 @@ import ErrorBoundary from "./ErrorBoundary.jsx";
 const ADMIN_PASS = "12345@Jon";
 const ADMIN_TG = "https://t.me/RegimeEdge_Admin";
 
+const _SB_URL  = "https://gongzbdpfbxkaypfwkht.supabase.co";
+const _SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdvbmd6YmRwZmJ4a2F5cGZ3a2h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQzOTEsImV4cCI6MjA5Mzc2MDM5MX0.OReRufSVbPVSKOzXCad-qfoitnbwYe8mCNW1fIdYVdo";
+const sendTgNotification = async (event, data) => {
+  try {
+    const token = localStorage.getItem("re_access_token") || _SB_ANON;
+    await fetch(`${_SB_URL}/functions/v1/send-tg-notification`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${token}`, "apikey":_SB_ANON },
+      body:JSON.stringify({ event, data }),
+    });
+  } catch { /* silent fail */ }
+};
+
 // ── Animated Trust+ Badge ─────────────────────────────────────────────────────
 function TrustBadge({size=18,style={}}){
   return(
@@ -1412,6 +1425,10 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               email:kycRow.email,
               full_name:kycRow.full_name||"there",
             });
+            sendTgNotification("kyc_approved",{
+              user_id:kycRow.user_id,
+              full_name:kycRow.full_name||"there",
+            });
           }
         }catch(syncErr){console.warn("Profile sync failed:",syncErr.message);}
       }
@@ -1421,6 +1438,11 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           const kycRow=kycList.find(r=>r.id===id);
           if(kycRow?.user_id){
             await sendNotificationEmail("kyc_rejected",{
+              user_id:kycRow.user_id,
+              full_name:kycRow.full_name||"there",
+              rejection_reason:extra.rejection_reason||"Documents did not meet requirements",
+            });
+            sendTgNotification("kyc_rejected",{
               user_id:kycRow.user_id,
               full_name:kycRow.full_name||"there",
               rejection_reason:extra.rejection_reason||"Documents did not meet requirements",

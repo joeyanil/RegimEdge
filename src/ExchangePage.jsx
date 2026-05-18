@@ -2275,38 +2275,115 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
         ) : listings.map(l => {
           const methods = l.payment_method ? l.payment_method.split(", ") : [];
           const isOwn = l.seller_id === user.id;
+          const hasTrades = l.seller_completed_trades > 0;
+          const hasRating = l.seller_rating > 0;
+          const hasSuccess = l.seller_success_rate > 0;
           return (
-            <div key={l.id} style={{ background:G.card, border:`1px solid ${l.seller_trust_plus ? G.gold+"66" : G.border}`, borderTop:l.seller_trust_plus ? `3px solid ${G.gold}` : `1px solid ${G.border}`, borderRadius:G.r, marginBottom:12, overflow:"hidden", boxShadow:l.seller_trust_plus ? `0 0 20px rgba(212,175,55,0.1)` : `0 2px 12px rgba(0,0,0,0.2)` }}>
+            <div key={l.id} style={{
+              background:G.card,
+              border:`1px solid ${l.seller_trust_plus ? G.gold+"55" : G.border}`,
+              borderRadius:G.r, marginBottom:12, overflow:"hidden",
+              boxShadow:l.seller_trust_plus ? `0 0 28px rgba(212,175,55,0.12)` : `0 2px 12px rgba(0,0,0,0.2)`,
+            }}>
+
+              {/* ── Trust+ banner ── */}
               {l.seller_trust_plus && (
-                <div style={{ padding:"5px 16px", background:G.goldBg, borderBottom:`1px solid ${G.gold}22`, display:"flex", alignItems:"center", gap:6 }}>
+                <div style={{ padding:"6px 16px", background:`linear-gradient(90deg, ${G.gold}18, ${G.gold}08)`, borderBottom:`1px solid ${G.gold}22`, display:"flex", alignItems:"center", gap:6 }}>
                   <TrustBadge size={11} />
-                  <span style={{ fontSize:10, color:G.gold, fontWeight:700, letterSpacing:1 }}>TRUST+ SELLER — MOST TRUSTED</span>
+                  <span style={{ fontSize:10, color:G.gold, fontWeight:800, letterSpacing:1.5 }}>TRUST+ SELLER — MOST TRUSTED</span>
                 </div>
               )}
-              <div style={{ padding:"14px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${G.border}` }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:40, height:40, borderRadius:"50%", background:l.seller_trust_plus ? `linear-gradient(135deg,${G.gold}66,${G.gold}33)` : `linear-gradient(135deg,${G.gold}44,${G.gold}22)`, border:`2px solid ${l.seller_trust_plus ? G.gold : G.gold+"44"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <span style={{ fontFamily:"'Playfair Display',serif", fontSize:17, color:G.gold, fontWeight:900 }}>{(l.seller_display_name || "S")[0].toUpperCase()}</span>
+
+              {/* ── Seller identity row ── */}
+              <div style={{ padding:"14px 16px 12px", borderBottom:`1px solid ${G.border}` }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10 }}>
+                  {/* Avatar */}
+                  <div style={{
+                    width:46, height:46, borderRadius:"50%", flexShrink:0,
+                    background:l.seller_trust_plus
+                      ? `linear-gradient(135deg, ${G.gold}88, ${G.gold}33)`
+                      : `linear-gradient(135deg, ${G.gold}44, ${G.gold}18)`,
+                    border:`2px solid ${l.seller_trust_plus ? G.gold : G.gold+"44"}`,
+                    boxShadow:l.seller_trust_plus ? `0 0 14px rgba(212,175,55,0.35)` : "none",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                  }}>
+                    <span style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.gold, fontWeight:900, lineHeight:1 }}>
+                      {(l.seller_display_name || "S")[0].toUpperCase()}
+                    </span>
                   </div>
-                  <div>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-                      <span style={{ fontSize:14, fontWeight:800, color:G.text }}>{l.seller_display_name}</span>
+
+                  {/* Name + badges */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:15, fontWeight:900, color:G.text, lineHeight:1 }}>{l.seller_display_name}</span>
                       {l.seller_trust_plus && <TrustBadge size={14} />}
                     </div>
-                    <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-                      <Badge color={G.green} style={{ fontSize:9, padding:"2px 7px" }}><Icon name="shieldCheck" size={9} color={G.green} />KYC Verified</Badge>
-                      {l.seller_completed_trades > 0 && <span style={{ fontSize:11, color:G.textSub }}>{l.seller_completed_trades} trades</span>}
-                      {l.seller_success_rate > 0 && <span style={{ fontSize:11, color:G.green }}>{l.seller_success_rate}%</span>}
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+                      <Badge color={G.green} style={{ fontSize:9, padding:"2px 8px" }}>
+                        <Icon name="shieldCheck" size={9} color={G.green} />KYC Verified
+                      </Badge>
                     </div>
                   </div>
+
+                  {/* Star rating — top right */}
+                  {hasRating && (
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill={G.gold} stroke={G.gold} strokeWidth="0.5">
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                        <span style={{ fontSize:16, color:G.gold, fontWeight:900, fontFamily:"'Playfair Display',serif" }}>{l.seller_rating}</span>
+                      </div>
+                      <span style={{ fontSize:9, color:G.textDim, marginTop:1 }}>rating</span>
+                    </div>
+                  )}
                 </div>
-                {l.seller_rating > 0 && (
-                  <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill={G.gold} stroke={G.gold} strokeWidth="0.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                    <span style={{ fontSize:13, color:G.gold, fontWeight:700 }}>{l.seller_rating}</span>
+
+                {/* ── Trust stat pills ── */}
+                {(hasTrades || hasSuccess) && (
+                  <div style={{ display:"flex", gap:8 }}>
+                    {hasTrades && (
+                      <div style={{
+                        flex:1, padding:"8px 10px", textAlign:"center",
+                        background:G.surface, border:`1px solid ${G.border}`,
+                        borderRadius:G.rs,
+                      }}>
+                        <div style={{ fontSize:16, fontWeight:900, color:G.text, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>
+                          {l.seller_completed_trades}
+                        </div>
+                        <div style={{ fontSize:9, color:G.textSub, marginTop:3, letterSpacing:0.5 }}>TRADES</div>
+                      </div>
+                    )}
+                    {hasSuccess && (
+                      <div style={{
+                        flex:1, padding:"8px 10px", textAlign:"center",
+                        background: l.seller_success_rate >= 90 ? G.greenBg : G.surface,
+                        border:`1px solid ${l.seller_success_rate >= 90 ? G.green+"44" : G.border}`,
+                        borderRadius:G.rs,
+                      }}>
+                        <div style={{ fontSize:16, fontWeight:900, color:l.seller_success_rate >= 90 ? G.green : G.text, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>
+                          {l.seller_success_rate}%
+                        </div>
+                        <div style={{ fontSize:9, color:G.textSub, marginTop:3, letterSpacing:0.5 }}>SUCCESS</div>
+                      </div>
+                    )}
+                    {hasRating && (
+                      <div style={{
+                        flex:1, padding:"8px 10px", textAlign:"center",
+                        background:G.goldBg, border:`1px solid ${G.gold}33`,
+                        borderRadius:G.rs,
+                      }}>
+                        <div style={{ fontSize:16, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>
+                          {l.seller_rating}★
+                        </div>
+                        <div style={{ fontSize:9, color:G.textSub, marginTop:3, letterSpacing:0.5 }}>RATING</div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+
+              {/* ── Price grid ── */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", borderBottom:`1px solid ${G.border}` }}>
                 {[
                   ["Available", `${l.amount_usdt} USDT`, G.gold],
@@ -2319,9 +2396,13 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
                   </div>
                 ))}
               </div>
+
+              {/* ── Payment methods + Buy Now ── */}
               <div style={{ padding:"11px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {methods.map(m => <span key={m} style={{ fontSize:11, color:G.textSub, background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"3px 8px" }}>{m}</span>)}
+                  {methods.map(m => (
+                    <span key={m} style={{ fontSize:11, color:G.textSub, background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"3px 8px" }}>{m}</span>
+                  ))}
                 </div>
                 {isOwn
                   ? <span style={{ fontSize:11, color:G.textSub, fontStyle:"italic" }}>Your listing</span>
@@ -2584,6 +2665,26 @@ function SellForm({ user, kyc, config, onBack, onDone }) {
         const proceed = window.confirm("You already have an active listing. Post another one?");
         if (!proceed) { setLoading(false); return; }
       }
+
+      // Fetch real seller stats to stamp onto the listing — so buyers see accurate trust data
+      // even on a brand new listing, not zeroes.
+      let sellerCompletedTrades = 0;
+      let sellerSuccessRate = 0;
+      let sellerRating = 0;
+      try {
+        const [allTrades, ratings] = await Promise.all([
+          p2pSelect("p2p_trades", `?seller_id=eq.${user.id}&status=not.eq.waiting_payment&select=id,status`),
+          p2pSelect("trade_ratings", `?seller_id=eq.${user.id}&select=stars`),
+        ]);
+        const completed = (allTrades || []).filter(t => t.status === "completed").length;
+        const total = (allTrades || []).length;
+        sellerCompletedTrades = completed;
+        sellerSuccessRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+        if (ratings?.length > 0) {
+          sellerRating = parseFloat((ratings.reduce((s, r) => s + r.stars, 0) / ratings.length).toFixed(1));
+        }
+      } catch { /* non-blocking — fall back to zeros if stats fetch fails */ }
+
       const primary = methodAccounts[selectedMethods[0]];
       const paymentDetails = selectedMethods.map(m => ({ method:m, ...methodAccounts[m] }));
       await p2pInsert("p2p_listings", {
@@ -2597,7 +2698,9 @@ function SellForm({ user, kyc, config, onBack, onDone }) {
         payment_details:JSON.stringify(paymentDetails),
         seller_account:primary?.account || "",
         seller_account_name:primary?.name || "",
-        seller_rating:0, seller_completed_trades:0, seller_success_rate:0,
+        seller_rating:sellerRating,
+        seller_completed_trades:sellerCompletedTrades,
+        seller_success_rate:sellerSuccessRate,
         seller_trust_plus:kyc?.trust_plus || false,
         status:"open",
       });
