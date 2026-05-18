@@ -1447,6 +1447,78 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
               <ProofImg label="Platform fee" url={trade.payment_proof_url_2} onExpand={setExpandedProof} />
             </div>
           )}
+
+          {/* Buyer's USDT address — shown here so seller knows where to send after verifying */}
+          {trade.buyer_usdt_address && (
+            <div style={{ marginBottom:14 }}>
+              <style>{`@keyframes addrGlow{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,0.0)}50%{box-shadow:0 0 20px rgba(212,175,55,0.18)}}`}</style>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                <div style={{ flex:1, height:1, background:`linear-gradient(90deg, ${G.gold}44, transparent)` }} />
+                <span style={{ fontSize:9, color:G.gold, letterSpacing:3, textTransform:"uppercase", fontWeight:800, whiteSpace:"nowrap" }}>Send USDT To Buyer</span>
+                <div style={{ flex:1, height:1, background:`linear-gradient(90deg, transparent, ${G.gold}44)` }} />
+              </div>
+              <div style={{
+                background:`linear-gradient(135deg, ${G.bgDeep} 0%, rgba(212,175,55,0.04) 100%)`,
+                border:`1.5px solid ${G.gold}55`, borderRadius:G.r, padding:"16px 14px",
+                animation:"addrGlow 3s ease-in-out infinite", position:"relative", overflow:"hidden",
+              }}>
+                <div style={{ position:"absolute", top:8, right:10, fontSize:40, color:G.gold, opacity:0.04, fontWeight:900, pointerEvents:"none", userSelect:"none", lineHeight:1 }}>USDT</div>
+                {/* Network badge */}
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
+                  <div style={{
+                    display:"flex", alignItems:"center", gap:6, padding:"6px 14px",
+                    background: trade.network === "BEP20" ? "rgba(243,186,47,0.12)" : "rgba(212,175,55,0.12)",
+                    border:`1.5px solid ${trade.network === "BEP20" ? "#f3ba2f88" : G.gold+"88"}`,
+                    borderRadius:20,
+                  }}>
+                    <div style={{ width:18, height:18, borderRadius:"50%", background: trade.network === "BEP20" ? "#f3ba2f" : "#E84142", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:900, color:"#000", flexShrink:0 }}>
+                      {trade.network === "BEP20" ? "B" : "T"}
+                    </div>
+                    <span style={{ fontSize:13, fontWeight:900, color: trade.network === "BEP20" ? "#f3ba2f" : G.gold, letterSpacing:0.5 }}>{trade.network || "TRC20"}</span>
+                    <span style={{ fontSize:10, color:G.textSub }}>{trade.network === "BEP20" ? "BNB Smart Chain" : "TRON Network"}</span>
+                  </div>
+                  <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:4 }}>
+                    <div style={{ width:6, height:6, borderRadius:"50%", background:G.green, animation:"pulse 1.5s ease-in-out infinite" }} />
+                    <span style={{ fontSize:10, color:G.green, fontWeight:700 }}>SEND HERE</span>
+                  </div>
+                </div>
+                {/* Address */}
+                <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"12px 14px", marginBottom:10 }}>
+                  <div style={{ fontSize:9, color:G.textDim, letterSpacing:2, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Buyer's Wallet Address</div>
+                  <div style={{ fontSize:13, color:G.text, fontWeight:700, wordBreak:"break-all", fontFamily:"monospace", lineHeight:1.8, letterSpacing:0.3 }}>
+                    {trade.buyer_usdt_address}
+                  </div>
+                </div>
+                {/* Copy button */}
+                <button
+                  onClick={() => copy("buyer_addr", trade.buyer_usdt_address)}
+                  style={{
+                    width:"100%", padding:"13px 0",
+                    background: copied.buyer_addr ? `linear-gradient(135deg, ${G.green}, #16a34a)` : `linear-gradient(135deg, ${G.gold}, #b8962e)`,
+                    border:"none", borderRadius:G.rs, color:"#000", fontSize:13, fontWeight:900,
+                    cursor:"pointer", fontFamily:"inherit", transition:"all 0.25s",
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                    boxShadow: copied.buyer_addr ? `0 4px 16px rgba(34,197,94,0.4)` : `0 4px 16px rgba(212,175,55,0.35)`,
+                    letterSpacing:0.5,
+                  }}
+                >
+                  {copied.buyer_addr ? (
+                    <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Address Copied!</>
+                  ) : (
+                    <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy Wallet Address</>
+                  )}
+                </button>
+                {/* Warning */}
+                <div style={{ marginTop:10, padding:"8px 12px", background:"rgba(239,68,68,0.07)", border:`1px solid ${G.red}33`, borderLeft:`3px solid ${G.red}`, borderRadius:G.rs, display:"flex", alignItems:"flex-start", gap:8 }}>
+                  <span style={{ fontSize:13, flexShrink:0 }}>⚠</span>
+                  <p style={{ color:G.red, fontSize:11, margin:0, fontWeight:700, lineHeight:1.6 }}>
+                    Send ONLY via <span style={{ background:G.red+"22", padding:"1px 6px", borderRadius:4 }}>{trade.network || "TRC20"}</span> — wrong network = buyer's funds permanently lost
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{ background:G.surface, borderRadius:G.rs, padding:"10px 12px", marginBottom:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
               <span style={{ fontSize:12, color:G.textSub }}>Check your {trade.payment_method}</span>
@@ -1488,7 +1560,14 @@ function TradeRoom({ initialTrade, user, config, onBack }) {
           <div style={{ fontSize:14, fontWeight:800, color:G.purple, marginBottom:8, display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ fontSize:20 }}>⏳</span> Waiting for Buyer to Confirm Receipt
           </div>
-          <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>You released the USDT. Waiting for buyer to confirm receipt in their wallet.</p>
+          <p style={{ color:G.textSub, fontSize:12, margin:"0 0 12px", lineHeight:1.6 }}>You released the USDT. Waiting for buyer to confirm receipt in their wallet.</p>
+          {/* Address reminder in case seller needs to verify what they sent to */}
+          {trade.buyer_usdt_address && (
+            <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"10px 12px" }}>
+              <div style={{ fontSize:9, color:G.textDim, letterSpacing:2, textTransform:"uppercase", marginBottom:4, fontWeight:700 }}>Sent to address · {trade.network || "TRC20"}</div>
+              <div style={{ fontSize:11, color:G.text, fontFamily:"monospace", wordBreak:"break-all", lineHeight:1.7 }}>{trade.buyer_usdt_address}</div>
+            </div>
+          )}
         </div>
       )}
 
