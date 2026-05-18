@@ -6,17 +6,10 @@ import {
   sendNotificationEmail,
   Icon, P2P_TEXT,
 } from "./p2pHelpers.jsx";
+import { G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div } from "./theme.js";
+import ErrorBoundary from "./ErrorBoundary.jsx";
 
-// ── TOKENS ────────────────────────────────────────────────────────────────────
-const G = {
-  bg:"#16181D", bgDeep:"#111315", surface:"#1B1E24", card:"#1F2229",
-  border:"#2A2D35", borderLight:"#343840",
-  gold:"#D4AF37", goldLight:"#E8C84A", goldBg:"rgba(212,175,55,0.07)", goldBg2:"rgba(212,175,55,0.13)",
-  text:"#EEF0F4", textSub:"#8A8F9E", textDim:"#3D4250",
-  green:"#22c55e", greenBg:"rgba(34,197,94,0.09)",
-  red:"#ef4444", redBg:"rgba(239,68,68,0.09)",
-  blue:"#60a5fa", r:14, rs:10,
-};
+// ── TOKENS: imported from ./theme.js (G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div) ──
 const ADMIN_PASS = "12345@Jon";
 const ADMIN_TG = "https://t.me/RegimeEdge_Admin";
 
@@ -133,47 +126,10 @@ function useLiveGoldPrice() {
 }
 
 
-const Card=({children,style={},gold,glow})=>(
-  <div style={{background:G.card,border:`1px solid ${gold?G.gold+"55":G.border}`,borderRadius:G.r,padding:22,
-    boxShadow:gold?`0 0 40px rgba(212,175,55,0.08),inset 0 1px 0 rgba(212,175,55,0.08)`:`0 2px 14px rgba(0,0,0,0.3)`,
-    transition:"all 0.2s",...style}}>{children}</div>
-);
+// Card, GlowCard, Btn, Badge, FI, FTA, SH, Div → imported from ./theme.js
 
-// Glowing colored card — like Events page style
-const GlowCard=({children,color,style={}})=>(
-  <div style={{background:`linear-gradient(135deg,${color}0a 0%,${G.card} 60%)`,border:`1px solid ${color}44`,borderRadius:G.r,padding:22,
-    boxShadow:`0 0 32px ${color}18, inset 0 1px 0 ${color}18`,...style}}>{children}</div>
-);
-
-const Btn=({children,onClick,variant="gold",style={},disabled})=>{
-  const v={gold:{background:G.gold,color:"#000",boxShadow:"0 4px 16px rgba(212,175,55,0.25)"},outline:{background:"none",border:`1px solid ${G.borderLight}`,color:G.textSub},danger:{background:G.redBg,border:`1px solid ${G.red}44`,color:G.red}};
-  return <button onClick={onClick} disabled={disabled} style={{border:"none",borderRadius:G.rs,padding:"13px 22px",fontSize:13,fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontFamily:"inherit",opacity:disabled?0.4:1,transition:"all 0.2s",...v[variant],...style}}>{children}</button>;
-};
-
-const Badge=({children,color=G.gold})=>(
-  <span style={{display:"inline-block",padding:"4px 12px",borderRadius:20,border:`1px solid ${color}44`,color,fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",background:`${color}10`}}>{children}</span>
-);
-
-const FI=({value,onChange,placeholder,type="text",style={}})=>(
-  <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit",...style}}/>
-);
-
-const FTA=({value,onChange,placeholder,rows=4})=>(
-  <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
-    style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",color:G.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
-);
-
-const SH=({label,title,sub})=>(
-  <div style={{marginBottom:28}}>
-    <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:8}}>{label}</div>
-    <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:26,color:G.text,margin:0,fontWeight:900,lineHeight:1.2}}>{title}</h2>
-    {sub&&<p style={{color:G.textSub,fontSize:13,margin:"8px 0 0",lineHeight:1.6}}>{sub}</p>}
-  </div>
-);
-
+// App-specific helpers (use imported Badge and G from theme.js)
 const BiasTag=({d})=><Badge color={d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold}>{d}</Badge>;
-const Div=()=><div style={{height:1,background:G.border,margin:"22px 0"}}/>;
 
 const CDRow=({target,color=G.gold})=>{
   const t=useCountdown(target);
@@ -2993,6 +2949,7 @@ export default function App(){
           {showAdmin?(
             <AdminPanel st={st} update={update} addItem={addItem} removeItem={removeItem} onClose={handleAdminClose}/>
           ):(
+            <ErrorBoundary>
             <div className="re-page" style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
               {contentLoading&&page==="home"?(
                 <div style={{padding:"44px 22px"}}>
@@ -3020,6 +2977,7 @@ export default function App(){
                 </div>
               </div>
             </div>
+            </ErrorBoundary>
           )}
         </div>
       </div>

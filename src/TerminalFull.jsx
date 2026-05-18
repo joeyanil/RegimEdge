@@ -1,33 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { G, Card, GlowCard, SH } from "./theme.js";
 
-const G = {
-  bg:"#16181D", bgDeep:"#111315", surface:"#1B1E24", card:"#1F2229",
-  border:"#2A2D35", borderLight:"#343840",
-  gold:"#D4AF37", goldLight:"#E8C84A", goldBg:"rgba(212,175,55,0.07)", goldBg2:"rgba(212,175,55,0.13)",
-  text:"#EEF0F4", textSub:"#8A8F9E", textDim:"#3D4250",
-  green:"#22c55e", greenBg:"rgba(34,197,94,0.09)",
-  red:"#ef4444", redBg:"rgba(239,68,68,0.09)",
-  blue:"#60a5fa", r:14, rs:10,
-};
-
-const Card=({children,style={},gold,glow})=>(
-  <div style={{background:G.card,border:`1px solid ${gold?G.gold+"55":G.border}`,borderRadius:G.r,padding:22,
-    boxShadow:gold?`0 0 40px rgba(212,175,55,0.08),inset 0 1px 0 rgba(212,175,55,0.08)`:`0 2px 14px rgba(0,0,0,0.3)`,
-    transition:"all 0.2s",...style}}>{children}</div>
-);
-
-const GlowCard=({children,color,style={}})=>(
-  <div style={{background:`linear-gradient(135deg,${color}0a 0%,${G.card} 60%)`,border:`1px solid ${color}44`,borderRadius:G.r,padding:22,
-    boxShadow:`0 0 32px ${color}18, inset 0 1px 0 ${color}18`,...style}}>{children}</div>
-);
-
-const SH=({label,title,sub})=>(
-  <div style={{marginBottom:28}}>
-    <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:8}}>{label}</div>
-    <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:26,color:G.text,margin:0,fontWeight:900,lineHeight:1.2}}>{title}</h2>
-    {sub&&<p style={{color:G.textSub,fontSize:13,margin:"8px 0 0",lineHeight:1.6}}>{sub}</p>}
-  </div>
-);
+// ── Design tokens + Card, GlowCard, SH: imported from ./theme.js ──────────────
 
 const SUPABASE_URL = "https://gongzbdpfbxkaypfwkht.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdvbmd6YmRwZmJ4a2F5cGZ3a2h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODQzOTEsImV4cCI6MjA5Mzc2MDM5MX0.OReRufSVbPVSKOzXCad-qfoitnbwYe8mCNW1fIdYVdo";

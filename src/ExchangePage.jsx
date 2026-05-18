@@ -3,6 +3,7 @@ import {
   p2pSelect, p2pInsert, p2pUpsert, p2pUpdate, p2pUpload, sendNotificationEmail,
   Icon,
 } from "./p2pHelpers.jsx";
+import { G, Card, GlowCard, Btn, Badge, FI, SH, OutlineBtn, Spinner, ErrBox, OkBox, BackBtn, StatPill } from "./theme.js";
 
 // ── Supabase config (mirrors App.jsx) ────────────────────────────────────────
 const _SB_URL  = "https://gongzbdpfbxkaypfwkht.supabase.co";
@@ -59,137 +60,11 @@ const getSignedUrl = async (rawUrl, bucket) => {
   } catch { return rawUrl; }
 };
 
-// ── Design tokens (mirror App.jsx exactly) ───────────────────────────────────
-const G = {
-  bg:"#16181D", bgDeep:"#111315", surface:"#1B1E24", card:"#1F2229",
-  border:"#2A2D35", borderLight:"#343840",
-  gold:"#D4AF37", goldLight:"#E8C84A", goldBg:"rgba(212,175,55,0.07)", goldBg2:"rgba(212,175,55,0.13)",
-  text:"#EEF0F4", textSub:"#8A8F9E", textDim:"#3D4250",
-  green:"#22c55e", greenBg:"rgba(34,197,94,0.09)",
-  red:"#ef4444", redBg:"rgba(239,68,68,0.09)",
-  blue:"#60a5fa", blueBg:"rgba(96,165,250,0.09)",
-  purple:"#a78bfa", purpleBg:"rgba(167,139,250,0.09)",
-  r:14, rs:10,
-};
+// ── Design tokens + shared UI primitives: imported from ./theme.js ────────────
+// G, Card, GlowCard, Btn, Badge, FI, SH, OutlineBtn, Spinner, ErrBox, OkBox, BackBtn, StatPill
 
-// ── Shared UI primitives ──────────────────────────────────────────────────────
-const Card = ({ children, style = {}, gold }) => (
-  <div style={{
-    background:G.card, border:`1px solid ${gold ? G.gold+"55" : G.border}`,
-    borderRadius:G.r, padding:20,
-    boxShadow:gold ? `0 0 30px rgba(212,175,55,0.07),inset 0 1px 0 rgba(212,175,55,0.07)` : `0 2px 12px rgba(0,0,0,0.25)`,
-    ...style,
-  }}>{children}</div>
-);
-
-const GlowCard = ({ children, color, style = {} }) => (
-  <div style={{
-    background:`linear-gradient(135deg,${color}0a 0%,${G.card} 60%)`,
-    border:`1px solid ${color}44`, borderRadius:G.r, padding:20,
-    boxShadow:`0 0 28px ${color}14,inset 0 1px 0 ${color}14`,
-    ...style,
-  }}>{children}</div>
-);
-
-const Badge = ({ children, color = G.gold, style = {} }) => (
-  <span style={{
-    display:"inline-flex", alignItems:"center", gap:4,
-    padding:"3px 9px", borderRadius:20,
-    border:`1px solid ${color}44`, color, fontSize:10, fontWeight:700,
-    letterSpacing:0.8, textTransform:"uppercase", background:`${color}10`,
-    ...style,
-  }}>{children}</span>
-);
-
-const FI = ({ value, onChange, placeholder, type = "text", style = {}, disabled, onKeyDown, min, max, step }) => (
-  <input
-    type={type} value={value}
-    onChange={e => onChange(e.target.value)}
-    placeholder={placeholder} disabled={disabled}
-    onKeyDown={onKeyDown} min={min} max={max} step={step}
-    style={{
-      width:"100%", background:G.surface, border:`1px solid ${G.border}`,
-      borderRadius:G.rs, padding:"12px 14px", color:G.text, fontSize:14,
-      outline:"none", boxSizing:"border-box", fontFamily:"inherit",
-      opacity:disabled ? 0.5 : 1, ...style,
-    }}
-  />
-);
-
-const SH = ({ label, title, sub }) => (
-  <div style={{ marginBottom:22 }}>
-    <div style={{ fontSize:9, color:G.gold, letterSpacing:3, textTransform:"uppercase", marginBottom:6 }}>{label}</div>
-    <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.text, margin:0, fontWeight:900, lineHeight:1.2 }}>{title}</h2>
-    {sub && <p style={{ color:G.textSub, fontSize:13, margin:"6px 0 0", lineHeight:1.6 }}>{sub}</p>}
-  </div>
-);
-
+// ExchangePage-only local alias (Divider used only in this file)
 const Divider = () => <div style={{ height:1, background:G.border, margin:"16px 0" }} />;
-
-const Btn = ({ children, onClick, color = G.gold, disabled, style = {}, small, full = true, variant }) => {
-  const bg = variant === "danger" ? G.red : variant === "outline" ? "transparent" : (disabled ? "#2A2D35" : color);
-  const textColor = variant === "outline" ? color : (disabled ? G.textSub : "#000");
-  const border = variant === "outline" ? `1px solid ${color}` : `1px solid ${disabled ? "#2A2D35" : (variant === "danger" ? G.red : color)}`;
-  return (
-    <button onClick={onClick} disabled={disabled} style={{
-      width:full ? "100%" : "auto",
-      padding:small ? "9px 16px" : "13px 18px",
-      background:bg, border, borderRadius:G.rs,
-      color:textColor, fontSize:small ? 12 : 13,
-      fontWeight:800, cursor:disabled ? "not-allowed" : "pointer",
-      fontFamily:"inherit", transition:"all 0.15s",
-      opacity:disabled ? 0.6 : 1, ...style,
-    }}>{children}</button>
-  );
-};
-
-const OutlineBtn = ({ children, onClick, color = G.textSub, style = {}, small }) => (
-  <button onClick={onClick} style={{
-    width:"100%", padding:small ? "9px 16px" : "11px 18px",
-    background:"transparent", border:`1px solid ${color}`,
-    borderRadius:G.rs, color, fontSize:small ? 12 : 13,
-    fontWeight:700, cursor:"pointer", fontFamily:"inherit", ...style,
-  }}>{children}</button>
-);
-
-const Spinner = ({ text = "Loading..." }) => (
-  <div style={{ textAlign:"center", padding:40 }}>
-    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    <div style={{
-      width:28, height:28, border:`2px solid ${G.border}`,
-      borderTop:`2px solid ${G.gold}`, borderRadius:"50%",
-      animation:"spin 0.8s linear infinite", margin:"0 auto 10px",
-    }} />
-    <div style={{ color:G.textSub, fontSize:13 }}>{text}</div>
-  </div>
-);
-
-const ErrBox = ({ msg }) => msg ? (
-  <div style={{ background:G.redBg, border:`1px solid ${G.red}33`, borderRadius:G.rs, padding:"10px 14px", marginBottom:12 }}>
-    <p style={{ color:G.red, fontSize:12, margin:0, lineHeight:1.5 }}>{msg}</p>
-  </div>
-) : null;
-
-const OkBox = ({ msg }) => msg ? (
-  <div style={{ background:G.greenBg, border:`1px solid ${G.green}33`, borderRadius:G.rs, padding:"10px 14px", marginBottom:12 }}>
-    <p style={{ color:G.green, fontSize:12, margin:0 }}>{msg}</p>
-  </div>
-) : null;
-
-const BackBtn = ({ onClick }) => (
-  <button onClick={onClick} style={{
-    background:"none", border:"none", color:G.textSub, cursor:"pointer",
-    fontSize:13, marginBottom:18, fontFamily:"inherit",
-    display:"flex", alignItems:"center", gap:6, padding:0,
-  }}>← Back</button>
-);
-
-const StatPill = ({ label, value, color = G.text }) => (
-  <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"10px 8px", textAlign:"center" }}>
-    <div style={{ fontSize:14, fontWeight:900, color, fontFamily:"'Playfair Display',serif" }}>{value}</div>
-    <div style={{ fontSize:9, color:G.textDim, marginTop:2 }}>{label}</div>
-  </div>
-);
 
 // Animated Trust+ Badge
 function TrustBadge({ size = 18, style = {} }) {
