@@ -51,6 +51,8 @@ const INIT = {
   archiveWeeks:[],
   p2pTransactions:[],
   eaApprovedUsers:[],
+  eas:[],
+  books:[],
   exchangeConfig:{
     min_rate_etb:160,
     max_rate_etb:195,
@@ -143,6 +145,125 @@ function useLiveGoldPrice() {
 
 // App-specific helpers (use imported Badge and G from theme.js)
 const BiasTag=({d})=><Badge color={d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold}>{d}</Badge>;
+
+// ── Rich Text Renderer ────────────────────────────────────────────────────────
+function inlineFmt(text){
+  const parts=text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return parts.map((p,i)=>{
+    if(p.startsWith("**")&&p.endsWith("**"))
+      return<strong key={i} style={{color:G.text,fontWeight:800}}>{p.slice(2,-2)}</strong>;
+    if(p.startsWith("*")&&p.endsWith("*"))
+      return<em key={i} style={{color:G.textSub,fontStyle:"italic"}}>{p.slice(1,-1)}</em>;
+    return p;
+  });
+}
+
+function renderBody(text,compact=false){
+  if(!text)return null;
+  const lines=text.split("\n");
+  const fs=compact?13:14;
+  const lh=compact?1.8:1.9;
+  const elements=[];
+  let listItems=[];
+  let listType=null;
+  let olCounter=0;
+
+  const flushList=()=>{
+    if(!listItems.length)return;
+    elements.push(
+      <div key={`lst-${elements.length}`} style={{marginBottom:12}}>
+        {listItems.map((item,idx)=>(
+          <div key={idx} style={{display:"flex",gap:10,marginBottom:6,alignItems:"flex-start"}}>
+            {listType==="ol"?(
+              <span style={{minWidth:20,height:20,borderRadius:"50%",background:`${G.gold}20`,border:`1px solid ${G.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:G.gold,flexShrink:0,marginTop:2}}>{item.num}</span>
+            ):(
+              <span style={{color:G.gold,fontSize:10,marginTop:4,flexShrink:0,lineHeight:1}}>◈</span>
+            )}
+            <span style={{color:G.text,fontSize:fs,lineHeight:lh}}>{inlineFmt(item.text)}</span>
+          </div>
+        ))}
+      </div>
+    );
+    listItems=[];listType=null;olCounter=0;
+  };
+
+  lines.forEach((raw,i)=>{
+    const trimmed=raw.trim();
+
+    // Blank line
+    if(!trimmed){flushList();elements.push(<div key={`sp-${i}`} style={{height:10}}/>);return;}
+
+    // Divider ---
+    if(/^---+$/.test(trimmed)){
+      flushList();
+      elements.push(
+        <div key={`div-${i}`} style={{display:"flex",alignItems:"center",gap:10,margin:"16px 0"}}>
+          <div style={{flex:1,height:1,background:`linear-gradient(90deg,transparent,${G.border})`}}/>
+          <span style={{color:G.gold,fontSize:12,opacity:0.5}}>◈</span>
+          <div style={{flex:1,height:1,background:`linear-gradient(90deg,${G.border},transparent)`}}/>
+        </div>
+      );
+      return;
+    }
+
+    // ## Section header
+    if(/^##\s/.test(trimmed)){
+      flushList();
+      elements.push(
+        <div key={`h-${i}`} style={{fontSize:10,fontWeight:800,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginTop:18,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:3,height:12,background:G.gold,borderRadius:2,flexShrink:0}}/>
+          {trimmed.replace(/^##\s/,"")}
+        </div>
+      );
+      return;
+    }
+
+    // > Callout box
+    if(/^>\s/.test(trimmed)){
+      flushList();
+      const content=trimmed.replace(/^>\s/,"");
+      // Detect emoji icon at start (⚡ 🔑 ⚠ etc.)
+      const iconMatch=content.match(/^([\u{1F300}-\u{1FFFF}⚡🔑⚠✅❌📌🎯💡🔥]+)\s/u);
+      const icon=iconMatch?iconMatch[1]:null;
+      const body=icon?content.slice(icon.length).trim():content;
+      elements.push(
+        <div key={`cq-${i}`} style={{background:`${G.gold}10`,border:`1px solid ${G.gold}33`,borderLeft:`3px solid ${G.gold}`,borderRadius:G.rs,padding:"12px 14px",margin:"10px 0",display:"flex",gap:10,alignItems:"flex-start"}}>
+          {icon&&<span style={{fontSize:16,flexShrink:0,lineHeight:1,marginTop:2}}>{icon}</span>}
+          <span style={{color:G.text,fontSize:fs,lineHeight:lh,fontWeight:600}}>{inlineFmt(body)}</span>
+        </div>
+      );
+      return;
+    }
+
+    // Bullet - or •
+    if(/^[-•]\s/.test(trimmed)){
+      if(listType==="ol")flushList();
+      listType="ul";
+      listItems.push({text:trimmed.replace(/^[-•]\s/,"")});
+      return;
+    }
+
+    // Numbered list 1. 2. etc
+    const olMatch=trimmed.match(/^(\d+)\.\s(.+)/);
+    if(olMatch){
+      if(listType==="ul")flushList();
+      listType="ol";olCounter++;
+      listItems.push({num:olCounter,text:olMatch[2]});
+      return;
+    }
+
+    // Plain paragraph
+    flushList();
+    elements.push(
+      <p key={`p-${i}`} style={{color:G.text,fontSize:fs,lineHeight:lh,margin:"0 0 10px"}}>
+        {inlineFmt(trimmed)}
+      </p>
+    );
+  });
+
+  flushList();
+  return elements;
+}
 
 const CDRow=({target,color=G.gold})=>{
   const t=useCountdown(target);
@@ -506,7 +627,7 @@ const HomePage = React.memo(function HomePage({st,setPage}){
           <div style={{fontSize:11,color:G.textSub,marginBottom:12,display:"flex",alignItems:"center",gap:5}}>
             <span style={{color:G.textDim,fontSize:10}}>·</span>{st.weeklyBias.updatedAt}
           </div>
-          <p style={{color:G.text,fontSize:13,lineHeight:1.85,margin:"0 0 14px"}}>{st.weeklyBias.body}</p>
+          <div style={{marginBottom:14}}>{renderBody(st.weeklyBias.body,true)}</div>
           {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:10,marginBottom:14}}/>}
           <button onClick={()=>setPage("weekly")} style={{width:"100%",padding:11,background:"none",border:`1px solid ${wColor}44`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Full Bias Analysis →</button>
         </GlowCard>
@@ -524,7 +645,7 @@ const HomePage = React.memo(function HomePage({st,setPage}){
           <div style={{fontSize:11,color:G.textSub,marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
             <span style={{color:G.textDim,fontSize:10}}>·</span>{st.dailyBias.updatedAt}
           </div>
-          <p style={{color:G.text,fontSize:13,lineHeight:1.8,margin:0}}>{st.dailyBias.body}</p>
+          <div>{renderBody(st.dailyBias.body,true)}</div>
         </GlowCard>
 
         {/* Active signals alert */}
@@ -576,6 +697,60 @@ const HomePage = React.memo(function HomePage({st,setPage}){
             ))}
           </div>
         </div>
+
+        {/* ── EA BOTS SECTION ── */}
+        {st.eas&&st.eas.length>0&&(
+          <div style={{marginBottom:28}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Trading EAs</div>
+              <button onClick={()=>setPage("eas")} style={{background:"none",border:"none",color:G.gold,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>View all →</button>
+            </div>
+            {st.eas.slice(0,2).map(ea=>(
+              <div key={ea.id} onClick={()=>setPage("eas")}
+                style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:11,overflow:"hidden",cursor:"pointer",transition:"all 0.2s"}}>
+                <div style={{height:2,background:`linear-gradient(90deg,${G.gold},${G.gold}44)`}}/>
+                <div style={{display:"flex",gap:0}}>
+                  {ea.image&&(
+                    <div style={{width:80,flexShrink:0,overflow:"hidden"}}>
+                      <img src={ea.image} alt={ea.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",minHeight:80}}/>
+                    </div>
+                  )}
+                  <div style={{flex:1,padding:"12px 14px"}}>
+                    <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:3}}>{ea.name}</div>
+                    {ea.tagline&&<div style={{fontSize:11,color:G.gold,marginBottom:5}}>{ea.tagline}</div>}
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {ea.winRate&&<span style={{fontSize:10,color:G.green,fontWeight:700}}>{ea.winRate} win rate</span>}
+                      {ea.pairs&&<span style={{fontSize:10,color:G.textSub}}>{ea.pairs}</span>}
+                      {ea.price&&<span style={{fontSize:10,color:G.gold,fontWeight:700,marginLeft:"auto"}}>{ea.price}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── BOOKS SECTION ── */}
+        {st.books&&st.books.length>0&&(
+          <div style={{marginBottom:28}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Free Books</div>
+              <button onClick={()=>setPage("books")} style={{background:"none",border:"none",color:G.blue,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Library →</button>
+            </div>
+            <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,overflow:"hidden"}}>
+              {st.books.slice(0,3).map((book,i)=>(
+                <div key={book.id} onClick={()=>setPage("books")} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<Math.min(st.books.length,3)-1?`1px solid ${G.border}`:"none",cursor:"pointer"}}>
+                  <span style={{fontSize:22,flexShrink:0}}>📖</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{book.title}</div>
+                    {book.author&&<div style={{fontSize:11,color:G.textSub}}>by {book.author}</div>}
+                  </div>
+                  <span style={{fontSize:10,color:G.blue,fontWeight:700,flexShrink:0}}>FREE ↓</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -595,7 +770,7 @@ const WeeklyPage = React.memo(function WeeklyPage({st}){
         </div>
         <div style={{fontSize:24,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif",marginBottom:14}}>{st.weeklyBias.dayLabel}</div>
         {st.weeklyBias.updatedNote?<div style={{fontSize:12,color:G.gold,marginBottom:14,padding:"10px 14px",background:G.goldBg,borderRadius:8,borderLeft:`3px solid ${G.gold}`}}>Wednesday Update: {st.weeklyBias.updatedNote}</div>:null}
-        <p style={{color:G.text,fontSize:14,lineHeight:1.9,margin:"0 0 16px"}}>{st.weeklyBias.body}</p>
+        <div style={{marginBottom:16}}>{renderBody(st.weeklyBias.body)}</div>
         {st.weeklyBias.image&&(
           <>
             <img src={st.weeklyBias.image} onClick={()=>setZoomedImg(true)} style={{width:"100%",borderRadius:12,marginBottom:16,cursor:"zoom-in",display:"block"}}/>
@@ -615,7 +790,7 @@ const WeeklyPage = React.memo(function WeeklyPage({st}){
           <div style={{fontSize:18,fontWeight:900,color:st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold,fontFamily:"'Playfair Display',serif"}}>{st.dailyBias.dayLabel}</div>
           <BiasTag d={st.dailyBias.direction}/>
         </div>
-        <p style={{color:G.text,fontSize:13,lineHeight:1.8,margin:"0 0 10px"}}>{st.dailyBias.body}</p>
+        <div style={{marginBottom:10}}>{renderBody(st.dailyBias.body,true)}</div>
         <div style={{fontSize:11,color:G.textSub}}>{st.dailyBias.updatedAt}</div>
       </GlowCard>
 
@@ -868,6 +1043,159 @@ const ArchivePage = React.memo(function ArchivePage({st}){
     </div>
   );
 });
+
+// ── EA BOTS PAGE ──────────────────────────────────────────────────────────────
+function EAsPage({st}){
+  const[selected,setSelected]=useState(null);
+  const eas=st.eas||[];
+  if(eas.length===0) return(
+    <div style={{padding:"48px 22px",textAlign:"center"}}>
+      <div style={{fontSize:40,marginBottom:16}}>🤖</div>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.text,marginBottom:8}}>EAs Coming Soon</div>
+      <p style={{color:G.textSub,fontSize:13,lineHeight:1.7}}>Automated trading bots built on the Single Edge Method. Check back soon.</p>
+    </div>
+  );
+  return(
+    <div style={{padding:"32px 22px"}}>
+      <SH label="Automation" title="Trading EAs" sub="Bots built on the Single Edge Method"/>
+      {eas.map(ea=>(
+        <div key={ea.id} onClick={()=>setSelected(selected===ea.id?null:ea.id)}
+          style={{background:G.card,border:`1px solid ${selected===ea.id?G.gold+"55":G.border}`,borderRadius:G.r,marginBottom:14,overflow:"hidden",cursor:"pointer",transition:"all 0.2s",boxShadow:selected===ea.id?`0 0 28px ${G.gold}15`:"0 2px 8px rgba(0,0,0,0.2)"}}>
+          {/* Top accent bar */}
+          <div style={{height:3,background:`linear-gradient(90deg,${G.gold},${G.gold}44)`}}/>
+          {/* Image */}
+          {ea.image&&(
+            <div style={{position:"relative",overflow:"hidden"}}>
+              <img src={ea.image} alt={ea.name} style={{width:"100%",maxHeight:200,objectFit:"cover",display:"block",filter:"brightness(0.92)"}}/>
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 40%,rgba(22,24,25,0.95))"}}/>
+              <div style={{position:"absolute",bottom:14,left:18,right:18}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:G.text,textShadow:"0 2px 8px rgba(0,0,0,0.8)"}}>{ea.name}</div>
+                {ea.tagline&&<div style={{fontSize:12,color:G.gold,marginTop:3,textShadow:"0 1px 4px rgba(0,0,0,0.9)"}}>{ea.tagline}</div>}
+              </div>
+            </div>
+          )}
+          <div style={{padding:"16px 18px"}}>
+            {!ea.image&&(
+              <>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:900,color:G.text,marginBottom:4}}>{ea.name}</div>
+                {ea.tagline&&<div style={{fontSize:12,color:G.gold,marginBottom:10}}>{ea.tagline}</div>}
+              </>
+            )}
+            {/* Stats row */}
+            {(ea.winRate||ea.pairs||ea.timeframe||ea.price)&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14,marginTop:ea.image?8:0}}>
+                {ea.winRate&&(
+                  <div style={{background:`${G.green}15`,border:`1px solid ${G.green}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}>
+                    <div style={{fontSize:15,fontWeight:900,color:G.green,fontFamily:"'Playfair Display',serif"}}>{ea.winRate}</div>
+                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>WIN RATE</div>
+                  </div>
+                )}
+                {ea.pairs&&(
+                  <div style={{background:`${G.gold}10`,border:`1px solid ${G.gold}22`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}>
+                    <div style={{fontSize:13,fontWeight:800,color:G.gold}}>{ea.pairs}</div>
+                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>PAIRS</div>
+                  </div>
+                )}
+                {ea.timeframe&&(
+                  <div style={{background:`${G.blue}10`,border:`1px solid ${G.blue}22`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}>
+                    <div style={{fontSize:13,fontWeight:800,color:G.blue}}>{ea.timeframe}</div>
+                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>TIMEFRAME</div>
+                  </div>
+                )}
+                {ea.price&&(
+                  <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 12px",textAlign:"center",marginLeft:"auto"}}>
+                    <div style={{fontSize:15,fontWeight:900,color:G.text,fontFamily:"'Playfair Display',serif"}}>{ea.price}</div>
+                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>PRICE</div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Short description always visible */}
+            {ea.shortDesc&&<p style={{color:G.textSub,fontSize:13,lineHeight:1.75,margin:"0 0 14px"}}>{ea.shortDesc}</p>}
+            {/* Expanded body */}
+            {selected===ea.id&&ea.body&&(
+              <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14,marginTop:4}}>
+                {renderBody(ea.body,true)}
+              </div>
+            )}
+            {/* Extra images */}
+            {selected===ea.id&&ea.images&&ea.images.length>0&&(
+              <div style={{display:"grid",gridTemplateColumns:ea.images.length===1?"1fr":"1fr 1fr",gap:8,marginTop:12}}>
+                {ea.images.map((img,i)=>(
+                  <img key={i} src={img} alt={`chart-${i}`} style={{width:"100%",borderRadius:8,display:"block",objectFit:"cover",maxHeight:160}}/>
+                ))}
+              </div>
+            )}
+            {/* CTA */}
+            <a href={`https://t.me/RegimeEdge_Admin?text=I'm interested in the ${encodeURIComponent(ea.name)} EA`}
+              target="_blank" rel="noreferrer"
+              onClick={e=>e.stopPropagation()}
+              style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:14,padding:"13px 0",background:G.gold,borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:13,textDecoration:"none",letterSpacing:0.3}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
+              Buy via Telegram →
+            </a>
+            {/* Expand toggle hint */}
+            <div style={{textAlign:"center",marginTop:10,fontSize:11,color:G.textDim}}>
+              {selected===ea.id?"▲ Show less":"▼ Full details"}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── BOOKS PAGE ────────────────────────────────────────────────────────────────
+function BooksPage({st}){
+  const books=st.books||[];
+  if(books.length===0) return(
+    <div style={{padding:"48px 22px",textAlign:"center"}}>
+      <div style={{fontSize:40,marginBottom:16}}>📚</div>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.text,marginBottom:8}}>Library Coming Soon</div>
+      <p style={{color:G.textSub,fontSize:13,lineHeight:1.7}}>Free trading books and guides, curated by RegimeEdge.</p>
+    </div>
+  );
+  return(
+    <div style={{padding:"32px 22px"}}>
+      <SH label="Free Resource" title="Trading Library" sub="Download and read — completely free"/>
+      <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:"12px 16px",marginBottom:22,display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:18}}>🎁</span>
+        <p style={{color:G.gold,fontSize:12,lineHeight:1.7,margin:0,fontWeight:600}}>All books are free. No sign-up required to download. Build your edge.</p>
+      </div>
+      {books.map(book=>(
+        <div key={book.id} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:14,overflow:"hidden"}}>
+          <div style={{height:3,background:`linear-gradient(90deg,${G.blue},${G.blue}44)`}}/>
+          <div style={{display:"flex",gap:0}}>
+            {/* Cover */}
+            {book.cover?(
+              <div style={{width:90,flexShrink:0,background:G.surface,overflow:"hidden"}}>
+                <img src={book.cover} alt={book.title} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",minHeight:120}}/>
+              </div>
+            ):(
+              <div style={{width:90,flexShrink:0,background:G.surface,display:"flex",alignItems:"center",justifyContent:"center",minHeight:120}}>
+                <span style={{fontSize:36}}>📖</span>
+              </div>
+            )}
+            {/* Info */}
+            <div style={{flex:1,padding:"14px 16px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+              <div>
+                <div style={{fontSize:8,color:G.blue,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginBottom:5}}>{book.category||"Trading"}</div>
+                <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.4,marginBottom:5}}>{book.title}</div>
+                {book.author&&<div style={{fontSize:11,color:G.textSub,marginBottom:6}}>by {book.author}</div>}
+                {book.desc&&<p style={{color:G.textDim,fontSize:11,lineHeight:1.65,margin:"0 0 10px"}}>{book.desc}</p>}
+              </div>
+              <a href={book.pdfUrl} target="_blank" rel="noreferrer"
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",background:`${G.blue}18`,border:`1px solid ${G.blue}44`,borderRadius:8,color:G.blue,fontSize:11,fontWeight:800,textDecoration:"none",alignSelf:"flex-start"}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Free Download
+              </a>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── STRATEGY ──────────────────────────────────────────────────────────────────
 function StrategyPage(){
@@ -1329,6 +1657,11 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[nn,setNn]=useState({headline:"",take:"",tag:"Gold"});
   const[no,setNo]=useState({text:"",type:"announcement"});
   const[aw,setAw]=useState({week:"",bias:"Bullish",result:"green",note:""});
+  const eaImgRef=useRef();
+  const eaImgRef2=useRef();
+  const bookCoverRef=useRef();
+  const[newEa,setNewEa]=useState({name:"",tagline:"",shortDesc:"",body:"",winRate:"",pairs:"",timeframe:"",price:"",image:null,images:[]});
+  const[newBook,setNewBook]=useState({title:"",author:"",desc:"",category:"",pdfUrl:"",cover:null});
   const[cfg,setCfg]=useState({platform_fee_etb:75,min_usdt:5,max_usdt:500,min_rate_etb:160,max_rate_etb:195,admin_cbe_account:"",admin_cbe_name:"",admin_telebirr:"",admin_telebirr_name:"",exchange_active:true});
   const[cfgLoading,setCfgLoading]=useState(false);
   const[cfgSaving,setCfgSaving]=useState(false);
@@ -1344,7 +1677,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
     }
   },[tab]);
   const imgRef=useRef();
-  const TABS=["bias","events","news","notices","archive","kyc","trust+","trades","disputes","config"];
+  const TABS=["bias","events","news","notices","archive","eas","books","kyc","trust+","trades","disputes","config"];
 
   // ── KYC Review state
   const[kycList,setKycList]=useState([]);
@@ -1683,6 +2016,96 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             <div key={w.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:12,color:G.text,flex:1,marginRight:9}}>{w.week} · {w.bias}</div>
               <Btn variant="danger" onClick={()=>removeItem("archiveWeeks",w.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
+            </div>
+          ))}
+        </>}
+
+        {tab==="eas"&&<>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Post EA Bot</div>
+          <FI value={newEa.name} onChange={v=>setNewEa(e=>({...e,name:v}))} placeholder="EA name e.g. GoldEdge v2" style={{marginBottom:9}}/>
+          <FI value={newEa.tagline} onChange={v=>setNewEa(e=>({...e,tagline:v}))} placeholder="Short tagline e.g. Precision scalper for XAU/USD" style={{marginBottom:9}}/>
+          <FTA value={newEa.shortDesc} onChange={v=>setNewEa(e=>({...e,shortDesc:v}))} placeholder="Short description (shown collapsed)..." rows={2}/>
+          <div style={{height:9}}/>
+          <FTA value={newEa.body} onChange={v=>setNewEa(e=>({...e,body:v}))} placeholder={"Full description (rich text supported):\n## How It Works\n- Uses Liquidity sweep detection\n- **Only trades during London/NY sessions**\n\n> ⚡ Key Zone: Only active on XAU/USD M15\n\n## Requirements\n1. MT4 or MT5\n2. Minimum $500 account\n\n---\n## Performance\n- 70%+ win rate last 6 months"} rows={7}/>
+          <div style={{height:9}}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
+            <FI value={newEa.winRate} onChange={v=>setNewEa(e=>({...e,winRate:v}))} placeholder="Win rate e.g. 71%"/>
+            <FI value={newEa.pairs} onChange={v=>setNewEa(e=>({...e,pairs:v}))} placeholder="Pairs e.g. XAU/USD"/>
+            <FI value={newEa.timeframe} onChange={v=>setNewEa(e=>({...e,timeframe:v}))} placeholder="Timeframe e.g. M15"/>
+            <FI value={newEa.price} onChange={v=>setNewEa(e=>({...e,price:v}))} placeholder="Price e.g. $99"/>
+          </div>
+          {/* Main image */}
+          <button onClick={()=>eaImgRef.current.click()} style={{width:"100%",padding:12,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:newEa.image?G.green:G.textSub,fontSize:13,cursor:"pointer",marginBottom:7,fontFamily:"inherit"}}>
+            {newEa.image?"✓ Main image uploaded — tap to change":"Upload main EA image (banner/chart)"}
+          </button>
+          <input ref={eaImgRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setNewEa(ea=>({...ea,image:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
+          {newEa.image&&<img src={newEa.image} style={{width:"100%",borderRadius:8,marginBottom:7,maxHeight:140,objectFit:"cover"}}/>}
+          {/* Extra images */}
+          <button onClick={()=>eaImgRef2.current.click()} style={{width:"100%",padding:10,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:newEa.images.length?G.green:G.textSub,fontSize:12,cursor:"pointer",marginBottom:7,fontFamily:"inherit"}}>
+            {newEa.images.length?`✓ ${newEa.images.length} extra chart(s) — tap to add more`:"Add extra charts / screenshots (optional)"}
+          </button>
+          <input ref={eaImgRef2} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setNewEa(ea=>({...ea,images:[...ea.images,ev.target.result]}));r.readAsDataURL(f);}} style={{display:"none"}}/>
+          {newEa.images.length>0&&(
+            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:9}}>
+              {newEa.images.map((img,i)=>(
+                <div key={i} style={{position:"relative"}}>
+                  <img src={img} style={{width:70,height:50,objectFit:"cover",borderRadius:6}}/>
+                  <button onClick={()=>setNewEa(ea=>({...ea,images:ea.images.filter((_,j)=>j!==i)}))} style={{position:"absolute",top:-5,right:-5,width:16,height:16,borderRadius:"50%",background:G.red,border:"none",color:"#fff",fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Btn onClick={()=>{
+            if(!newEa.name)return;
+            addItem("eas",{...newEa,id:Date.now()});
+            setNewEa({name:"",tagline:"",shortDesc:"",body:"",winRate:"",pairs:"",timeframe:"",price:"",image:null,images:[]});
+            alert("EA posted!");
+          }} style={{width:"100%",marginBottom:22}}>Post EA</Btn>
+          <Div/>
+          <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>Posted EAs ({(st.eas||[]).length})</div>
+          {(st.eas||[]).map(ea=>(
+            <div key={ea.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:12,color:G.text,fontWeight:700}}>{ea.name}</div>
+                <div style={{fontSize:10,color:G.textSub}}>{ea.price} · {ea.pairs}</div>
+              </div>
+              <Btn variant="danger" onClick={()=>removeItem("eas",ea.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
+            </div>
+          ))}
+        </>}
+
+        {tab==="books"&&<>
+          <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Post Book / PDF</div>
+          <FI value={newBook.title} onChange={v=>setNewBook(b=>({...b,title:v}))} placeholder="Book title" style={{marginBottom:9}}/>
+          <FI value={newBook.author} onChange={v=>setNewBook(b=>({...b,author:v}))} placeholder="Author name (optional)" style={{marginBottom:9}}/>
+          <FI value={newBook.category} onChange={v=>setNewBook(b=>({...b,category:v}))} placeholder="Category e.g. Price Action, Mindset, Macro" style={{marginBottom:9}}/>
+          <FTA value={newBook.desc} onChange={v=>setNewBook(b=>({...b,desc:v}))} placeholder="Short description..." rows={2}/>
+          <div style={{height:9}}/>
+          <FI value={newBook.pdfUrl} onChange={v=>setNewBook(b=>({...b,pdfUrl:v}))} placeholder="PDF download URL (Google Drive, Dropbox, direct link)" style={{marginBottom:9}}/>
+          <div style={{fontSize:11,color:G.textSub,marginBottom:12,padding:"9px 12px",background:G.surface,borderRadius:8,lineHeight:1.6}}>
+            💡 Upload PDF to Google Drive → Share → "Anyone with the link" → Copy link. Paste above.
+          </div>
+          {/* Cover image */}
+          <button onClick={()=>bookCoverRef.current.click()} style={{width:"100%",padding:11,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:newBook.cover?G.green:G.textSub,fontSize:12,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>
+            {newBook.cover?"✓ Cover uploaded — tap to change":"Upload book cover (optional)"}
+          </button>
+          <input ref={bookCoverRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setNewBook(b=>({...b,cover:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
+          {newBook.cover&&<img src={newBook.cover} style={{width:80,height:110,objectFit:"cover",borderRadius:8,marginBottom:9,display:"block"}}/>}
+          <Btn onClick={()=>{
+            if(!newBook.title||!newBook.pdfUrl)return alert("Title and PDF URL required.");
+            addItem("books",{...newBook,id:Date.now()});
+            setNewBook({title:"",author:"",desc:"",category:"",pdfUrl:"",cover:null});
+            alert("Book posted!");
+          }} style={{width:"100%",marginBottom:22}}>Post Book</Btn>
+          <Div/>
+          <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>Posted Books ({(st.books||[]).length})</div>
+          {(st.books||[]).map(book=>(
+            <div key={book.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:12,color:G.text,fontWeight:700}}>{book.title}</div>
+                <div style={{fontSize:10,color:G.textSub}}>{book.category||"Book"}{book.author?` · ${book.author}`:""}</div>
+              </div>
+              <Btn variant="danger" onClick={()=>removeItem("books",book.id)} style={{padding:"5px 9px",fontSize:11}}>✕</Btn>
             </div>
           ))}
         </>}
@@ -2529,6 +2952,8 @@ const MENU_GROUPS=[
     {id:"news",label:"News"},
     {id:"archive",label:"Archive"},
   ]},
+  {id:"eas",label:"Trading EAs",single:true,color:G.gold},
+  {id:"books",label:"Free Books",single:true,color:G.blue},
   {id:"events",label:"NFP & FOMC",single:true,color:G.gold},
   {id:"exchange",label:"P2P Exchange",single:true,color:G.blue},
   {id:"terminal",label:"EdgeTerminal",single:true,color:"#a78bfa"},
@@ -2565,7 +2990,7 @@ export default function App(){
   const removeItem=(key,id)=>update(key,st[key].filter(i=>i.id!==id));
 
   // ── URL HASH ROUTING ──────────────────────────────────────────────────────────
-  const VALID_PAGES=["home","weekly","macro","events","news","exchange","archive","terminal","strategy","profile"];
+  const VALID_PAGES=["home","weekly","macro","events","news","exchange","archive","terminal","strategy","profile","eas","books"];
   const getPageFromHash=()=>{
     const hash=window.location.hash.replace("#","").replace("/","");
     return VALID_PAGES.includes(hash)?hash:"home";
@@ -2749,6 +3174,8 @@ export default function App(){
   const pages={
     home:<HomePage st={st} setPage={nav}/>,
     weekly:<WeeklyPage st={st}/>,
+    eas:<EAsPage st={st}/>,
+    books:<BooksPage st={st}/>,
     macro:<MacroPage st={st}/>,
     events:<EventsPage st={st}/>,
     news:<NewsPage st={st}/>,
