@@ -6,7 +6,7 @@ import {
   sendNotificationEmail,
   Icon, P2P_TEXT,
 } from "./p2pHelpers.jsx";
-import { G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div } from "./theme.jsx";
+import { G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div, GlobalStyles, Skeleton } from "./theme.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 
 // ── TOKENS: imported from ./theme.js (G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div) ──
@@ -519,161 +519,188 @@ const HomePage = React.memo(function HomePage({st,setPage}){
 
   return(
     <div>
+      <GlobalStyles/>
       <style>{`
-        @keyframes heroShimmer{0%,100%{opacity:0.5;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
-        @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
+        @keyframes goldPulse{0%,100%{opacity:0.6}50%{opacity:1}}
+        @keyframes priceIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
       {/* HERO */}
-      <div style={{padding:"44px 22px 36px",position:"relative",overflow:"hidden"}}>
-        {/* Animated shimmer background */}
-        <div style={{position:"absolute",top:"-30%",left:"-20%",width:"80%",height:"160%",
-          background:"radial-gradient(ellipse at center,rgba(212,175,55,0.07) 0%,transparent 65%)",
-          pointerEvents:"none",animation:"heroShimmer 4s ease-in-out infinite",borderRadius:"50%"}}/>
-        <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,background:"radial-gradient(ellipse at 25% 50%,rgba(212,175,55,0.04) 0%,transparent 65%)",pointerEvents:"none"}}/>
+      <div style={{padding:"40px 22px 32px",position:"relative",overflow:"hidden"}}>
+        {/* Multi-layer glow background */}
+        <div style={{position:"absolute",top:"-40%",left:"-30%",width:"90%",height:"180%",
+          background:"radial-gradient(ellipse,rgba(212,175,55,0.09) 0%,transparent 60%)",
+          pointerEvents:"none",animation:"heroShimmer 5s ease-in-out infinite",borderRadius:"50%"}}/>
+        <div style={{position:"absolute",top:"20%",right:"-20%",width:"60%",height:"100%",
+          background:"radial-gradient(ellipse,rgba(34,197,94,0.04) 0%,transparent 65%)",
+          pointerEvents:"none"}}/>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(180deg,transparent 60%,rgba(14,15,18,0.8))",pointerEvents:"none"}}/>
 
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,position:"relative"}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10}}>Macro Intelligence</div>
-            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(28px,8vw,38px)",color:G.text,margin:"0 0 10px",fontWeight:900,lineHeight:1.1}}>Regime<span style={{color:G.gold}}>Edge</span></h1>
-            <p style={{color:G.textSub,fontSize:12,margin:"0 0 12px",lineHeight:1.7}}>Not signals. Reasoning. Direction. Discipline.</p>
+            <div style={{fontSize:10,color:G.gold,letterSpacing:4,textTransform:"uppercase",marginBottom:12,fontWeight:700,animation:"fadeUp 0.5s ease both"}}>
+              Macro Intelligence
+            </div>
+            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,9vw,42px)",color:G.text,margin:"0 0 10px",fontWeight:900,lineHeight:1.05,animation:"fadeUp 0.5s 0.05s ease both"}}>
+              Regime<span style={{color:G.gold,textShadow:"0 0 40px rgba(212,175,55,0.4)"}}> Edge</span>
+            </h1>
+            <p style={{color:G.textSub,fontSize:12,margin:"0 0 16px",lineHeight:1.75,animation:"fadeUp 0.5s 0.1s ease both"}}>
+              Not signals. Reasoning. Direction. Discipline.
+            </p>
 
-            {/* Live gold price ticker */}
-            <div style={{display:"inline-flex",alignItems:"center",gap:8,background:G.surface,border:`1px solid ${G.gold}33`,borderRadius:20,padding:"5px 12px",marginBottom:14}}>
-              <span style={{fontFamily:"monospace",fontSize:11,color:G.textSub,fontWeight:600}}>XAU/USD</span>
+            {/* Live gold price — upgraded */}
+            <div style={{display:"inline-flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.gold}22`,borderRadius:24,padding:"7px 14px 7px 10px",marginBottom:16,animation:"fadeUp 0.5s 0.15s ease both",boxShadow:`0 0 20px rgba(212,175,55,0.08)`}}>
+              <div style={{width:6,height:6,borderRadius:"50%",background:liveGold.error?G.red:G.green,flexShrink:0,animation:!liveGold.loading&&!liveGold.error?"pulseDot 2s ease-in-out infinite":"none"}}/>
+              <span style={{fontFamily:"monospace",fontSize:10,color:G.textSub,fontWeight:600,letterSpacing:1}}>XAU/USD</span>
               {liveGold.loading?(
-                <span style={{fontFamily:"monospace",fontSize:11,color:G.textDim}}>Loading…</span>
+                <span style={{fontFamily:"monospace",fontSize:11,color:G.textDim}}>—</span>
               ):liveGold.error?(
                 <span style={{fontFamily:"monospace",fontSize:11,color:G.textDim}}>Unavailable</span>
               ):(
                 <>
-                  <span style={{fontFamily:"monospace",fontSize:12,color:G.gold,fontWeight:700}}>
+                  <span style={{fontFamily:"'Playfair Display',serif",fontSize:15,color:G.gold,fontWeight:900,animation:"priceIn 0.3s ease"}}>
                     {liveGold.price?.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
                   </span>
-                  <span style={{fontFamily:"monospace",fontSize:11,color:liveGold.dir==="down"?G.red:G.green,fontWeight:700}}>
-                    {liveGold.dir==="down"?"▼":"▲"}{" "}
-                    {liveGold.pct!==null?`${liveGold.pct>0?"+":""}${liveGold.pct.toFixed(2)}%`:""}
+                  <span style={{fontSize:11,color:liveGold.dir==="down"?G.red:G.green,fontWeight:700}}>
+                    {liveGold.dir==="down"?"▼":"▲"}{liveGold.pct!==null?` ${liveGold.pct>0?"+":""}${liveGold.pct.toFixed(2)}%`:""}
                   </span>
-                  <span style={{fontSize:9,color:G.textDim}}>LIVE</span>
                 </>
               )}
             </div>
 
-            <div style={{display:"flex",flexDirection:"column",gap:7}}>
-              {[["WEEK",st.weeklyBias.direction,st.weeklyBias.dayLabel,"weekly"],[" DAY",st.dailyBias.direction,st.dailyBias.dayLabel,"weekly"]].map(([l,d,v,pg])=>(
-                <button key={l} onClick={()=>setPage(pg)} style={{display:"flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:"9px 13px",cursor:"pointer",textAlign:"left",width:"100%",transition:"border-color 0.2s"}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=d==="Bullish"?G.green:G.red}
-                  onMouseLeave={e=>e.currentTarget.style.borderColor=G.border}>
-                  <div style={{fontSize:9,color:G.textSub,letterSpacing:1,flexShrink:0}}>{l}</div>
-                  <div style={{fontSize:12,fontWeight:800,color:d==="Bullish"?G.green:G.red,marginLeft:"auto"}}>{v}</div>
-                </button>
-              ))}
+            {/* Bias pills */}
+            <div style={{display:"flex",flexDirection:"column",gap:8,animation:"fadeUp 0.5s 0.2s ease both"}}>
+              {[["WEEK",st.weeklyBias.direction,st.weeklyBias.dayLabel,"weekly"],[" DAY",st.dailyBias.direction,st.dailyBias.dayLabel,"weekly"]].map(([l,d,v,pg])=>{
+                const c=d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold;
+                return(
+                  <button key={l} onClick={()=>setPage(pg)} style={{display:"flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderLeft:`3px solid ${c}`,borderRadius:10,padding:"9px 13px",cursor:"pointer",textAlign:"left",width:"100%",transition:"all 0.2s",boxShadow:"none"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=c;e.currentTarget.style.background=`${c}0a`;e.currentTarget.style.boxShadow=`0 4px 16px ${c}18`;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.surface;e.currentTarget.style.boxShadow="none";}}>
+                    <div style={{fontSize:8,color:G.textDim,letterSpacing:1.5,flexShrink:0,textTransform:"uppercase",fontWeight:700}}>{l}</div>
+                    <div style={{flex:1,fontSize:12,fontWeight:800,color:c,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</div>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.6"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <div style={{flexShrink:0}}><CandleAnim/></div>
+          <div style={{flexShrink:0,animation:"fadeUp 0.5s 0.25s ease both"}}><CandleAnim/></div>
         </div>
       </div>
 
-      {/* Section divider with logo */}
+      {/* Gold divider */}
       <div style={{display:"flex",alignItems:"center",margin:"0 22px",gap:12}}>
         <div style={{flex:1,height:1,background:`linear-gradient(90deg,transparent,${G.border})`}}/>
-        <span style={{color:G.gold,fontSize:16,opacity:0.5}}>◈</span>
+        <span style={{color:G.gold,fontSize:14,opacity:0.35,animation:"goldPulse 3s ease-in-out infinite"}}>◈</span>
         <div style={{flex:1,height:1,background:`linear-gradient(90deg,${G.border},transparent)`}}/>
       </div>
 
-      <div style={{padding:"28px 22px 0"}}>
+      <div style={{padding:"24px 22px 0"}}>
         {/* Notices Feed */}
         {st.notices.length>0&&(
-          <div style={{marginBottom:26}}>
-            <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Updates</div>
-            {visibleNotices.map(n=>(
-              <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"11px 14px",marginBottom:7,display:"flex",gap:0,alignItems:"stretch",overflow:"hidden",position:"relative"}}>
-                {/* Colored left border */}
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Updates</div>
+            {visibleNotices.map((n,ni)=>(
+              <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"11px 14px",marginBottom:7,display:"flex",gap:0,alignItems:"stretch",overflow:"hidden",position:"relative",animation:`fadeUp 0.3s ${ni*0.05}s ease both`}}>
                 <div style={{width:3,background:noticeTypeColor(n.type),borderRadius:2,flexShrink:0,marginRight:12,alignSelf:"stretch",minHeight:20}}/>
                 <div style={{flex:1}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
                     <span style={{fontSize:9,fontWeight:700,color:noticeTypeColor(n.type),letterSpacing:1,textTransform:"uppercase"}}>{n.type}</span>
-                    {/* NEW badge for fresh notices */}
                     {(n.time?.includes("min ago")||n.time==="Just now"||(n.time?.includes("h ago")&&parseInt(n.time)<=2))&&(
-                      <span style={{fontSize:8,fontWeight:800,color:"#000",background:G.gold,borderRadius:4,padding:"1px 5px",letterSpacing:0.5}}>NEW</span>
+                      <span style={{fontSize:8,fontWeight:800,color:"#000",background:G.gold,borderRadius:4,padding:"1px 6px",letterSpacing:0.5}}>NEW</span>
                     )}
                   </div>
                   <div style={{fontSize:13,color:G.text,lineHeight:1.6,marginBottom:2}}>{n.text}</div>
                   <div style={{fontSize:10,color:G.textDim}}>{n.time}</div>
                 </div>
-                {/* Pulse dot */}
-                <div style={{width:7,height:7,borderRadius:"50%",background:noticeTypeColor(n.type),flexShrink:0,alignSelf:"flex-start",marginTop:4,animation:"pulseDot 2s ease-in-out infinite"}}/>
+                <div style={{width:6,height:6,borderRadius:"50%",background:noticeTypeColor(n.type),flexShrink:0,alignSelf:"flex-start",marginTop:5,animation:"pulseDot 2s ease-in-out infinite"}}/>
               </div>
             ))}
             {st.notices.length>2&&(
-              <button onClick={()=>setShowAllNotices(v=>!v)} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",width:"100%",padding:"8px 0",fontFamily:"inherit",marginTop:2}}>
+              <button onClick={()=>setShowAllNotices(v=>!v)} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:10,color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",width:"100%",padding:"8px 0",fontFamily:"inherit",marginTop:2,transition:"all 0.2s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold+"44";e.currentTarget.style.color=G.gold;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textSub;}}>
                 {showAllNotices?"Show less ▲":`Show all ${st.notices.length} ▼`}
               </button>
             )}
           </div>
         )}
 
-        {/* Weekly Bias */}
-        <GlowCard color={wColor} style={{marginBottom:14,position:"relative",overflow:"hidden"}}>
-          {/* Background direction glyph */}
-          <div style={{position:"absolute",top:8,right:12,fontSize:80,color:wColor,opacity:0.06,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none"}}>
+        {/* Weekly Bias — upgraded card */}
+        <GlowCard color={wColor} style={{marginBottom:12,position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:-10,right:-5,fontSize:100,color:wColor,opacity:0.04,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none",fontFamily:"'Playfair Display',serif"}}>
             {st.weeklyBias.direction==="Bullish"?"↑":st.weeklyBias.direction==="Bearish"?"↓":"↔"}
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Weekly Bias</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <div style={{width:3,height:14,background:wColor,borderRadius:2}}/>
+              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>Weekly Bias</div>
+            </div>
             <BiasTag d={st.weeklyBias.direction}/>
           </div>
-          <div style={{fontSize:22,fontWeight:900,color:wColor,fontFamily:"'Playfair Display',serif",marginBottom:5}}>{st.weeklyBias.dayLabel}</div>
-          <div style={{fontSize:11,color:G.textSub,marginBottom:12,display:"flex",alignItems:"center",gap:5}}>
-            <span style={{color:G.textDim,fontSize:10}}>·</span>{st.weeklyBias.updatedAt}
+          <div style={{fontSize:20,fontWeight:900,color:wColor,fontFamily:"'Playfair Display',serif",marginBottom:4,lineHeight:1.2}}>{st.weeklyBias.dayLabel}</div>
+          <div style={{fontSize:11,color:G.textDim,marginBottom:12,display:"flex",alignItems:"center",gap:5}}>
+            <span>·</span>{st.weeklyBias.updatedAt}
           </div>
           <div style={{marginBottom:14}}>{renderBody(st.weeklyBias.body,true)}</div>
-          {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:10,marginBottom:14}}/>}
-          <button onClick={()=>setPage("weekly")} style={{width:"100%",padding:11,background:"none",border:`1px solid ${wColor}44`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Full Bias Analysis →</button>
+          {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:10,marginBottom:14,display:"block"}}/>}
+          <button onClick={()=>setPage("weekly")} style={{width:"100%",padding:"11px 0",background:`${wColor}0e`,border:`1px solid ${wColor}33`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3}}
+            onMouseEnter={e=>{e.currentTarget.style.background=`${wColor}18`;}}
+            onMouseLeave={e=>{e.currentTarget.style.background=`${wColor}0e`;}}>
+            Full Bias Analysis →
+          </button>
         </GlowCard>
 
         {/* Daily Bias */}
-        <GlowCard color={dColor} style={{marginBottom:14,position:"relative",overflow:"hidden"}}>
-          <div style={{position:"absolute",top:8,right:12,fontSize:80,color:dColor,opacity:0.06,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none"}}>
+        <GlowCard color={dColor} style={{marginBottom:12,position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:-10,right:-5,fontSize:100,color:dColor,opacity:0.04,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none",fontFamily:"'Playfair Display',serif"}}>
             {st.dailyBias.direction==="Bullish"?"↑":st.dailyBias.direction==="Bearish"?"↓":"↔"}
           </div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Daily Bias</div>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <div style={{width:3,height:14,background:dColor,borderRadius:2}}/>
+              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>Daily Bias</div>
+            </div>
             <BiasTag d={st.dailyBias.direction}/>
           </div>
-          <div style={{fontSize:18,fontWeight:900,color:dColor,fontFamily:"'Playfair Display',serif",marginBottom:4}}>{st.dailyBias.dayLabel}</div>
-          <div style={{fontSize:11,color:G.textSub,marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
-            <span style={{color:G.textDim,fontSize:10}}>·</span>{st.dailyBias.updatedAt}
+          <div style={{fontSize:17,fontWeight:900,color:dColor,fontFamily:"'Playfair Display',serif",marginBottom:4}}>{st.dailyBias.dayLabel}</div>
+          <div style={{fontSize:11,color:G.textDim,marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
+            <span>·</span>{st.dailyBias.updatedAt}
           </div>
           <div>{renderBody(st.dailyBias.body,true)}</div>
         </GlowCard>
 
         {/* Active signals alert */}
         {(st.nfpSignal.active||st.fomcSignal.active)&&(
-          <GlowCard color={G.gold} style={{marginBottom:14,cursor:"pointer"}} onClick={()=>setPage("events")}>
-            <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:8}}>⚡ Signal Active</div>
+          <div onClick={()=>setPage("events")} style={{background:`linear-gradient(135deg,${G.gold}12,${G.card})`,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"14px 18px",marginBottom:12,cursor:"pointer",animation:"glow 2.5s ease-in-out infinite",boxShadow:`0 0 24px rgba(212,175,55,0.1)`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:G.gold,animation:"pulseDot 1.5s ease-in-out infinite"}}/>
+              <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Signal Active</div>
+            </div>
             {st.nfpSignal.active&&<div style={{fontSize:15,fontWeight:800,color:G.text,marginBottom:3}}>NFP: <span style={{color:G.gold}}>{st.nfpSignal.prediction}</span></div>}
             {st.fomcSignal.active&&<div style={{fontSize:15,fontWeight:800,color:G.text}}>FOMC: <span style={{color:G.gold}}>{st.fomcSignal.prediction}</span></div>}
-            <div style={{fontSize:11,color:G.textSub,marginTop:8}}>Tap to view full analysis →</div>
-          </GlowCard>
+            <div style={{fontSize:11,color:G.textSub,marginTop:6}}>Tap to view full analysis →</div>
+          </div>
         )}
 
         {/* Quick Nav — Feature Cards */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:28}}>
-          {quickNavCards.map(({label,sub,page,icon,color,status,isTerminal})=>{
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
+          {quickNavCards.map(({label,sub,page,icon,color,status,isTerminal},qi)=>{
             const hov=hovCard===page;
             const statusText=isTerminal?null:status;
             const terminalStatus=isTerminal?(st.eaApprovedUsers?.length>0?"◎ Active":"Request access"):null;
             return(
               <button key={page} onClick={()=>setPage(page)}
                 onMouseEnter={()=>setHovCard(page)} onMouseLeave={()=>setHovCard(null)}
-                style={{background:G.card,border:`1px solid ${hov?color:G.border}`,borderRadius:G.r,padding:"16px 14px",textAlign:"left",cursor:"pointer",
-                  transition:"all 0.2s",borderTop:`3px solid ${color}`,
-                  transform:hov?"translateY(-2px)":"none",
-                  boxShadow:hov?`0 8px 24px ${color}22,0 0 0 1px ${color}33`:"0 2px 8px rgba(0,0,0,0.2)"}}>
-                <div style={{fontSize:22,marginBottom:8,color}}>{icon}</div>
-                <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:3}}>{label}</div>
-                <div style={{fontSize:11,color:G.textSub,marginBottom:6}}>{sub}</div>
+                style={{background:G.card,border:`1px solid ${hov?color+"55":G.border}`,borderRadius:G.r,padding:"16px 14px",textAlign:"left",cursor:"pointer",
+                  transition:"all 0.22s cubic-bezier(0.4,0,0.2,1)",
+                  borderTop:`3px solid ${color}`,
+                  transform:hov?"translateY(-3px)":"none",
+                  boxShadow:hov?`0 12px 32px rgba(0,0,0,0.4),0 0 0 1px ${color}22`:"0 4px 16px rgba(0,0,0,0.25)",
+                  animation:`fadeUp 0.4s ${qi*0.07}s ease both`}}>
+                <div style={{width:36,height:36,borderRadius:10,background:`${color}15`,border:`1px solid ${color}22`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10,fontSize:18,color}}>{icon}</div>
+                <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:3}}>{label}</div>
+                <div style={{fontSize:11,color:G.textSub,marginBottom:statusText||terminalStatus?6:0,lineHeight:1.4}}>{sub}</div>
                 {(statusText||terminalStatus)&&(
                   <div style={{fontSize:10,color:color,fontWeight:700,letterSpacing:0.3}}>{statusText||terminalStatus}</div>
                 )}
@@ -683,13 +710,13 @@ const HomePage = React.memo(function HomePage({st,setPage}){
         </div>
 
         {/* What RegimeEdge Tracks */}
-        <div style={{marginBottom:28}}>
-          <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>What RegimeEdge Tracks</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9}}>
-            {pillars.map(p=>(
-              <button key={p.page} onClick={()=>setPage(p.page)} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"14px 10px",textAlign:"center",cursor:"pointer",transition:"all 0.2s"}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.background=G.goldBg;}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.card;}}>
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>What RegimeEdge Tracks</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+            {pillars.map((p,pi)=>(
+              <button key={p.page} onClick={()=>setPage(p.page)} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"14px 10px",textAlign:"center",cursor:"pointer",transition:"all 0.2s",animation:`fadeUp 0.4s ${0.1+pi*0.07}s ease both`}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold+"44";e.currentTarget.style.background=G.goldBg;e.currentTarget.style.transform="translateY(-2px)";}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.card;e.currentTarget.style.transform="none";}}>
                 <div style={{fontSize:20,marginBottom:7}}>{p.icon}</div>
                 <div style={{fontSize:11,fontWeight:700,color:G.text,marginBottom:4,lineHeight:1.3}}>{p.title}</div>
                 <div style={{fontSize:10,color:G.textSub,lineHeight:1.5}}>{p.desc}</div>
@@ -700,24 +727,25 @@ const HomePage = React.memo(function HomePage({st,setPage}){
 
         {/* ── EA BOTS SECTION ── */}
         {st.eas&&st.eas.length>0&&(
-          <div style={{marginBottom:28}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Trading EAs</div>
-              <button onClick={()=>setPage("eas")} style={{background:"none",border:"none",color:G.gold,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>View all →</button>
+          <div style={{marginBottom:24}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>Trading EAs</div>
+              <button onClick={()=>setPage("eas")} style={{background:"none",border:"none",color:G.gold,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>View all <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
             </div>
             {st.eas.slice(0,2).map(ea=>(
               <div key={ea.id} onClick={()=>setPage("eas")}
-                style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:11,overflow:"hidden",cursor:"pointer",transition:"all 0.2s"}}>
-                <div style={{height:2,background:`linear-gradient(90deg,${G.gold},${G.gold}44)`}}/>
+                style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:10,overflow:"hidden",cursor:"pointer",transition:"all 0.22s"}}
+                className="re-card-hover">
+                <div style={{height:2,background:`linear-gradient(90deg,${G.gold},${G.gold}33)`}}/>
                 <div style={{display:"flex",gap:0}}>
                   {ea.image&&(
                     <div style={{width:80,flexShrink:0,overflow:"hidden"}}>
                       <img src={ea.image} alt={ea.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",minHeight:80}}/>
                     </div>
                   )}
-                  <div style={{flex:1,padding:"12px 14px"}}>
+                  <div style={{flex:1,padding:"13px 15px"}}>
                     <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:3}}>{ea.name}</div>
-                    {ea.tagline&&<div style={{fontSize:11,color:G.gold,marginBottom:5}}>{ea.tagline}</div>}
+                    {ea.tagline&&<div style={{fontSize:11,color:G.gold,marginBottom:6}}>{ea.tagline}</div>}
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                       {ea.winRate&&<span style={{fontSize:10,color:G.green,fontWeight:700}}>{ea.winRate} win rate</span>}
                       {ea.pairs&&<span style={{fontSize:10,color:G.textSub}}>{ea.pairs}</span>}
@@ -732,20 +760,22 @@ const HomePage = React.memo(function HomePage({st,setPage}){
 
         {/* ── BOOKS SECTION ── */}
         {st.books&&st.books.length>0&&(
-          <div style={{marginBottom:28}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase"}}>Free Books</div>
-              <button onClick={()=>setPage("books")} style={{background:"none",border:"none",color:G.blue,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Library →</button>
+          <div style={{marginBottom:24}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>Free Books</div>
+              <button onClick={()=>setPage("books")} style={{background:"none",border:"none",color:G.blue,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>Library <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
             </div>
             <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,overflow:"hidden"}}>
               {st.books.slice(0,3).map((book,i)=>(
-                <div key={book.id} onClick={()=>setPage("books")} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<Math.min(st.books.length,3)-1?`1px solid ${G.border}`:"none",cursor:"pointer"}}>
-                  <span style={{fontSize:22,flexShrink:0}}>📖</span>
+                <div key={book.id} onClick={()=>setPage("books")} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<Math.min(st.books.length,3)-1?`1px solid ${G.border}`:"none",cursor:"pointer",transition:"background 0.15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=G.surface}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{width:32,height:32,borderRadius:8,background:`${G.blue}15`,border:`1px solid ${G.blue}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>📖</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{book.title}</div>
                     {book.author&&<div style={{fontSize:11,color:G.textSub}}>by {book.author}</div>}
                   </div>
-                  <span style={{fontSize:10,color:G.blue,fontWeight:700,flexShrink:0}}>FREE ↓</span>
+                  <span style={{fontSize:10,color:G.blue,fontWeight:800,flexShrink:0,background:`${G.blue}12`,border:`1px solid ${G.blue}22`,borderRadius:6,padding:"2px 7px"}}>FREE ↓</span>
                 </div>
               ))}
             </div>
@@ -3203,7 +3233,7 @@ export default function App(){
       `}</style>
 
       {/* Header */}
-      <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(22,24,29,0.97)",backdropFilter:"blur(14px)",borderBottom:`1px solid ${G.border}`,padding:"0 18px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54}}>
+      <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(10,11,13,0.96)",backdropFilter:"blur(20px)",borderBottom:`1px solid ${G.border}`,padding:"0 18px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54,boxShadow:"0 4px 24px rgba(0,0,0,0.3)"}}>
         <button onClick={()=>nav("home")} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:10}}>
           {/* Sovereign Bridge Logo — Regime Edge */}
           <svg width="36" height="36" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" style={{display:"block",flexShrink:0}}>
@@ -3331,30 +3361,32 @@ export default function App(){
 
       {/* Slide-down menu */}
       <div style={{position:"fixed",top:54,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,zIndex:99,
-        background:"rgba(17,19,21,0.98)",backdropFilter:"blur(12px)",
+        background:"rgba(10,11,13,0.98)",backdropFilter:"blur(20px)",
         maxHeight:menuOpen?"calc(100vh - 54px)":"0",overflow:"hidden",
-        transition:"max-height 0.35s cubic-bezier(0.4,0,0.2,1)",borderBottom:menuOpen?`1px solid ${G.border}`:"none"}}>
-        <div style={{padding:"12px 20px 20px",overflowY:"auto",maxHeight:"calc(100vh - 80px)"}}>
+        transition:"max-height 0.35s cubic-bezier(0.4,0,0.2,1)",borderBottom:menuOpen?`1px solid ${G.border}`:"none",
+        boxShadow:menuOpen?"0 24px 48px rgba(0,0,0,0.6)":"none"}}>
+        <div style={{padding:"16px 20px 24px",overflowY:"auto",maxHeight:"calc(100vh - 80px)"}}>
           {MENU_GROUPS.map(grp=>(
             <div key={grp.id}>
               {grp.single?(
-                <button onClick={()=>nav(grp.id)} style={{display:"flex",alignItems:"center",width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:`1px solid ${G.border}`,color:page===grp.id?grp.color:G.text,fontSize:15,fontWeight:page===grp.id?800:500,cursor:"pointer",textAlign:"left",fontFamily:"inherit",gap:10}}>
-                  <span style={{width:3,height:16,background:page===grp.id?grp.color:"transparent",borderRadius:2,flexShrink:0,display:"inline-block"}}/>
+                <button onClick={()=>nav(grp.id)} style={{display:"flex",alignItems:"center",width:"100%",padding:"13px 0",background:"none",border:"none",borderBottom:`1px solid ${G.border}22`,color:page===grp.id?grp.color:G.text,fontSize:14,fontWeight:page===grp.id?800:500,cursor:"pointer",textAlign:"left",fontFamily:"inherit",gap:12,transition:"all 0.15s"}}>
+                  <span style={{width:3,height:14,background:page===grp.id?grp.color:"transparent",borderRadius:2,flexShrink:0,transition:"background 0.2s"}}/>
                   {grp.label}
-                  {grp.id==="terminal"&&!isApproved&&<span style={{marginLeft:"auto",fontSize:10,color:G.textSub,border:`1px solid ${G.border}`,borderRadius:6,padding:"2px 7px"}}>Approval needed</span>}
-                  {grp.id==="terminal"&&isApproved&&<span style={{marginLeft:"auto",fontSize:10,color:G.green}}>✓ Approved</span>}
+                  {grp.id==="terminal"&&!isApproved&&<span style={{marginLeft:"auto",fontSize:10,color:G.textDim,border:`1px solid ${G.border}`,borderRadius:6,padding:"2px 7px"}}>Approval needed</span>}
+                  {grp.id==="terminal"&&isApproved&&<span style={{marginLeft:"auto",fontSize:10,color:G.green,fontWeight:700}}>✓ Active</span>}
+                  {page===grp.id&&<svg style={{marginLeft:"auto"}} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>}
                 </button>
               ):(
                 <div>
-                  <button onClick={()=>setOpenGroup(openGroup===grp.id?null:grp.id)} style={{display:"flex",alignItems:"center",width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:`1px solid ${G.border}`,color:grp.color,fontSize:15,fontWeight:700,cursor:"pointer",textAlign:"left",fontFamily:"inherit",gap:10}}>
-                    <span style={{width:3,height:16,background:grp.color,borderRadius:2,flexShrink:0,display:"inline-block"}}/>
+                  <button onClick={()=>setOpenGroup(openGroup===grp.id?null:grp.id)} style={{display:"flex",alignItems:"center",width:"100%",padding:"13px 0",background:"none",border:"none",borderBottom:`1px solid ${G.border}22`,color:grp.color,fontSize:14,fontWeight:700,cursor:"pointer",textAlign:"left",fontFamily:"inherit",gap:12}}>
+                    <span style={{width:3,height:14,background:grp.color,borderRadius:2,flexShrink:0}}/>
                     {grp.label}
-                    <span style={{marginLeft:"auto",fontSize:12,color:G.textSub,transition:"transform 0.2s",transform:openGroup===grp.id?"rotate(180deg)":"rotate(0)"}}> ▾</span>
+                    <span style={{marginLeft:"auto",fontSize:12,color:G.textSub,transition:"transform 0.2s",transform:openGroup===grp.id?"rotate(180deg)":"rotate(0)"}}>▾</span>
                   </button>
                   {openGroup===grp.id&&(
-                    <div style={{paddingLeft:16,overflow:"hidden"}}>
+                    <div style={{paddingLeft:18,overflow:"hidden",animation:"fadeUp 0.2s ease"}}>
                       {grp.items.map(item=>(
-                        <button key={item.id} onClick={()=>nav(item.id)} style={{display:"block",width:"100%",padding:"11px 0",background:"none",border:"none",borderBottom:`1px solid ${G.border}22`,color:page===item.id?G.gold:G.textSub,fontSize:14,fontWeight:page===item.id?700:400,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                        <button key={item.id} onClick={()=>nav(item.id)} style={{display:"block",width:"100%",padding:"11px 0",background:"none",border:"none",borderBottom:`1px solid ${G.border}18`,color:page===item.id?G.gold:G.textSub,fontSize:13,fontWeight:page===item.id?700:400,cursor:"pointer",textAlign:"left",fontFamily:"inherit",transition:"color 0.15s"}}>
                           {item.label}
                         </button>
                       ))}
@@ -3364,7 +3396,7 @@ export default function App(){
               )}
             </div>
           ))}
-          <button onClick={()=>{setMenuOpen(false);setShowAdminLogin(true);}} style={{position:"absolute",bottom:8,right:10,background:"none",border:"none",cursor:"pointer",padding:4,opacity:0.15}} title=""><span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:G.textDim}}/></button>
+          <button onClick={()=>{setMenuOpen(false);setShowAdminLogin(true);}} style={{position:"absolute",bottom:8,right:10,background:"none",border:"none",cursor:"pointer",padding:4,opacity:0.12}} title=""><span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:G.textDim}}/></button>
         </div>
       </div>
 
@@ -3417,27 +3449,46 @@ export default function App(){
             <ErrorBoundary>
             <div className="re-page" style={{paddingBottom:88,minHeight:"100vh",boxSizing:"border-box"}}>
               {contentLoading&&page==="home"?(
-                <div style={{padding:"44px 22px"}}>
-                  <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
-                  {[{h:120,mb:24},{h:80,mb:14},{h:80,mb:14},{h:100,mb:0}].map((s,i)=>(
-                    <div key={i} style={{height:s.h,borderRadius:G.r,marginBottom:s.mb,
-                      background:`linear-gradient(90deg,${G.surface} 25%,${G.card} 50%,${G.surface} 75%)`,
-                      backgroundSize:"200% 100%",animation:"shimmer 1.5s infinite"}}/>
-                  ))}
+                <div style={{padding:"40px 22px",animation:"fadeIn 0.3s ease"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:28}}>
+                    <div style={{flex:1}}>
+                      <Skeleton h={10} w={120} mb={12} r={4}/>
+                      <Skeleton h={40} w={200} mb={10} r={6}/>
+                      <Skeleton h={12} w={180} mb={18} r={4}/>
+                      <Skeleton h={34} w={160} mb={8} r={20}/>
+                      <Skeleton h={38} mb={8} r={10}/>
+                      <Skeleton h={38} r={10}/>
+                    </div>
+                    <div style={{width:110,marginLeft:16}}>
+                      <Skeleton h={120} r={12}/>
+                    </div>
+                  </div>
+                  <Skeleton h={1} mb={24} r={0}/>
+                  <Skeleton h={160} mb={12} r={16}/>
+                  <Skeleton h={120} mb={12} r={16}/>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
+                    <Skeleton h={110} r={16}/>
+                    <Skeleton h={110} r={16}/>
+                    <Skeleton h={110} r={16}/>
+                    <Skeleton h={110} r={16}/>
+                  </div>
                 </div>
               ):(
                 pages[page]||pages.home
               )}
 
               {/* Footer */}
-              <div style={{padding:"26px 22px 18px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:G.gold,marginBottom:5,textAlign:"center"}}>RegimeEdge</div>
-                <div style={{fontSize:12,color:G.textDim,marginBottom:16,textAlign:"center"}}>Macro intelligence. Not signals — reasoning.</div>
-                <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+              <div style={{padding:"32px 22px 22px",borderTop:`1px solid ${G.border}`,marginTop:8,background:G.bgDeep}}>
+                <div style={{textAlign:"center",marginBottom:18}}>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.gold,marginBottom:4,fontWeight:900,letterSpacing:0.5}}>Regime<span style={{color:G.text}}>Edge</span></div>
+                  <div style={{fontSize:11,color:G.textDim,lineHeight:1.6}}>Macro intelligence. Not signals — reasoning.</div>
+                </div>
+                <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
                   <SocialLink href="https://t.me/RegimeEdge" label="Telegram" color="#229ED9" icon="✈"/>
                   <SocialLink href="https://www.youtube.com/@RegimeEdge" label="YouTube" color="#FF0000" icon="▶"/>
                 </div>
-                <div style={{fontSize:10,color:G.textDim,textAlign:"center"}}>
+                <div style={{height:1,background:G.border,marginBottom:14}}/>
+                <div style={{fontSize:10,color:G.textDim,textAlign:"center",letterSpacing:0.3}}>
                   © 2025 RegimeEdge · A platform by <span style={{color:G.gold,fontWeight:700}}>J</span> · All rights reserved
                 </div>
               </div>
@@ -3449,13 +3500,17 @@ export default function App(){
 
       {/* Bottom Nav — mobile only, hidden on desktop via CSS */}
       {!showAdmin&&(
-        <div className="re-bnav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(17,19,21,0.97)",backdropFilter:"blur(14px)",borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-around",padding:"9px 0 max(14px,env(safe-area-inset-bottom))",zIndex:98}}>
-          {BNAV.map(item=>(
-            <button key={item.id} onClick={()=>nav(item.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"3px 8px",minWidth:0}}>
-              <span style={{fontSize:17,color:page===item.id?G.gold:G.textDim,transition:"color 0.2s"}}>{item.icon}</span>
-              <span style={{fontSize:9,color:page===item.id?G.gold:G.textDim,letterSpacing:0.5,transition:"color 0.2s",whiteSpace:"nowrap"}}>{item.label}</span>
-            </button>
-          ))}
+        <div className="re-bnav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(10,11,13,0.96)",backdropFilter:"blur(20px)",borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-around",padding:"8px 0 max(14px,env(safe-area-inset-bottom))",zIndex:98,boxShadow:"0 -8px 32px rgba(0,0,0,0.4)"}}>
+          {BNAV.map(item=>{
+            const active=page===item.id;
+            return(
+              <button key={item.id} onClick={()=>nav(item.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"4px 12px",minWidth:0,position:"relative",transition:"all 0.2s"}}>
+                {active&&<div style={{position:"absolute",top:-8,left:"50%",transform:"translateX(-50%)",width:20,height:2,borderRadius:1,background:G.gold}}/>}
+                <span style={{fontSize:18,color:active?G.gold:G.textDim,transition:"all 0.2s",transform:active?"scale(1.1)":"scale(1)"}}>{item.icon}</span>
+                <span style={{fontSize:9,color:active?G.gold:G.textDim,letterSpacing:0.5,transition:"all 0.2s",fontWeight:active?700:400,whiteSpace:"nowrap"}}>{item.label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 

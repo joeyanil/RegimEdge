@@ -2323,16 +2323,21 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
           return (
             <div key={l.id} style={{
               background:G.card,
-              border:`1px solid ${l.seller_trust_plus ? G.gold+"55" : G.border}`,
+              border:`1px solid ${l.seller_trust_plus ? G.gold+"44" : G.border}`,
               borderRadius:G.r, marginBottom:12, overflow:"hidden",
-              boxShadow:l.seller_trust_plus ? `0 0 28px rgba(212,175,55,0.12)` : `0 2px 12px rgba(0,0,0,0.2)`,
+              boxShadow:l.seller_trust_plus
+                ? `0 0 0 1px ${G.gold}18, 0 8px 32px rgba(212,175,55,0.1)`
+                : `0 4px 16px rgba(0,0,0,0.25)`,
+              transition:"all 0.2s",
+              animation:"fadeUp 0.3s ease both",
             }}>
 
               {/* ── Trust+ banner ── */}
               {l.seller_trust_plus && (
-                <div style={{ padding:"6px 16px", background:`linear-gradient(90deg, ${G.gold}18, ${G.gold}08)`, borderBottom:`1px solid ${G.gold}22`, display:"flex", alignItems:"center", gap:6 }}>
+                <div style={{ padding:"7px 16px", background:`linear-gradient(90deg, ${G.gold}14, transparent)`, borderBottom:`1px solid ${G.gold}18`, display:"flex", alignItems:"center", gap:8 }}>
                   <TrustBadge size={11} />
-                  <span style={{ fontSize:10, color:G.gold, fontWeight:800, letterSpacing:1.5 }}>TRUST+ SELLER — MOST TRUSTED</span>
+                  <span style={{ fontSize:9, color:G.gold, fontWeight:800, letterSpacing:2, textTransform:"uppercase" }}>Most Trusted Seller</span>
+                  <div style={{marginLeft:"auto",width:5,height:5,borderRadius:"50%",background:G.gold,animation:"pulseDot 2s ease-in-out infinite"}}/>
                 </div>
               )}
 
@@ -2341,15 +2346,15 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
                 <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10 }}>
                   {/* Avatar */}
                   <div style={{
-                    width:46, height:46, borderRadius:"50%", flexShrink:0,
+                    width:48, height:48, borderRadius:"50%", flexShrink:0,
                     background:l.seller_trust_plus
-                      ? `linear-gradient(135deg, ${G.gold}88, ${G.gold}33)`
+                      ? `linear-gradient(135deg, ${G.gold}77, ${G.gold}33)`
                       : `linear-gradient(135deg, ${G.gold}44, ${G.gold}18)`,
-                    border:`2px solid ${l.seller_trust_plus ? G.gold : G.gold+"44"}`,
-                    boxShadow:l.seller_trust_plus ? `0 0 14px rgba(212,175,55,0.35)` : "none",
+                    border:`2px solid ${l.seller_trust_plus ? G.gold : G.gold+"33"}`,
+                    boxShadow:l.seller_trust_plus ? `0 0 18px rgba(212,175,55,0.4)` : "none",
                     display:"flex", alignItems:"center", justifyContent:"center",
                   }}>
-                    <span style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:G.gold, fontWeight:900, lineHeight:1 }}>
+                    <span style={{ fontFamily:"'Playfair Display',serif", fontSize:21, color:G.gold, fontWeight:900, lineHeight:1 }}>
                       {(l.seller_display_name || "S")[0].toUpperCase()}
                     </span>
                   </div>
@@ -2357,68 +2362,47 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
                   {/* Name + badges */}
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
-                      <span style={{ fontSize:15, fontWeight:900, color:G.text, lineHeight:1 }}>{l.seller_display_name}</span>
+                      <span style={{ fontSize:15, fontWeight:900, color:G.text, fontFamily:"'Playfair Display',serif" }}>{l.seller_display_name}</span>
                       {l.seller_trust_plus && <TrustBadge size={14} />}
                     </div>
-                    <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-                      <Badge color={G.green} style={{ fontSize:9, padding:"2px 8px" }}>
-                        <Icon name="shieldCheck" size={9} color={G.green} />KYC Verified
-                      </Badge>
-                    </div>
+                    <Badge color={G.green} style={{ fontSize:9, padding:"2px 8px" }}>
+                      <Icon name="shieldCheck" size={9} color={G.green} />KYC Verified
+                    </Badge>
                   </div>
 
-                  {/* Star rating — top right */}
+                  {/* Star rating */}
                   {hasRating && (
                     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill={G.gold} stroke={G.gold} strokeWidth="0.5">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill={G.gold} stroke={G.gold} strokeWidth="0.5">
                           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                         </svg>
-                        <span style={{ fontSize:16, color:G.gold, fontWeight:900, fontFamily:"'Playfair Display',serif" }}>{l.seller_rating}</span>
+                        <span style={{ fontSize:17, color:G.gold, fontWeight:900, fontFamily:"'Playfair Display',serif" }}>{l.seller_rating}</span>
                       </div>
-                      <span style={{ fontSize:9, color:G.textDim, marginTop:1 }}>rating</span>
+                      <span style={{ fontSize:9, color:G.textDim }}>rating</span>
                     </div>
                   )}
                 </div>
 
                 {/* ── Trust stat pills ── */}
                 {(hasTrades || hasSuccess) && (
-                  <div style={{ display:"flex", gap:8 }}>
+                  <div style={{ display:"flex", gap:7 }}>
                     {hasTrades && (
-                      <div style={{
-                        flex:1, padding:"8px 10px", textAlign:"center",
-                        background:G.surface, border:`1px solid ${G.border}`,
-                        borderRadius:G.rs,
-                      }}>
-                        <div style={{ fontSize:16, fontWeight:900, color:G.text, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>
-                          {l.seller_completed_trades}
-                        </div>
-                        <div style={{ fontSize:9, color:G.textSub, marginTop:3, letterSpacing:0.5 }}>TRADES</div>
+                      <div style={{ flex:1, padding:"9px 10px", textAlign:"center", background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.rs }}>
+                        <div style={{ fontSize:16, fontWeight:900, color:G.text, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>{l.seller_completed_trades}</div>
+                        <div style={{ fontSize:9, color:G.textDim, marginTop:3, letterSpacing:0.5, textTransform:"uppercase" }}>Trades</div>
                       </div>
                     )}
                     {hasSuccess && (
-                      <div style={{
-                        flex:1, padding:"8px 10px", textAlign:"center",
-                        background: l.seller_success_rate >= 90 ? G.greenBg : G.surface,
-                        border:`1px solid ${l.seller_success_rate >= 90 ? G.green+"44" : G.border}`,
-                        borderRadius:G.rs,
-                      }}>
-                        <div style={{ fontSize:16, fontWeight:900, color:l.seller_success_rate >= 90 ? G.green : G.text, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>
-                          {l.seller_success_rate}%
-                        </div>
-                        <div style={{ fontSize:9, color:G.textSub, marginTop:3, letterSpacing:0.5 }}>SUCCESS</div>
+                      <div style={{ flex:1, padding:"9px 10px", textAlign:"center", background: l.seller_success_rate >= 90 ? `${G.green}0a` : G.surface, border:`1px solid ${l.seller_success_rate >= 90 ? G.green+"33" : G.border}`, borderRadius:G.rs }}>
+                        <div style={{ fontSize:16, fontWeight:900, color:l.seller_success_rate >= 90 ? G.green : G.text, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>{l.seller_success_rate}%</div>
+                        <div style={{ fontSize:9, color:G.textDim, marginTop:3, letterSpacing:0.5, textTransform:"uppercase" }}>Success</div>
                       </div>
                     )}
                     {hasRating && (
-                      <div style={{
-                        flex:1, padding:"8px 10px", textAlign:"center",
-                        background:G.goldBg, border:`1px solid ${G.gold}33`,
-                        borderRadius:G.rs,
-                      }}>
-                        <div style={{ fontSize:16, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>
-                          {l.seller_rating}★
-                        </div>
-                        <div style={{ fontSize:9, color:G.textSub, marginTop:3, letterSpacing:0.5 }}>RATING</div>
+                      <div style={{ flex:1, padding:"9px 10px", textAlign:"center", background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.rs }}>
+                        <div style={{ fontSize:16, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif", lineHeight:1 }}>{l.seller_rating}★</div>
+                        <div style={{ fontSize:9, color:G.textDim, marginTop:3, letterSpacing:0.5, textTransform:"uppercase" }}>Rating</div>
                       </div>
                     )}
                   </div>
@@ -2432,23 +2416,23 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
                   ["Rate", `${l.rate_etb} ETB`, G.text],
                   ["Min Pay", `${Math.round((config?.min_usdt || 5) * l.rate_etb + fee)} ETB`, G.green],
                 ].map(([k, v, c], i) => (
-                  <div key={k} style={{ padding:"11px 12px", borderRight:i < 2 ? `1px solid ${G.border}` : "none" }}>
-                    <div style={{ fontSize:10, color:G.textDim, marginBottom:3 }}>{k}</div>
-                    <div style={{ fontSize:14, fontWeight:900, color:c, fontFamily:"'Playfair Display',serif" }}>{v}</div>
+                  <div key={k} style={{ padding:"12px 14px", borderRight:i < 2 ? `1px solid ${G.border}` : "none", background:i===2?`${G.green}04`:"transparent" }}>
+                    <div style={{ fontSize:9, color:G.textDim, marginBottom:4, letterSpacing:0.5, textTransform:"uppercase" }}>{k}</div>
+                    <div style={{ fontSize:15, fontWeight:900, color:c, fontFamily:"'Playfair Display',serif" }}>{v}</div>
                   </div>
                 ))}
               </div>
 
               {/* ── Payment methods + Buy Now ── */}
-              <div style={{ padding:"11px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              <div style={{ padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap", flex:1 }}>
                   {methods.map(m => (
-                    <span key={m} style={{ fontSize:11, color:G.textSub, background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"3px 8px" }}>{m}</span>
+                    <span key={m} style={{ fontSize:11, color:G.textSub, background:G.surface, border:`1px solid ${G.border}`, borderRadius:7, padding:"3px 9px", fontWeight:500 }}>{m}</span>
                   ))}
                 </div>
                 {isOwn
-                  ? <span style={{ fontSize:11, color:G.textSub, fontStyle:"italic" }}>Your listing</span>
-                  : <Btn onClick={() => setBuyFlowListing(l)} disabled={buying === l.id} full={false} style={{ padding:"9px 18px", fontSize:13 }}>{buying === l.id ? "Opening..." : "Buy Now"}</Btn>
+                  ? <span style={{ fontSize:11, color:G.textDim, fontStyle:"italic", flexShrink:0 }}>Your listing</span>
+                  : <Btn onClick={() => setBuyFlowListing(l)} disabled={buying === l.id} full={false} style={{ padding:"10px 20px", fontSize:13, flexShrink:0 }}>{buying === l.id ? "Opening..." : "Buy Now"}</Btn>
                 }
               </div>
             </div>
@@ -2906,22 +2890,19 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
 
   return (
     <div style={{ paddingBottom:28 }}>
-      {/* Hero header */}
+      {/* Hero header — upgraded */}
       <div style={{
-        background:`linear-gradient(135deg,rgba(212,175,55,0.07) 0%,${G.bgDeep} 70%)`,
-        borderBottom:`1px solid ${G.border}`, padding:"18px 18px 16px",
+        background:`linear-gradient(160deg,rgba(212,175,55,0.09) 0%,rgba(10,11,13,0.8) 55%,${G.bgDeep} 100%)`,
+        borderBottom:`1px solid ${G.border}`, padding:"20px 18px 18px",
+        position:"relative", overflow:"hidden",
       }}>
-        {/* Brand logo — uses custom logoUrl if provided, otherwise the inline RegimeEdge brand mark */}
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+        {/* Subtle grid texture */}
+        <div style={{position:"absolute",inset:0,backgroundImage:`linear-gradient(${G.border}18 1px,transparent 1px),linear-gradient(90deg,${G.border}18 1px,transparent 1px)`,backgroundSize:"32px 32px",pointerEvents:"none",opacity:0.4}}/>
+
+        {/* Brand */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16, position:"relative" }}>
           {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt="RegimeEdge"
-              style={{
-                height:32, width:"auto", objectFit:"contain",
-                filter:"drop-shadow(0 0 6px rgba(212,175,55,0.3))",
-              }}
-            />
+            <img src={logoUrl} alt="RegimeEdge" style={{ height:32, width:"auto", objectFit:"contain", filter:"drop-shadow(0 0 6px rgba(212,175,55,0.3))" }}/>
           ) : (
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <svg width="32" height="32" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" style={{ display:"block", flexShrink:0 }}>
@@ -2944,10 +2925,10 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
                 <ellipse cx="30" cy="14" rx="3.5" ry="2.3" fill="none" stroke="#FFE57A" strokeWidth="1.7" filter="url(#exhub-glow)"/>
                 <ellipse cx="38" cy="18.5" rx="3" ry="2" fill="none" stroke="#D4AF37" strokeWidth="1.4" transform="rotate(18,38,18.5)" filter="url(#exhub-soft)"/>
                 <path d="M13 38 Q30 10 47 38" fill="none" stroke="#D4AF37" strokeWidth=".5" strokeDasharray="1.5 3" opacity=".2" strokeLinecap="round"/>
-                <polygon points="13,31 8,34.5 8,41.5 13,45 18,41.5 18,34.5" fill="#111315" stroke="#22c55e" strokeWidth="1.6"/>
+                <polygon points="13,31 8,34.5 8,41.5 13,45 18,41.5 18,34.5" fill="#0A0B0D" stroke="#22c55e" strokeWidth="1.6"/>
                 <circle cx="13" cy="38" r="3" fill="#22c55e" opacity=".85" filter="url(#exhub-soft)"/>
                 <text x="13" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">B</text>
-                <polygon points="47,31 42,34.5 42,41.5 47,45 52,41.5 52,34.5" fill="#111315" stroke="#D4AF37" strokeWidth="1.6"/>
+                <polygon points="47,31 42,34.5 42,41.5 47,45 52,41.5 52,34.5" fill="#0A0B0D" stroke="#D4AF37" strokeWidth="1.6"/>
                 <circle cx="47" cy="38" r="3" fill="#D4AF37" opacity=".85" filter="url(#exhub-soft)"/>
                 <text x="47" y="40.5" textAnchor="middle" fontSize="4.5" fill="#000" fontFamily="DM Mono,monospace" fontWeight="700">S</text>
                 <circle r="2.5" fill="#FFE57A" opacity=".9" filter="url(#exhub-glow)">
@@ -2958,36 +2939,39 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
                 <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, fontWeight:900, color:G.text, lineHeight:1 }}>
                   Regime<span style={{ color:G.gold }}>Edge</span>
                 </div>
-                <div style={{ fontSize:8, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginTop:2 }}>Exchange</div>
+                <div style={{ fontSize:8, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginTop:3 }}>Exchange</div>
               </div>
             </div>
           )}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+
+        {/* User profile row — upgraded */}
+        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:16, position:"relative" }}>
           <div style={{
-            width:46, height:46, borderRadius:"50%",
-            background:`linear-gradient(135deg,${G.gold}44,${G.gold}22)`,
-            border:`2px solid ${hasTrustPlus ? G.gold : G.gold+"55"}`,
-            boxShadow:hasTrustPlus ? `0 0 16px rgba(212,175,55,0.4)` : "none",
+            width:50, height:50, borderRadius:"50%",
+            background:`linear-gradient(135deg,${G.gold}55,${G.gold}22)`,
+            border:`2px solid ${hasTrustPlus ? G.gold : G.gold+"44"}`,
+            boxShadow:hasTrustPlus ? `0 0 20px rgba(212,175,55,0.4), 0 0 40px rgba(212,175,55,0.15)` : "none",
             display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+            animation:hasTrustPlus?"glow 3s ease-in-out infinite":"none",
           }}>
-            <span style={{ fontFamily:"'Playfair Display',serif", fontSize:21, color:G.gold, fontWeight:900 }}>
+            <span style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:G.gold, fontWeight:900 }}>
               {(kyc?.full_name || user.name || "T")[0].toUpperCase()}
             </span>
           </div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap", marginBottom:4 }}>
-              <span style={{ fontSize:15, fontWeight:800, color:G.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:5 }}>
+              <span style={{ fontSize:16, fontWeight:800, color:G.text, fontFamily:"'Playfair Display',serif" }}>
                 {kyc?.full_name || user.name || "Trader"}
               </span>
-              {hasTrustPlus && <TrustBadge size={16} />}
+              {hasTrustPlus && <TrustBadge size={15} />}
             </div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              <Badge color={G.green} style={{ fontSize:9 }}>
+              <Badge color={G.green} style={{ fontSize:9, padding:"2px 8px" }}>
                 <Icon name="shieldCheck" size={9} color={G.green} />KYC Verified
               </Badge>
               {hasTrustPlus && (
-                <Badge color={G.gold} style={{ fontSize:9 }}>
+                <Badge color={G.gold} style={{ fontSize:9, padding:"2px 8px" }}>
                   <Icon name="shieldStar" size={9} color={G.gold} />Trust+ Elite
                 </Badge>
               )}
@@ -2995,7 +2979,8 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
           </div>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+        {/* Stats row — upgraded */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, position:"relative" }}>
           <StatPill label="My Trades" value={stats.trades || "—"} color={G.text} />
           <StatPill label="Rating" value={stats.rating > 0 ? stats.rating + "★" : "—"} color={G.gold} />
           <StatPill label="Success" value={stats.success > 0 ? stats.success + "%" : "—"} color={G.green} />
@@ -3004,24 +2989,27 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
       </div>
 
       <div style={{ padding:"18px 18px 0" }}>
-        {/* Quick actions */}
-        <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:12 }}>Quick Actions</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:18 }}>
-          {ACTIONS.map(({ icon, label, sub, color, sc }) => (
+        {/* Quick actions — upgraded */}
+        <div style={{ fontSize:9, color:G.textSub, letterSpacing:2.5, textTransform:"uppercase", marginBottom:12, fontWeight:700 }}>Quick Actions</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+          {ACTIONS.map(({ icon, label, sub, color, sc }, ai) => (
             <button key={label} onClick={() => setScreen(sc)} style={{
-              background:G.card, border:`1px solid ${G.border}`, borderRadius:G.r,
+              background:G.card, border:`1px solid ${G.border}`,
+              borderTop:`3px solid ${color}`,
+              borderRadius:G.r,
               padding:"16px 14px", cursor:"pointer", textAlign:"left",
               fontFamily:"inherit", display:"flex", flexDirection:"column", gap:8,
-              transition:"all 0.2s",
+              transition:"all 0.22s cubic-bezier(0.4,0,0.2,1)",
+              animation:`fadeUp 0.3s ${ai*0.06}s ease both`,
             }}
-              onMouseEnter={e => { e.currentTarget.style.border = `1px solid ${color}55`; e.currentTarget.style.background = `${color}09`; }}
-              onMouseLeave={e => { e.currentTarget.style.border = `1px solid ${G.border}`; e.currentTarget.style.background = G.card; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = `${color}55`; e.currentTarget.style.background = `${color}08`; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 10px 28px rgba(0,0,0,0.35)`; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = G.border; e.currentTarget.style.background = G.card; e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
             >
-              <div style={{ width:36, height:36, borderRadius:10, background:`${color}18`, border:`1px solid ${color}33`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <div style={{ width:38, height:38, borderRadius:11, background:`${color}14`, border:`1px solid ${color}22`, display:"flex", alignItems:"center", justifyContent:"center" }}>
                 <Icon name={icon} size={18} color={color} />
               </div>
-              <div style={{ fontSize:13, fontWeight:800, color:G.text }}>{label}</div>
-              <div style={{ fontSize:11, color:G.textSub, lineHeight:1.3 }}>{sub}</div>
+              <div style={{ fontSize:13, fontWeight:800, color:G.text, lineHeight:1.2 }}>{label}</div>
+              <div style={{ fontSize:11, color:G.textSub, lineHeight:1.4 }}>{sub}</div>
             </button>
           ))}
         </div>
