@@ -1679,6 +1679,13 @@ function TpScreenshotRow({urls}){
 
 // ── ADMIN PANEL PAGE ──────────────────────────────────────────────────────────
 function AdminPanel({st,update,addItem,removeItem,onClose}){
+  const[toast,setToast]=React.useState(null);
+  const toastTimer=React.useRef();
+  const showToast=(msg,type="ok")=>{
+    clearTimeout(toastTimer.current);
+    setToast({msg,type});
+    toastTimer.current=setTimeout(()=>setToast(null),3200);
+  };
   const[tab,setTab]=useState("bias");
   const[wb,setWb]=useState(st.weeklyBias);
   const[db,setDb]=useState(st.dailyBias);
@@ -1816,7 +1823,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
 
       setKycList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setExpanded(null);
-    }catch(e){alert("Error: "+e.message);}
+    }catch(e){showToast("Error: "+e.message,"err");}
     finally{setKycBusy(b=>({...b,[id]:false}));}
   };
 
@@ -1894,8 +1901,8 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
       }catch{}
       setTradeList(l=>l.map(r=>r.id===tradeId?{...r,status:newStatus}:r));
       setTradeExpanded(null);
-      alert("✓ Trade updated to: "+newStatus);
-    }catch(e){alert("Error: "+e.message);}
+      showToast("Trade updated to: "+newStatus,"ok");
+    }catch(e){showToast("Error: "+e.message,"err");}
   };
 
   const fetchTp=async(filter)=>{
@@ -1922,8 +1929,8 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
       }
       setTpList(l=>l.map(r=>r.id===id?{...r,status,...extra}:r));
       setTpExpanded(null);
-      alert("✓ Done!");
-    }catch(e){alert("Error: "+e.message);}
+      showToast("Done ✓","ok");
+    }catch(e){showToast("Error: "+e.message,"err");}
     finally{setTpBusy(b=>({...b,[id]:false}));}
   };
 
@@ -1935,7 +1942,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
     </div>
   );
 
-  return(
+  return(<>
     <div style={{minHeight:"100vh",background:G.bgDeep,paddingBottom:40}}>
       {/* Header */}
       <div style={{padding:"14px 20px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:G.bgDeep,zIndex:10}}>
@@ -1955,17 +1962,61 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <div style={{height:10}}/>
           <FI value={wb.updatedAt} onChange={v=>setWb(b=>({...b,updatedAt:v}))} placeholder="Updated label e.g. Monday, May 5" style={{marginBottom:9}}/>
           <FI value={wb.updatedNote} onChange={v=>setWb(b=>({...b,updatedNote:v}))} placeholder="Wednesday update note (optional)" style={{marginBottom:11}}/>
-          <button onClick={()=>imgRef.current.click()} style={{width:"100%",padding:12,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:wb.image?G.green:G.textSub,fontSize:13,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>{wb.image?"Chart uploaded — tap to change":"Upload TradingView chart"}</button>
-          <input ref={imgRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setWb(b=>({...b,image:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
-          {wb.image&&<button onClick={()=>setWb(b=>({...b,image:null}))} style={{background:"none",border:"none",color:G.red,fontSize:12,cursor:"pointer",marginBottom:10,fontFamily:"inherit"}}>Remove image</button>}
-          <Btn onClick={()=>{update("weeklyBias",{...wb,postedAt:new Date().toISOString()});alert("Weekly bias saved!");}} style={{width:"100%"}}>Save Weekly Bias</Btn>
+          <button onClick={()=>imgRef.current.click()} style={{width:"100%",padding:12,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:wb._imgFile||wb.image?G.green:G.textSub,fontSize:13,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>
+            {wb._imgFile?"✓ New chart selected — will upload on save":wb.image?"✓ Chart uploaded — tap to change":"Upload TradingView chart"}
+          </button>
+          <input ref={imgRef} type="file" accept="image/*" onChange={e=>{
+            const f=e.target.files[0];
+            if(!f)return;
+            setWb(b=>({...b,_imgFile:f}));
+            // Show preview only — NOT stored as base64
+            const url=URL.createObjectURL(f);
+            setWb(b=>({...b,_imgFile:f,_imgPreview:url}));
+          }} style={{display:"none"}}/>
+          {(wb._imgPreview||wb.image)&&(
+            <div style={{marginBottom:9,position:"relative"}}>
+              <img src={wb._imgPreview||wb.image} style={{width:"100%",borderRadius:8,maxHeight:160,objectFit:"cover"}}/>
+              <button onClick={()=>setWb(b=>({...b,image:null,_imgFile:null,_imgPreview:null}))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:"50%",width:24,height:24,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+            </div>
+          )}
+          <Btn onClick={async()=>{
+            let imageUrl=wb.image||null;
+            // Upload new image file to Supabase Storage if selected
+            if(wb._imgFile){
+              try{
+                const token=localStorage.getItem("re_access_token");
+                const ext=wb._imgFile.name.split(".").pop()||"jpg";
+                const path=`bias/weekly_${Date.now()}.${ext}`;
+                const bucket="bias-charts";
+                const upRes=await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,{
+                  method:"POST",
+                  headers:{"Authorization":`Bearer ${token}`,"apikey":SUPABASE_ANON_KEY,"Content-Type":wb._imgFile.type,"x-upsert":"true"},
+                  body:wb._imgFile,
+                });
+                if(upRes.ok){
+                  imageUrl=`${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+                }else{
+                  // Fallback: store without image rather than storing base64
+                  imageUrl=null;
+                  showToast("Image upload failed — bias saved without chart","warn");
+                }
+              }catch{
+                imageUrl=null;
+                showToast("Image upload failed — bias saved without chart","warn");
+              }
+            }
+            const saved={...wb,image:imageUrl,_imgFile:undefined,_imgPreview:undefined,postedAt:new Date().toISOString()};
+            update("weeklyBias",saved);
+            setWb(saved);
+            showToast("Weekly bias saved ✓","ok");
+          }} style={{width:"100%"}}>Save Weekly Bias</Btn>
           <Div/>
           <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Daily Bias</div>
           <DB val={db.direction} onChange={d=>setDb(b=>({...b,direction:d,dayLabel:`${d} Day`}))}/>
           <FTA value={db.body} onChange={v=>setDb(b=>({...b,body:v}))} placeholder="Daily note..." rows={3}/>
           <div style={{height:10}}/>
           <FI value={db.updatedAt} onChange={v=>setDb(b=>({...b,updatedAt:v}))} placeholder="Updated at e.g. Today, 08:00 AM" style={{marginBottom:11}}/>
-          <Btn onClick={()=>{update("dailyBias",{...db,postedAt:new Date().toISOString()});alert("Daily bias saved!");}} style={{width:"100%"}}>Save Daily Bias</Btn>
+          <Btn onClick={()=>{update("dailyBias",{...db,postedAt:new Date().toISOString()});showToast("Daily bias saved ✓","ok");}} style={{width:"100%"}}>Save Daily Bias</Btn>
         </>}
 
         {tab==="events"&&<>
@@ -1984,8 +2035,8 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               <FI value={sig.posted} onChange={v=>setSig(s=>({...s,posted:v}))} placeholder="Post label e.g. Posted tonight before release" style={{marginBottom:9}}/>
               <FI value={sig.result} onChange={v=>setSig(s=>({...s,result:v}))} placeholder="Post-event result (fill after release)" style={{marginBottom:11}}/>
               <div style={{display:"flex",gap:9,marginBottom:22}}>
-                <Btn onClick={()=>{update(key,{...sig,active:true,postedAt:new Date().toISOString()});setSig(s=>({...s,active:true}));alert("Signal activated!");}} style={{flex:1}}>Activate</Btn>
-                <Btn variant="danger" onClick={()=>{update(key,{...sig,active:false});setSig(s=>({...s,active:false}));alert("Deactivated.");}} style={{flex:1}}>Deactivate</Btn>
+                <Btn onClick={()=>{update(key,{...sig,active:true,postedAt:new Date().toISOString()});setSig(s=>({...s,active:true}));showToast("Signal activated ✓","ok");}} style={{flex:1}}>Activate</Btn>
+                <Btn variant="danger" onClick={()=>{update(key,{...sig,active:false});setSig(s=>({...s,active:false}));showToast("Signal deactivated","ok");}} style={{flex:1}}>Deactivate</Btn>
               </div>
               <Div/>
             </div>
@@ -2000,7 +2051,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <select value={nn.tag} onChange={e=>setNn(n=>({...n,tag:e.target.value}))} style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:11,color:G.text,fontSize:13,outline:"none",marginBottom:11}}>
             {["Gold","USD","FOMC","NFP","Risk","Macro"].map(t=><option key={t} value={t}>{t}</option>)}
           </select>
-          <Btn onClick={()=>{if(!nn.headline)return;addItem("news",{...nn,id:Date.now(),time:"Just now"});setNn({headline:"",take:"",tag:"Gold"});alert("News posted!");}} style={{width:"100%",marginBottom:22}}>Post News</Btn>
+          <Btn onClick={()=>{if(!nn.headline)return;addItem("news",{...nn,id:Date.now(),time:"Just now"});setNn({headline:"",take:"",tag:"Gold"});showToast("News posted ✓","ok");}} style={{width:"100%",marginBottom:22}}>Post News</Btn>
           {st.news.map(n=>(
             <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:12,color:G.text,flex:1,marginRight:9,lineHeight:1.5}}>{n.headline}</div>
@@ -2016,7 +2067,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <select value={no.type} onChange={e=>setNo(n=>({...n,type:e.target.value}))} style={{width:"100%",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:11,color:G.text,fontSize:13,outline:"none",marginBottom:11}}>
             {["announcement","exchange","promo"].map(t=><option key={t} value={t}>{t}</option>)}
           </select>
-          <Btn onClick={()=>{if(!no.text)return;addItem("notices",{...no,id:Date.now(),time:"Just now"});setNo({text:"",type:"announcement"});alert("Notice posted!");}} style={{width:"100%",marginBottom:22}}>Post Notice</Btn>
+          <Btn onClick={()=>{if(!no.text)return;addItem("notices",{...no,id:Date.now(),time:"Just now"});setNo({text:"",type:"announcement"});showToast("Notice posted ✓","ok");}} style={{width:"100%",marginBottom:22}}>Post Notice</Btn>
           {st.notices.map(n=>(
             <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:11,marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:12,color:G.text,flex:1,marginRight:9}}>{n.text}</div>
@@ -2039,7 +2090,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             ))}
           </div>
           <FI value={aw.note} onChange={v=>setAw(a=>({...a,note:v}))} placeholder="Result note" style={{marginBottom:11}}/>
-          <Btn onClick={()=>{if(!aw.week)return;addItem("archiveWeeks",{...aw,id:Date.now()});setAw({week:"",bias:"Bullish",result:"green",note:""});alert("Week added!");}} style={{width:"100%"}}>Add to Archive</Btn>
+          <Btn onClick={()=>{if(!aw.week)return;addItem("archiveWeeks",{...aw,id:Date.now()});setAw({week:"",bias:"Bullish",result:"green",note:""});showToast("Week added to archive ✓","ok");}} style={{width:"100%"}}>Add to Archive</Btn>
           <Div/>
           <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>Archive ({st.archiveWeeks.length} weeks)</div>
           {st.archiveWeeks.map(w=>(
@@ -2089,7 +2140,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             if(!newEa.name)return;
             addItem("eas",{...newEa,id:Date.now()});
             setNewEa({name:"",tagline:"",shortDesc:"",body:"",winRate:"",pairs:"",timeframe:"",price:"",image:null,images:[]});
-            alert("EA posted!");
+            showToast("EA posted ✓","ok");
           }} style={{width:"100%",marginBottom:22}}>Post EA</Btn>
           <Div/>
           <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>Posted EAs ({(st.eas||[]).length})</div>
@@ -2122,10 +2173,10 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           <input ref={bookCoverRef} type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setNewBook(b=>({...b,cover:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
           {newBook.cover&&<img src={newBook.cover} style={{width:80,height:110,objectFit:"cover",borderRadius:8,marginBottom:9,display:"block"}}/>}
           <Btn onClick={()=>{
-            if(!newBook.title||!newBook.pdfUrl)return alert("Title and PDF URL required.");
+            if(!newBook.title||!newBook.pdfUrl)return showToast("Title and PDF URL required","err");
             addItem("books",{...newBook,id:Date.now()});
             setNewBook({title:"",author:"",desc:"",category:"",pdfUrl:"",cover:null});
-            alert("Book posted!");
+            showToast("Book posted ✓","ok");
           }} style={{width:"100%",marginBottom:22}}>Post Book</Btn>
           <Div/>
           <div style={{fontSize:11,color:G.textSub,marginBottom:10}}>Posted Books ({(st.books||[]).length})</div>
@@ -2476,6 +2527,22 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
 
       </div>
     </div>
+
+    {/* Toast notification */}
+    {toast&&(
+      <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",zIndex:9999,
+        background:toast.type==="ok"?G.green:toast.type==="warn"?G.gold:G.red,
+        color:"#000",padding:"11px 20px",borderRadius:28,
+        fontSize:13,fontWeight:800,
+        boxShadow:"0 8px 32px rgba(0,0,0,0.4)",
+        animation:"slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+        display:"flex",alignItems:"center",gap:8,whiteSpace:"nowrap",
+        maxWidth:"90vw",
+      }}>
+        {toast.type==="ok"?"✓":toast.type==="warn"?"⚠":"✕"} {toast.msg}
+      </div>
+    )}
+    </>
   );
 }
 
@@ -3187,6 +3254,9 @@ export default function App(){
     setOpenGroup(null);
     setShowProfileMenu(false);
     window.location.hash=p==="home"?"":"/"+p;
+    window.scrollTo({top:0,behavior:"smooth"});
+    const titles={home:"RegimeEdge",weekly:"Weekly Bias · RegimeEdge",macro:"Macro · RegimeEdge",events:"NFP & FOMC · RegimeEdge",news:"News · RegimeEdge",exchange:"Exchange · RegimeEdge",archive:"Archive · RegimeEdge",terminal:"Terminal · RegimeEdge",strategy:"Strategy · RegimeEdge",profile:"Profile · RegimeEdge",eas:"Trading EAs · RegimeEdge",books:"Library · RegimeEdge"};
+    document.title=titles[p]||"RegimeEdge";
   };
 
   // Listen to browser back/forward (hash changes)
@@ -3474,7 +3544,9 @@ export default function App(){
                   </div>
                 </div>
               ):(
-                pages[page]||pages.home
+                <div key={page} style={{animation:"fadeUp 0.25s ease both"}}>
+                  {pages[page]||pages.home}
+                </div>
               )}
 
               {/* Footer */}
