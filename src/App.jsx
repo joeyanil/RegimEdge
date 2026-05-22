@@ -2674,13 +2674,19 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
 }
 
 // ── SOCIAL ICONS ──────────────────────────────────────────────────────────────
-function SocialLink({href,label,color,icon}){
+const SOCIAL_SVGS={
+  telegram:`<path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/>`,
+  youtube:`<path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/>`,
+};
+
+function SocialLink({href,label,color,svgKey}){
   const[hov,setHov]=useState(false);
   return(
     <a href={href} target="_blank" rel="noreferrer"
       onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:20,border:`1px solid ${hov?color:G.border}`,background:hov?`${color}12`:"none",color:hov?color:G.textSub,fontSize:12,textDecoration:"none",transition:"all 0.25s",fontWeight:600}}>
-      <span style={{fontSize:15}}>{icon}</span>{label}
+      style={{display:"flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:22,border:`1px solid ${hov?color+"66":G.border}`,background:hov?`${color}12`:"transparent",color:hov?color:G.textSub,fontSize:12,textDecoration:"none",transition:"all 0.22s",fontWeight:700,letterSpacing:0.2}}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill={hov?color:G.textSub} style={{transition:"fill 0.22s",flexShrink:0}} dangerouslySetInnerHTML={{__html:SOCIAL_SVGS[svgKey]||""}}/>
+      {label}
     </a>
   );
 }
@@ -3683,8 +3689,8 @@ export default function App(){
                   <div style={{fontSize:11,color:G.textDim,lineHeight:1.6}}>Macro intelligence. Not signals — reasoning.</div>
                 </div>
                 <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-                  <SocialLink href="https://t.me/RegimeEdge" label="Telegram" color="#229ED9" icon="✈"/>
-                  <SocialLink href="https://www.youtube.com/@RegimeEdge" label="YouTube" color="#FF0000" icon="▶"/>
+                  <SocialLink href="https://t.me/RegimeEdge" label="Telegram" color="#229ED9" svgKey="telegram"/>
+                  <SocialLink href="https://www.youtube.com/@RegimeEdge" label="YouTube" color="#FF0000" svgKey="youtube"/>
                 </div>
                 <div style={{height:1,background:G.border,marginBottom:14}}/>
                 <div style={{fontSize:10,color:G.textDim,textAlign:"center",letterSpacing:0.3}}>

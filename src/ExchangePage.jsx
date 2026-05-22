@@ -488,7 +488,17 @@ function KYCScreen({ user, kyc, onSubmitted, onBack }) {
                 transition:"all 0.3s",
               }}
             >
-              {tgBotOpened ? "✈ Opened — tap again if needed" : "✈ Open Telegram & Start Bot"}
+              {tgBotOpened ? (
+                <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
+                  Opened — tap again if needed
+                </span>
+              ) : (
+                <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
+                  Open Telegram & Start Bot
+                </span>
+              )}
             </a>
 
             {tgBotOpened && (
@@ -3014,75 +3024,67 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
           ))}
         </div>
 
-        {/* How it works */}
-        <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.r, padding:16, marginBottom:14 }}>
-          <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:16 }}>How It Works</div>
-          {[
-            { icon:"list", label:"Browse listings", desc:"Find a seller with your rate and payment method", color:G.blue },
-            { icon:"lock", label:"Lock in trade", desc:"Tap Buy Now — USDT is reserved for 1 hour", color:G.gold },
-            { icon:"wallet", label:"Pay the seller", desc:"Transfer ETB + platform fee, upload both screenshots", color:G.green },
-            { icon:"zap", label:"Receive USDT", desc:"Seller verifies payments and releases USDT to you", color:G.purple },
-          ].map(({ icon, label, desc, color }, i, arr) => (
-            <div key={label} style={{ display:"flex", gap:12, position:"relative" }}>
-              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", background:`${color}18`, border:`1.5px solid ${color}55`, display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
-                  <Icon name={icon} size={14} color={color} />
+        {/* How it works — upgraded */}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:9, color:G.textSub, letterSpacing:2.5, textTransform:"uppercase", marginBottom:14, fontWeight:700 }}>How It Works</div>
+          <div style={{ position:"relative" }}>
+            <div style={{ position:"absolute", left:19, top:24, bottom:24, width:1, background:`linear-gradient(${G.blue}44,${G.purple}22)`, zIndex:0 }}/>
+            {[
+              { svg:`<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>`, label:"Browse listings", desc:"Find a seller at your rate and payment method", color:G.blue },
+              { svg:`<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`, label:"Lock in trade", desc:"Tap Buy Now — USDT reserved for 1 hour", color:G.gold },
+              { svg:`<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>`, label:"Pay the seller", desc:"Transfer ETB + platform fee, upload both screenshots", color:G.green },
+              { svg:`<polyline points="13 2 13 9 20 9"/><path d="M20 14.5v3.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 0 2-2h7l5 5z"/>`, label:"Receive USDT", desc:"Seller verifies and releases USDT to your wallet", color:G.purple },
+            ].map(({ svg, label, desc, color }, i, arr) => (
+              <div key={label} style={{ display:"flex", gap:14, position:"relative", zIndex:1, marginBottom:i<arr.length-1?4:0 }}>
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0 }}>
+                  <div style={{ width:38, height:38, borderRadius:"50%", background:`${color}12`, border:`1.5px solid ${color}44`, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 14px ${color}14` }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html:svg }}/>
+                  </div>
+                  {i<arr.length-1&&<div style={{ width:1, height:28, background:`${color}22`, marginTop:3 }}/>}
                 </div>
-                {i < arr.length - 1 && <div style={{ width:1.5, flex:1, background:`linear-gradient(${color}55,${arr[i + 1].color}22)`, margin:"3px 0", minHeight:24 }} />}
+                <div style={{ flex:1, background:G.card, border:`1px solid ${G.border}`, borderLeft:`2px solid ${color}33`, borderRadius:G.rs, padding:"11px 14px", marginBottom:i<arr.length-1?6:0 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:G.text, marginBottom:3 }}>{label}</div>
+                  <div style={{ fontSize:11, color:G.textSub, lineHeight:1.55 }}>{desc}</div>
+                </div>
               </div>
-              <div style={{ paddingBottom:i < arr.length - 1 ? 18 : 0, paddingTop:4 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:G.text, marginBottom:2 }}>{label}</div>
-                <div style={{ fontSize:12, color:G.textSub, lineHeight:1.4 }}>{desc}</div>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        {/* Exchange rules */}
-        <div style={{ background:G.goldBg, border:`1px solid ${G.gold}22`, borderRadius:G.r, padding:"14px 16px" }}>
-          <div style={{ fontSize:9, color:G.gold, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Exchange Rules</div>
+        {/* Exchange rules — upgraded */}
+        <div style={{ background:`linear-gradient(135deg,${G.gold}07,${G.card})`, border:`1px solid ${G.gold}22`, borderRadius:G.r, overflow:"hidden", marginBottom:14 }}>
+          <div style={{ padding:"12px 16px 10px", borderBottom:`1px solid ${G.gold}14`, display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ width:6, height:6, borderRadius:"50%", background:G.gold, animation:"pulseDot 2s ease-in-out infinite" }}/>
+            <div style={{ fontSize:9, color:G.gold, letterSpacing:2.5, textTransform:"uppercase", fontWeight:700 }}>Exchange Rules</div>
+          </div>
           {[
-            ["Payment Window", "1 hour to complete payment"],
-            ["Trade Size", "$5 – $500 USDT per trade"],
-            ["KYC Required", "Both parties must be verified"],
-            ["Fraud Policy", "Permanent ban + legal action"],
-            ["Disputes", "Our team resolves within 2 hours via Telegram"],
-          ].map(([l, v]) => (
-            <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:`1px solid ${G.border}22` }}>
+            ["Payment Window","1 hour to complete",G.gold],
+            ["Trade Size","$5 – $500 USDT",G.text],
+            ["KYC Required","Both parties must verify",G.green],
+            ["Fraud Policy","Permanent ban + legal action",G.red],
+            ["Disputes","Resolved within 2 hours via Telegram",G.blue],
+          ].map(([l,v,c],i,arr)=>(
+            <div key={l} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"11px 16px", borderBottom:i<arr.length-1?`1px solid ${G.border}22`:"none", background:i%2===0?"transparent":`${G.border}08` }}>
               <span style={{ fontSize:12, color:G.textSub }}>{l}</span>
-              <span style={{ fontSize:12, color:G.text, fontWeight:600, maxWidth:"55%", textAlign:"right" }}>{v}</span>
+              <span style={{ fontSize:12, color:c, fontWeight:700, maxWidth:"55%", textAlign:"right" }}>{v}</span>
             </div>
           ))}
         </div>
 
         {/* Full Guide CTA */}
-        <button
-          onClick={() => setScreen("guide")}
-          style={{
-            width:"100%", marginTop:14,
-            background:`linear-gradient(135deg,rgba(96,165,250,0.07) 0%,${G.card} 100%)`,
-            border:`1px solid rgba(96,165,250,0.25)`,
-            borderRadius:G.r, padding:"15px 16px",
-            display:"flex", alignItems:"center", justifyContent:"space-between",
-            cursor:"pointer", fontFamily:"inherit",
-            boxShadow:"0 2px 12px rgba(96,165,250,0.06)",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(96,165,250,0.5)"; e.currentTarget.style.background = `linear-gradient(135deg,rgba(96,165,250,0.12) 0%,${G.card} 100%)`; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(96,165,250,0.25)"; e.currentTarget.style.background = `linear-gradient(135deg,rgba(96,165,250,0.07) 0%,${G.card} 100%)`; }}
-        >
+        <button onClick={() => setScreen("guide")} style={{ width:"100%", background:G.card, border:`1px solid ${G.blue}33`, borderRadius:G.r, padding:"15px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", fontFamily:"inherit", transition:"all 0.2s", marginBottom:0 }}
+          onMouseEnter={e=>{ e.currentTarget.style.borderColor=`${G.blue}66`; e.currentTarget.style.background=`${G.blue}08`; e.currentTarget.style.transform="translateY(-1px)"; }}
+          onMouseLeave={e=>{ e.currentTarget.style.borderColor=`${G.blue}33`; e.currentTarget.style.background=G.card; e.currentTarget.style.transform="none"; }}>
           <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:40, height:40, borderRadius:12, background:"rgba(96,165,250,0.12)", border:"1px solid rgba(96,165,250,0.25)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              <Icon name="bookOpen" size={20} color="#60a5fa" />
+            <div style={{ width:40, height:40, borderRadius:12, background:`${G.blue}10`, border:`1px solid ${G.blue}22`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={G.blue} strokeWidth="1.8" strokeLinecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
             </div>
             <div style={{ textAlign:"left" }}>
               <div style={{ fontSize:14, fontWeight:800, color:G.text, marginBottom:2 }}>Full P2P Guide</div>
-              <div style={{ fontSize:11, color:G.textSub, lineHeight:1.3 }}>How to buy, sell, handle disputes & stay safe</div>
+              <div style={{ fontSize:11, color:G.textSub }}>How to buy, sell, handle disputes & stay safe</div>
             </div>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
-            <span style={{ fontSize:12, fontWeight:700, color:"#60a5fa" }}>Read</span>
-            <span style={{ fontSize:14, color:"#60a5fa" }}>→</span>
-          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.blue} strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
         </button>
 
       </div>
@@ -3503,48 +3505,84 @@ function GuidePage({ onBack }) {
 }
 
 function NotLoggedIn({ onSignIn, onGuide }) {
-  return (
-    <div style={{ padding:"32px 18px" }}>
-      <SH label="Trusted P2P" title="RegimeEdge Exchange" sub="Ethiopia's most trusted P2P USDT exchange" />
-      <GlowCard color={G.gold} style={{ marginBottom:18, textAlign:"center" }}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
-          <Icon name="lock" size={44} color={G.gold} />
-        </div>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:G.gold, fontWeight:900, marginBottom:10 }}>Sign In Required</div>
-        <p style={{ color:G.textSub, fontSize:13, lineHeight:1.7, margin:"0 0 18px" }}>
-          Sign in to access the P2P exchange, buy and sell USDT with verified traders.
-        </p>
-        {onSignIn && (
-          <button onClick={onSignIn} style={{
-            background:G.gold, border:"none", borderRadius:G.rs,
-            padding:"13px 32px", color:"#000", fontSize:14,
-            fontWeight:800, cursor:"pointer", fontFamily:"inherit",
-            boxShadow:"0 4px 16px rgba(212,175,55,0.3)",
-          }}>Sign In / Create Account</button>
-        )}
-        {onGuide && (
-          <button onClick={onGuide} style={{ marginTop:10, width:"100%", background:"none", border:`1px solid ${G.border}`, borderRadius:G.rs, padding:"11px 0", color:G.textSub, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-            📖 Read the Full P2P Guide
-          </button>
-        )}
-      </GlowCard>
+  const steps = [
+    { icon:`<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>`, label:"Verify Identity", desc:"Submit your Ethiopian ID for KYC", color:G.green },
+    { icon:`<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>`, label:"Browse Listings", desc:"Find a seller at your rate", color:G.blue },
+    { icon:`<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>`, label:"Pay ETB", desc:"Transfer to seller + platform fee", color:G.gold },
+    { icon:`<polyline points="20 6 9 17 4 12"/>`, label:"Receive USDT", desc:"Seller releases instantly to your wallet", color:"#a78bfa" },
+  ];
 
-      {/* Preview of how it works */}
-      <div style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.r, padding:16 }}>
-        <div style={{ fontSize:9, color:G.textSub, letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>How RegimeEdge Exchange Works</div>
-        {[
-          ["🪪", "Verify your identity with a real Ethiopian ID"],
-          ["📋", "Browse listings or post your USDT to sell"],
-          ["💸", "Buyer pays ETB to seller + small platform fee"],
-          ["✅", "Seller confirms and releases USDT instantly"],
-        ].map(([icon, text], i) => (
-          <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:12 }}>
-            <div style={{ width:28, height:28, borderRadius:"50%", background:G.goldBg, border:`1px solid ${G.gold}33`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:13 }}>
-              {icon}
-            </div>
-            <p style={{ color:G.textSub, fontSize:13, margin:0, lineHeight:1.5 }}>{text}</p>
+  return (
+    <div style={{ paddingBottom:40 }}>
+      {/* Hero */}
+      <div style={{ background:`linear-gradient(160deg,rgba(212,175,55,0.1) 0%,rgba(10,11,13,0.9) 55%)`, borderBottom:`1px solid ${G.border}`, padding:"36px 20px 30px", position:"relative", overflow:"hidden" }}>
+        {/* Grid texture */}
+        <div style={{ position:"absolute", inset:0, backgroundImage:`linear-gradient(${G.border}15 1px,transparent 1px),linear-gradient(90deg,${G.border}15 1px,transparent 1px)`, backgroundSize:"28px 28px", pointerEvents:"none", opacity:0.5 }}/>
+        <div style={{ position:"relative" }}>
+          <div style={{ fontSize:9, color:G.gold, letterSpacing:3, textTransform:"uppercase", marginBottom:12, fontWeight:700 }}>Trusted P2P</div>
+          <h1 style={{ fontFamily:"'Playfair Display',serif", fontSize:30, color:G.text, margin:"0 0 10px", fontWeight:900, lineHeight:1.05 }}>
+            Regime<span style={{ color:G.gold }}>Edge</span> Exchange
+          </h1>
+          <p style={{ color:G.textSub, fontSize:13, margin:"0 0 24px", lineHeight:1.65 }}>Ethiopia's most trusted P2P USDT exchange. KYC-verified sellers, escrow protection, instant settlement.</p>
+
+          {/* Trust stats */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:24 }}>
+            {[["KYC Only","All traders verified"],["Escrow","USDT locked until paid"],["2hr","Dispute resolution"]].map(([v,l])=>(
+              <div key={v} style={{ background:"rgba(255,255,255,0.04)", border:`1px solid ${G.border}`, borderRadius:10, padding:"8px 12px", display:"flex", flexDirection:"column" }}>
+                <span style={{ fontSize:13, fontWeight:900, color:G.gold, fontFamily:"'Playfair Display',serif" }}>{v}</span>
+                <span style={{ fontSize:10, color:G.textSub, marginTop:2 }}>{l}</span>
+              </div>
+            ))}
           </div>
-        ))}
+
+          {/* CTA */}
+          <button onClick={onSignIn} style={{ width:"100%", padding:"15px 0", background:`linear-gradient(135deg,${G.goldLight},${G.gold})`, border:"none", borderRadius:G.rs, color:"#000", fontSize:14, fontWeight:900, cursor:"pointer", fontFamily:"inherit", boxShadow:`0 8px 28px rgba(212,175,55,0.35)`, letterSpacing:0.3, marginBottom:10 }}>
+            Sign In / Create Account →
+          </button>
+          {onGuide&&(
+            <button onClick={onGuide} style={{ width:"100%", padding:"12px 0", background:"transparent", border:`1px solid ${G.border}`, borderRadius:G.rs, color:G.textSub, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              Read the Full P2P Guide
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* How It Works */}
+      <div style={{ padding:"24px 20px 0" }}>
+        <div style={{ fontSize:9, color:G.textSub, letterSpacing:2.5, textTransform:"uppercase", marginBottom:16, fontWeight:700 }}>How It Works</div>
+
+        <div style={{ position:"relative" }}>
+          {/* Connecting line */}
+          <div style={{ position:"absolute", left:20, top:28, bottom:28, width:1, background:`linear-gradient(${G.gold}44,${G.gold}11)`, zIndex:0 }}/>
+
+          {steps.map((s,i)=>(
+            <div key={i} style={{ display:"flex", gap:14, marginBottom:i<steps.length-1?16:0, position:"relative", zIndex:1, animation:`fadeUp 0.35s ${i*0.07}s ease both` }}>
+              {/* Icon circle */}
+              <div style={{ width:40, height:40, borderRadius:"50%", background:`${s.color}12`, border:`1.5px solid ${s.color}44`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:`0 0 16px ${s.color}18` }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <g dangerouslySetInnerHTML={{ __html:s.icon }}/>
+                </svg>
+              </div>
+              {/* Content */}
+              <div style={{ flex:1, background:G.card, border:`1px solid ${G.border}`, borderLeft:`2px solid ${s.color}44`, borderRadius:G.rs, padding:"12px 15px" }}>
+                <div style={{ fontSize:13, fontWeight:800, color:G.text, marginBottom:3 }}>{s.label}</div>
+                <div style={{ fontSize:12, color:G.textSub, lineHeight:1.55 }}>{s.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Security note */}
+        <div style={{ marginTop:20, background:G.surface, border:`1px solid ${G.border}`, borderRadius:G.r, padding:"14px 16px", display:"flex", alignItems:"flex-start", gap:12 }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:`${G.green}10`, border:`1px solid ${G.green}22`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.green} strokeWidth="2" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <div style={{ fontSize:12, fontWeight:800, color:G.text, marginBottom:4 }}>Protected by KYC + Escrow</div>
+            <p style={{ color:G.textSub, fontSize:12, margin:0, lineHeight:1.6 }}>All traders are identity-verified. USDT is locked in escrow until you confirm payment received. Disputes resolved within 2 hours.</p>
+          </div>
+        </div>
       </div>
     </div>
   );
