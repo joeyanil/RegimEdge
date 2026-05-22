@@ -789,44 +789,100 @@ const HomePage = React.memo(function HomePage({st,setPage}){
 // ── WEEKLY BIAS ───────────────────────────────────────────────────────────────
 const WeeklyPage = React.memo(function WeeklyPage({st}){
   const c=st.weeklyBias.direction==="Bullish"?G.green:st.weeklyBias.direction==="Bearish"?G.red:G.gold;
+  const dc=st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold;
   const[zoomedImg,setZoomedImg]=useState(false);
+  const hasWeekly=st.weeklyBias.body||st.weeklyBias.dayLabel;
+  const hasDaily=st.dailyBias.body||st.dailyBias.dayLabel;
+
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="Market Analysis" title="Bias Report" sub="Posted Monday · May update Wednesday"/>
-      <GlowCard color={c} style={{marginBottom:18}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <BiasTag d={st.weeklyBias.direction}/>
-          <div style={{fontSize:11,color:G.textSub,display:"flex",alignItems:"center",gap:4}}><span style={{color:G.textDim,fontSize:10}}>·</span>{st.weeklyBias.updatedAt}</div>
+    <div style={{paddingBottom:32}}>
+      {/* Page hero */}
+      <div style={{background:`linear-gradient(160deg,${c}0d 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-20,right:-10,fontSize:120,color:c,opacity:0.04,fontWeight:900,fontFamily:"'Playfair Display',serif",lineHeight:1,pointerEvents:"none",userSelect:"none"}}>
+          {st.weeklyBias.direction==="Bullish"?"↑":st.weeklyBias.direction==="Bearish"?"↓":"↔"}
         </div>
-        <div style={{fontSize:24,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif",marginBottom:14}}>{st.weeklyBias.dayLabel}</div>
-        {st.weeklyBias.updatedNote?<div style={{fontSize:12,color:G.gold,marginBottom:14,padding:"10px 14px",background:G.goldBg,borderRadius:8,borderLeft:`3px solid ${G.gold}`}}>Wednesday Update: {st.weeklyBias.updatedNote}</div>:null}
-        <div style={{marginBottom:16}}>{renderBody(st.weeklyBias.body)}</div>
-        {st.weeklyBias.image&&(
-          <>
-            <img src={st.weeklyBias.image} onClick={()=>setZoomedImg(true)} style={{width:"100%",borderRadius:12,marginBottom:16,cursor:"zoom-in",display:"block"}}/>
-            {zoomedImg&&(
-              <div onClick={()=>setZoomedImg(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <img src={st.weeklyBias.image} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>
+        <div style={{fontSize:10,color:c,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Market Analysis</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>Bias Report</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.6}}>Posted Monday · May update Wednesday</p>
+      </div>
+
+      <div style={{padding:"24px 22px 0"}}>
+        {/* Weekly Bias Card */}
+        {!hasWeekly?(
+          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"40px 24px",textAlign:"center",marginBottom:16}}>
+            <div style={{width:56,height:56,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+              <span style={{fontSize:24}}>📊</span>
+            </div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:G.text,marginBottom:8,fontWeight:800}}>No Bias Posted Yet</div>
+            <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Weekly bias is posted every Monday. Check back then.</p>
+          </div>
+        ):(
+          <GlowCard color={c} style={{marginBottom:16,position:"relative",overflow:"hidden"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:3,height:16,background:c,borderRadius:2}}/>
+                <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>Weekly Bias</div>
+              </div>
+              <BiasTag d={st.weeklyBias.direction}/>
+            </div>
+            <div style={{fontSize:26,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif",marginBottom:5,lineHeight:1.1}}>{st.weeklyBias.dayLabel}</div>
+            <div style={{fontSize:11,color:G.textDim,marginBottom:14}}>{st.weeklyBias.updatedAt}</div>
+            {st.weeklyBias.updatedNote&&(
+              <div style={{fontSize:12,color:G.gold,marginBottom:14,padding:"10px 14px",background:G.goldBg,borderRadius:8,borderLeft:`3px solid ${G.gold}`,display:"flex",alignItems:"flex-start",gap:8}}>
+                <span style={{flexShrink:0}}>⚡</span>
+                <span>Wednesday Update: {st.weeklyBias.updatedNote}</span>
               </div>
             )}
-          </>
+            <div style={{marginBottom:st.weeklyBias.image?16:0}}>{renderBody(st.weeklyBias.body)}</div>
+            {st.weeklyBias.image&&(
+              <>
+                <div style={{position:"relative",borderRadius:12,overflow:"hidden",marginBottom:14,cursor:"zoom-in"}} onClick={()=>setZoomedImg(true)}>
+                  <img src={st.weeklyBias.image} style={{width:"100%",display:"block",borderRadius:12}}/>
+                  <div style={{position:"absolute",bottom:10,right:10,background:"rgba(0,0,0,0.7)",borderRadius:8,padding:"4px 10px",fontSize:11,color:"#fff",display:"flex",alignItems:"center",gap:5}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+                    Zoom
+                  </div>
+                </div>
+                {zoomedImg&&(
+                  <div onClick={()=>setZoomedImg(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                    <img src={st.weeklyBias.image} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:8}}/>
+                    <button style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"50%",width:36,height:36,color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                  </div>
+                )}
+              </>
+            )}
+            <div style={{display:"flex",alignItems:"center",gap:8,paddingTop:14,borderTop:`1px solid ${G.border}`,fontSize:11,color:G.textDim}}>
+              <div style={{width:6,height:6,borderRadius:"50%",background:c,animation:"pulseDot 2s ease-in-out infinite"}}/>
+              Posted by RegimeEdge · {st.weeklyBias.updatedAt}
+            </div>
+          </GlowCard>
         )}
-        <div style={{fontSize:11,color:G.textSub,paddingTop:14,borderTop:`1px solid ${G.border}`}}>Posted by RegimeEdge · {st.weeklyBias.updatedAt}</div>
-      </GlowCard>
 
-      <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Today's Session Bias</div>
-      <GlowCard color={st.dailyBias.direction==="Bullish"?G.green:G.red} style={{marginBottom:24}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <div style={{fontSize:18,fontWeight:900,color:st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold,fontFamily:"'Playfair Display',serif"}}>{st.dailyBias.dayLabel}</div>
-          <BiasTag d={st.dailyBias.direction}/>
+        {/* Daily Bias */}
+        <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Today's Session</div>
+        {!hasDaily?(
+          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"28px 20px",textAlign:"center",marginBottom:16}}>
+            <p style={{color:G.textSub,fontSize:13,margin:0}}>Daily bias not yet posted for today.</p>
+          </div>
+        ):(
+          <GlowCard color={dc} style={{marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:3,height:14,background:dc,borderRadius:2}}/>
+                <div style={{fontSize:19,fontWeight:900,color:dc,fontFamily:"'Playfair Display',serif"}}>{st.dailyBias.dayLabel}</div>
+              </div>
+              <BiasTag d={st.dailyBias.direction}/>
+            </div>
+            <div style={{marginBottom:10}}>{renderBody(st.dailyBias.body,true)}</div>
+            <div style={{fontSize:11,color:G.textDim}}>{st.dailyBias.updatedAt}</div>
+          </GlowCard>
+        )}
+
+        {/* How to read */}
+        <div style={{background:G.surface,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}`,borderRadius:G.r,padding:"14px 18px"}}>
+          <div style={{fontSize:10,color:G.gold,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>How to read this</div>
+          <p style={{color:G.textSub,fontSize:13,lineHeight:1.8,margin:0}}>Weekly bias sets the direction. Daily refines the session. Both can update — check every day. Not a signal. You manage your own entry and risk.</p>
         </div>
-        <div style={{marginBottom:10}}>{renderBody(st.dailyBias.body,true)}</div>
-        <div style={{fontSize:11,color:G.textSub}}>{st.dailyBias.updatedAt}</div>
-      </GlowCard>
-
-      <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:18}}>
-        <div style={{fontSize:12,color:G.gold,fontWeight:700,marginBottom:6}}>How to read this</div>
-        <p style={{color:G.textSub,fontSize:13,lineHeight:1.8,margin:0}}>Weekly bias sets the direction. Daily bias refines the session. Both can update — check every day. This is not a signal. You manage your own entry and risk.</p>
       </div>
     </div>
   );
@@ -1031,45 +1087,71 @@ const ArchivePage = React.memo(function ArchivePage({st}){
   }
 
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="Full Transparency" title="Archive" sub="Every week on record. No edits. No hiding."/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:16}}>
-        {[[st.archiveWeeks.length,"Weeks",G.gold],[`${rate}%`,"Accuracy",G.green],[green,"Green",G.green],[streak>0?String(streak):"—","Streak",streak>0?G.gold:G.textSub]].map(([v,l,c],idx)=>(
-          <GlowCard key={idx} color={c} style={{padding:12,textAlign:"center"}}>
-            <div style={{fontSize:18,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif"}}>{v}</div>
-            <div style={{fontSize:9,color:G.textSub,marginTop:4}}>{l}</div>
-          </GlowCard>
-        ))}
+    <div style={{paddingBottom:32}}>
+      {/* Page hero */}
+      <div style={{background:`linear-gradient(160deg,rgba(212,175,55,0.07) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px"}}>
+        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Full Transparency</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>Archive</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.6}}>Every week on record. No edits. No hiding.</p>
       </div>
 
-      {/* Win Rate Bar */}
-      <div style={{marginBottom:20}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
-          <div style={{fontSize:11,color:G.textSub,fontWeight:700}}>Win Rate</div>
-          <div style={{fontSize:12,fontWeight:800,color:G.green}}>{rate}%</div>
-        </div>
-        <div style={{height:8,background:G.surface,borderRadius:8,overflow:"hidden",border:`1px solid ${G.border}`}}>
-          <div style={{height:"100%",background:`linear-gradient(90deg,${G.green},${G.green}99)`,borderRadius:8,width:barAnimated?`${rate}%`:"0%",transition:"width 1s cubic-bezier(0.4,0,0.2,1)"}}/>
-        </div>
-      </div>
-
-      <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:16,marginBottom:22}}>
-        <p style={{color:G.textSub,fontSize:12,lineHeight:1.8,margin:0}}>Green = correct direction. Red = wrong. Record closes end of each week. No retrospective changes.</p>
-      </div>
-      {st.archiveWeeks.map(w=>(
-        <div key={w.id} style={{background:G.card,border:`1px solid ${w.result==="green"?G.green+"33":G.red+"33"}`,borderRadius:G.r,padding:"16px 18px",marginBottom:10,display:"flex",gap:0,overflow:"hidden"}}>
-          {/* Left stripe */}
-          <div style={{width:3,background:w.result==="green"?G.green:G.red,borderRadius:2,flexShrink:0,marginRight:14,alignSelf:"stretch",minHeight:20}}/>
-          <div style={{flex:1}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
-              <span style={{fontSize:13,fontWeight:700,color:G.text}}>{w.week}</span>
-              <span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:w.result==="green"?G.green:G.red,flexShrink:0}}/>
+      <div style={{padding:"24px 22px 0"}}>
+        {/* Stats row */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:18}}>
+          {[[st.archiveWeeks.length,"Weeks",G.gold],[`${rate}%`,"Accuracy",G.green],[green,"Green",G.green],[streak>0?String(streak):"—","Streak",streak>0?G.gold:G.textSub]].map(([v,l,c],idx)=>(
+            <div key={idx} style={{background:G.card,border:`1px solid ${G.border}`,borderTop:`3px solid ${c}44`,borderRadius:G.rs,padding:"12px 8px",textAlign:"center",boxShadow:`inset 0 1px 0 ${c}15`,animation:`fadeUp 0.4s ${idx*0.06}s ease both`}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:c,lineHeight:1,marginBottom:4}}>{v}</div>
+              <div style={{fontSize:9,color:G.textSub,letterSpacing:1,textTransform:"uppercase"}}>{l}</div>
             </div>
-            <div style={{marginBottom:8}}><BiasTag d={w.bias}/></div>
-            <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.65}}>{w.note}</p>
+          ))}
+        </div>
+
+        {/* Win Rate Bar */}
+        <div style={{marginBottom:18,background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"14px 16px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:11,color:G.textSub,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:G.green,animation:"pulseDot 2s ease-in-out infinite"}}/>
+              Win Rate
+            </div>
+            <div style={{fontSize:14,fontWeight:900,color:G.green,fontFamily:"'Playfair Display',serif"}}>{rate}%</div>
+          </div>
+          <div style={{height:6,background:G.surface,borderRadius:6,overflow:"hidden",border:`1px solid ${G.border}`}}>
+            <div style={{height:"100%",background:`linear-gradient(90deg,${G.green},${G.green}88)`,borderRadius:6,width:barAnimated?`${rate}%`:"0%",transition:"width 1.2s cubic-bezier(0.4,0,0.2,1)",boxShadow:`0 0 8px ${G.green}44`}}/>
           </div>
         </div>
-      ))}
+
+        {/* Disclaimer */}
+        <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderLeft:`3px solid ${G.gold}`,borderRadius:G.r,padding:"12px 16px",marginBottom:20}}>
+          <p style={{color:G.textSub,fontSize:12,lineHeight:1.8,margin:0}}>Green = correct direction. Red = wrong. Record closes end of each week. No retrospective changes.</p>
+        </div>
+
+        {/* Archive list */}
+        {st.archiveWeeks.length===0?(
+          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"40px 24px",textAlign:"center"}}>
+            <div style={{width:56,height:56,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+              <span style={{fontSize:24}}>📅</span>
+            </div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:G.text,marginBottom:8,fontWeight:800}}>No Archive Yet</div>
+            <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Weekly records will appear here at the end of each week.</p>
+          </div>
+        ):(
+          st.archiveWeeks.map((w,wi)=>(
+            <div key={w.id} style={{background:G.card,border:`1px solid ${w.result==="green"?G.green+"22":G.red+"22"}`,borderRadius:G.r,padding:"16px 18px",marginBottom:10,display:"flex",gap:0,overflow:"hidden",animation:`fadeUp 0.35s ${wi*0.04}s ease both`,boxShadow:`0 4px 16px rgba(0,0,0,0.2)`}}>
+              <div style={{width:3,background:w.result==="green"?G.green:G.red,borderRadius:2,flexShrink:0,marginRight:14,alignSelf:"stretch",minHeight:20}}/>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:13,fontWeight:800,color:G.text}}>{w.week}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <BiasTag d={w.bias}/>
+                    <div style={{width:9,height:9,borderRadius:"50%",background:w.result==="green"?G.green:G.red,boxShadow:`0 0 6px ${w.result==="green"?G.green:G.red}66`,flexShrink:0}}/>
+                  </div>
+                </div>
+                {w.note&&<p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.65}}>{w.note}</p>}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 });
@@ -1229,24 +1311,60 @@ function BooksPage({st}){
 
 // ── STRATEGY ──────────────────────────────────────────────────────────────────
 function StrategyPage(){
+  const steps=[
+    {num:"01",title:"Macro Bias First",desc:"No trade without directional clarity. Weekly regime defines which side you're on.",color:G.gold},
+    {num:"02",title:"One Setup Only",desc:"One entry model. Rules-based. Repeatable. No discretion on entry.",color:G.green},
+    {num:"03",title:"Risk Before Reward",desc:"Every position sized to survive. Capital preservation is rule one.",color:G.red},
+    {num:"04",title:"Weekly Review",desc:"Performance tracked every week. Green or red. No hiding.",color:G.blue},
+  ];
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="Premium" title="Single Edge Method" sub="One strategy. Mastered completely."/>
-      <GlowCard color={G.gold} style={{marginBottom:16}}>
-        <div style={{fontSize:10,color:G.gold,letterSpacing:2,marginBottom:10}}>THE PHILOSOPHY</div>
-        <p style={{color:G.text,fontSize:14,lineHeight:1.9,margin:0}}>Most traders fail not because they lack strategies — they fail because they have too many. The Single Edge Method is one setup, mastered completely. <span style={{color:G.gold}}>Know it so well the market has no choice but to show it to you.</span></p>
-      </GlowCard>
-      {[["01. Macro Bias First","No trade without directional clarity. Weekly regime defines which side you're on."],["02. One Setup Only","One entry model. Rules-based. Repeatable. No discretion on entry."],["03. Risk Before Reward","Every position sized to survive. Capital preservation is rule one."],["04. Weekly Review","Performance tracked every week. Green or red. No hiding."]].map(([t,d],i)=>(
-        <Card key={i} style={{marginBottom:11}}>
-          <div style={{color:G.gold,fontWeight:800,fontSize:13,marginBottom:7}}>{t}</div>
-          <p style={{color:G.textSub,fontSize:13,margin:0,lineHeight:1.75}}>{d}</p>
-        </Card>
-      ))}
-      <GlowCard color={G.gold} style={{textAlign:"center",marginTop:6}}>
-        <div style={{fontSize:10,color:G.gold,letterSpacing:2,marginBottom:8}}>GET FULL ACCESS</div>
-        <p style={{color:G.textSub,fontSize:13,marginBottom:16}}>Purchase via USDT. Contact via Telegram.</p>
-        <a href={ADMIN_TG} target="_blank" rel="noreferrer" style={{display:"block",padding:14,background:G.gold,borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:14,textDecoration:"none"}}>Purchase via Telegram →</a>
-      </GlowCard>
+    <div style={{paddingBottom:32}}>
+      {/* Hero */}
+      <div style={{background:`linear-gradient(160deg,rgba(212,175,55,0.09) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-10,right:-10,fontSize:120,color:G.gold,opacity:0.04,fontWeight:900,fontFamily:"'Playfair Display',serif",lineHeight:1,pointerEvents:"none"}}>◈</div>
+        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Premium Method</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>Single Edge Method</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.6}}>One strategy. Mastered completely.</p>
+      </div>
+
+      <div style={{padding:"24px 22px 0"}}>
+        {/* Philosophy card */}
+        <div style={{background:`linear-gradient(135deg,${G.gold}0d,${G.card})`,border:`1px solid ${G.gold}33`,borderRadius:G.r,padding:"20px 22px",marginBottom:22,boxShadow:`0 0 32px ${G.gold}0a`}}>
+          <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:12,fontWeight:700}}>The Philosophy</div>
+          <p style={{color:G.text,fontSize:14,lineHeight:1.9,margin:0}}>Most traders fail not because they lack strategies — they fail because they have too many. The Single Edge Method is one setup, mastered completely. <span style={{color:G.gold,fontWeight:700}}>Know it so well the market has no choice but to show it to you.</span></p>
+        </div>
+
+        {/* Steps */}
+        <div style={{marginBottom:24}}>
+          {steps.map((s,i)=>(
+            <div key={i} style={{display:"flex",gap:14,marginBottom:12,animation:`fadeUp 0.35s ${i*0.08}s ease both`}}>
+              {/* Number column */}
+              <div style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
+                <div style={{width:42,height:42,borderRadius:12,background:`${s.color}12`,border:`1px solid ${s.color}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:900,color:s.color}}>{s.num}</span>
+                </div>
+                {i<steps.length-1&&<div style={{width:1,flex:1,minHeight:12,background:`linear-gradient(${s.color}33,transparent)`,marginTop:4}}/>}
+              </div>
+              {/* Content */}
+              <div style={{flex:1,background:G.card,border:`1px solid ${G.border}`,borderLeft:`3px solid ${s.color}`,borderRadius:G.rs,padding:"13px 16px",marginBottom:0}}>
+                <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:6}}>{s.title}</div>
+                <p style={{color:G.textSub,fontSize:13,margin:0,lineHeight:1.75}}>{s.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <div style={{background:`linear-gradient(135deg,${G.gold}0d,${G.card})`,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"22px",textAlign:"center",boxShadow:`0 0 40px ${G.gold}0a`}}>
+          <div style={{width:48,height:48,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:22}}>🎯</div>
+          <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Get Full Access</div>
+          <p style={{color:G.textSub,fontSize:13,marginBottom:18,lineHeight:1.7}}>Purchase via USDT. Contact via Telegram and get started today.</p>
+          <a href={ADMIN_TG} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 0",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:14,textDecoration:"none",boxShadow:`0 6px 24px rgba(212,175,55,0.3)`}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
+            Purchase via Telegram →
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1461,63 +1579,65 @@ function AuthModal({onAuth,onClose}){
   const overlayClose=(e)=>{ if(e.target===e.currentTarget) onClose(); };
 
   return(
-    <div onClick={overlayClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:250,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}>
-      <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:20,padding:28,width:"100%",maxWidth:370,boxShadow:"0 40px 100px rgba(0,0,0,0.8)",position:"relative"}}>
+    <div onClick={overlayClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:250,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:0,backdropFilter:"blur(12px)"}}>
+      <div style={{background:G.card,border:`1px solid ${G.border}`,borderTop:`1px solid ${G.gold}22`,borderRadius:"24px 24px 0 0",padding:"28px 26px 40px",width:"100%",maxWidth:480,boxShadow:"0 -32px 80px rgba(0,0,0,0.8)",position:"relative",animation:"slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)"}}>
+
+        {/* Drag handle */}
+        <div style={{width:36,height:4,background:G.border,borderRadius:2,margin:"0 auto 24px"}}/>
+
+        {/* Gold glow top */}
+        <div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:"60%",height:1,background:`linear-gradient(90deg,transparent,${G.gold}66,transparent)`}}/>
+
+        {/* Mode tabs */}
+        {mode!=="forgot"&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,marginBottom:24,background:G.surface,borderRadius:12,padding:3,border:`1px solid ${G.border}`}}>
+            {[["signin","Sign In"],["signup","Join Free"]].map(([m,l])=>(
+              <button key={m} onClick={()=>{setMode(m);clearErr();}} style={{padding:"10px 0",border:"none",borderRadius:10,background:mode===m?G.card:"transparent",color:mode===m?G.text:G.textSub,fontSize:13,fontWeight:mode===m?800:500,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",boxShadow:mode===m?"0 2px 8px rgba(0,0,0,0.3)":"none"}}>{l}</button>
+            ))}
+          </div>
+        )}
 
         {/* Header */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
-          <div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,color:G.text,fontWeight:900,lineHeight:1.1}}>
-              {mode==="signin"?"Welcome back":mode==="signup"?"Join RegimeEdge":"Reset Password"}
-            </div>
-            <div style={{fontSize:11,color:G.textSub,marginTop:5}}>
-              {mode==="signin"?"Sign in to your account":mode==="signup"?"Create your free account":"We'll send a link to your email"}
-            </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,color:G.text,fontWeight:900,lineHeight:1.1,marginBottom:6}}>
+            {mode==="signin"?"Welcome back":mode==="signup"?"Join RegimeEdge":"Reset Password"}
           </div>
-          <button onClick={onClose} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:8,color:G.textSub,cursor:"pointer",fontSize:16,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+          <div style={{fontSize:12,color:G.textSub}}>
+            {mode==="signin"?"Sign in to access your account":mode==="signup"?"Create your free account today":"We'll send a reset link to your email"}
+          </div>
         </div>
 
-        {/* Gold accent line */}
-        <div style={{height:1,background:`linear-gradient(90deg,${G.gold}44,transparent)`,marginBottom:22}}/>
-
         {/* Messages */}
-        {msg&&<div style={{color:G.green,fontSize:12,marginBottom:14,padding:"10px 14px",background:G.greenBg,border:`1px solid ${G.green}33`,borderRadius:10,lineHeight:1.6}}>{msg}</div>}
-        {err&&<div style={{color:G.red,fontSize:12,marginBottom:14,padding:"10px 14px",background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:10,lineHeight:1.6}}>⚠ {err}</div>}
+        {msg&&<div style={{color:G.green,fontSize:12,marginBottom:14,padding:"10px 14px",background:G.greenBg,border:`1px solid ${G.green}22`,borderRadius:10,lineHeight:1.6,display:"flex",alignItems:"flex-start",gap:8}}><span style={{flexShrink:0}}>✓</span>{msg}</div>}
+        {err&&<div style={{color:G.red,fontSize:12,marginBottom:14,padding:"10px 14px",background:G.redBg,border:`1px solid ${G.red}22`,borderRadius:10,lineHeight:1.6,display:"flex",alignItems:"flex-start",gap:8}}><span style={{flexShrink:0}}>⚠</span>{err}</div>}
 
         {/* Fields */}
         {mode==="signup"&&(
-          <div style={{marginBottom:11}}>
-            <div style={{fontSize:10,color:G.textSub,letterSpacing:1.5,marginBottom:6,textTransform:"uppercase"}}>Username</div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:G.textSub,letterSpacing:1.5,marginBottom:7,textTransform:"uppercase",fontWeight:700}}>Username</div>
             <FI value={username} onChange={v=>{setUsername(v);clearErr();}} placeholder="your_username"/>
           </div>
         )}
-
-        <div style={{marginBottom:11}}>
-          <div style={{fontSize:10,color:G.textSub,letterSpacing:1.5,marginBottom:6,textTransform:"uppercase"}}>Email</div>
-          <FI value={email} onChange={v=>{setEmail(v);clearErr();}} placeholder="your@email.com" type="email"/>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,color:G.textSub,letterSpacing:1.5,marginBottom:7,textTransform:"uppercase",fontWeight:700}}>Email</div>
+          <FI value={email} onChange={v=>{setEmail(v);clearErr();}} placeholder="your@email.com" type="email" onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?handleSignIn():mode==="signup"?handleSignUp():handleForgot())}/>
         </div>
-
         {mode!=="forgot"&&(
           <div style={{marginBottom:20}}>
-            <div style={{fontSize:10,color:G.textSub,letterSpacing:1.5,marginBottom:6,textTransform:"uppercase"}}>Password{mode==="signup"?" (min 8 chars)":""}</div>
-            <FI value={pass} onChange={v=>{setPass(v);clearErr();}} placeholder="••••••••" type="password"/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+              <div style={{fontSize:10,color:G.textSub,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Password{mode==="signup"?" (min 8 chars)":""}</div>
+              {mode==="signin"&&<button onClick={()=>{setMode("forgot");clearErr();}} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:11,fontFamily:"inherit",padding:0}}>Forgot?</button>}
+            </div>
+            <FI value={pass} onChange={v=>{setPass(v);clearErr();}} placeholder="••••••••" type="password" onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?handleSignIn():handleSignUp())}/>
           </div>
         )}
 
-        {mode==="signin"&&(
-          <div style={{textAlign:"right",marginBottom:20,marginTop:-12}}>
-            <button onClick={()=>{setMode("forgot");clearErr();}} style={{background:"none",border:"none",color:G.textSub,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Forgot password?</button>
-          </div>
-        )}
-
-        {/* CTA Button */}
-        <button
-          disabled={loading}
-          onClick={mode==="signin"?handleSignIn:mode==="signup"?handleSignUp:handleForgot}
-          style={{width:"100%",padding:"14px 0",background:loading?"none":G.gold,border:loading?`1px solid ${G.gold}44`:"none",borderRadius:G.rs,color:loading?G.gold:"#000",fontSize:13,fontWeight:800,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",marginBottom:18,letterSpacing:0.3,transition:"all 0.2s",boxShadow:loading?"none":"0 6px 24px rgba(212,175,55,0.25)",position:"relative",overflow:"hidden"}}>
+        {/* CTA */}
+        <button disabled={loading} onClick={mode==="signin"?handleSignIn:mode==="signup"?handleSignUp:handleForgot}
+          style={{width:"100%",padding:"15px 0",background:loading?G.surface:`linear-gradient(135deg,${G.goldLight},${G.gold})`,border:loading?`1px solid ${G.gold}33`:"none",borderRadius:G.rs,color:loading?G.gold:"#000",fontSize:14,fontWeight:800,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit",marginBottom:16,letterSpacing:0.3,transition:"all 0.2s",boxShadow:loading?"none":`0 6px 24px rgba(212,175,55,0.3)`,position:"relative",overflow:"hidden"}}>
           {loading?(
             <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-              <span style={{width:14,height:14,border:`2px solid ${G.gold}`,borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>
+              <span style={{width:14,height:14,border:`2px solid ${G.gold}44`,borderTopColor:G.gold,borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>
               {mode==="signin"?"Signing in…":mode==="signup"?"Creating account…":"Sending link…"}
             </span>
           ):(
@@ -1525,23 +1645,11 @@ function AuthModal({onAuth,onClose}){
           )}
         </button>
 
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        {mode==="forgot"&&(
+          <button onClick={()=>{setMode("signin");clearErr();}} style={{width:"100%",padding:"11px 0",background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>← Back to Sign In</button>
+        )}
 
-        {/* Footer link */}
-        <p style={{textAlign:"center",color:G.textSub,fontSize:12,margin:0,lineHeight:1.8}}>
-          {mode==="signin"&&<>No account?{" "}<button onClick={()=>{setMode("signup");clearErr();}} style={{background:"none",border:"none",color:G.gold,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>Sign up free</button></>}
-          {mode==="signup"&&<>Have an account?{" "}<button onClick={()=>{setMode("signin");clearErr();}} style={{background:"none",border:"none",color:G.gold,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>Sign in</button></>}
-          {mode==="forgot"&&<><button onClick={()=>{setMode("signin");clearErr();}} style={{background:"none",border:"none",color:G.gold,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>← Back to sign in</button></>}
-        </p>
-
-        {/* Verified badge */}
-        <div style={{marginTop:18,padding:"10px 14px",background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,display:"flex",alignItems:"center",gap:10}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{color:G.textSub,flexShrink:0}}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:G.textSub,letterSpacing:0.5}}>SECURED BY SUPABASE</div>
-            <div style={{fontSize:10,color:G.textDim,marginTop:1}}>Passwords hashed · Sessions encrypted · Email verified</div>
-          </div>
-        </div>
+        <button onClick={onClose} style={{position:"absolute",top:28,right:22,background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,color:G.textSub,cursor:"pointer",fontSize:14,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"inherit"}}>✕</button>
       </div>
     </div>
   );
@@ -1945,13 +2053,32 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   return(<>
     <div style={{minHeight:"100vh",background:G.bgDeep,paddingBottom:40}}>
       {/* Header */}
-      <div style={{padding:"14px 20px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:G.bgDeep,zIndex:10}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,color:G.gold}}>Admin · RegimeEdge</div>
-        <button onClick={onClose} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:8,color:G.textSub,cursor:"pointer",fontSize:13,padding:"5px 12px",fontFamily:"inherit",fontWeight:700}}>← Close</button>
+      <div style={{padding:"14px 20px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:"rgba(10,11,13,0.97)",backdropFilter:"blur(20px)",zIndex:10,boxShadow:"0 4px 24px rgba(0,0,0,0.3)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:G.gold,animation:"pulseDot 2s ease-in-out infinite"}}/>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,color:G.gold,fontWeight:900}}>Admin Panel</div>
+        </div>
+        <button onClick={onClose} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,color:G.textSub,cursor:"pointer",fontSize:12,padding:"7px 14px",fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:6,transition:"all 0.2s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold+"44";e.currentTarget.style.color=G.text;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textSub;}}>
+          ← Exit Admin
+        </button>
       </div>
       {/* Tabs */}
-      <div style={{display:"flex",overflowX:"auto",borderBottom:`1px solid ${G.border}`,padding:"0 14px"}}>
-        {TABS.map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:`2px solid ${tab===t?G.gold:"transparent"}`,color:tab===t?G.gold:G.textSub,fontSize:11,fontWeight:700,padding:"11px 12px",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",textTransform:"capitalize"}}>{t}</button>)}
+      <div style={{overflowX:"auto",scrollbarWidth:"none",borderBottom:`1px solid ${G.border}`,background:G.card}}>
+        <div style={{display:"flex",padding:"0 16px",minWidth:"max-content"}}>
+          {TABS.map(t=>(
+            <button key={t} onClick={()=>setTab(t)} style={{
+              padding:"13px 14px",background:"none",border:"none",
+              borderBottom:`2px solid ${tab===t?G.gold:"transparent"}`,
+              color:tab===t?G.gold:G.textSub,
+              fontSize:11,fontWeight:tab===t?800:500,
+              cursor:"pointer",fontFamily:"inherit",
+              textTransform:"capitalize",letterSpacing:0.3,
+              transition:"all 0.2s",whiteSpace:"nowrap",
+            }}>{t}</button>
+          ))}
+        </div>
       </div>
       <div style={{padding:18}}>
 
