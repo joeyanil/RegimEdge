@@ -1245,154 +1245,233 @@ const ArchivePage = React.memo(function ArchivePage({st}){
 });
 
 // ── EA BOTS PAGE ──────────────────────────────────────────────────────────────
-function EAsPage({st}){
+function EAsPage({st,user,onSignIn}){
   const[selected,setSelected]=useState(null);
   const eas=st.eas||[];
-  if(eas.length===0) return(
-    <div style={{padding:"48px 22px",textAlign:"center"}}>
-      <div style={{fontSize:40,marginBottom:16}}>🤖</div>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.text,marginBottom:8}}>EAs Coming Soon</div>
-      <p style={{color:G.textSub,fontSize:13,lineHeight:1.7}}>Automated trading bots built on the Single Edge Method. Check back soon.</p>
+
+  const SignInGate=({eaName})=>(
+    <div onClick={e=>e.stopPropagation()} style={{marginTop:14,background:G.surface,border:`1px solid ${G.gold}33`,borderRadius:G.rs,padding:"16px 18px",textAlign:"center"}}>
+      <div style={{width:36,height:36,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:5}}>Sign in to Purchase</div>
+      <p style={{color:G.textSub,fontSize:12,lineHeight:1.65,margin:"0 0 12px"}}>Create a free account to buy the {eaName} EA via Telegram.</p>
+      <button onClick={()=>onSignIn&&onSignIn()} style={{width:"100%",padding:"11px 0",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,border:"none",borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:`0 4px 16px rgba(212,175,55,0.25)`}}>
+        Sign In / Create Account →
+      </button>
     </div>
   );
+
+  if(eas.length===0) return(
+    <div style={{paddingBottom:32}}>
+      <div style={{background:`linear-gradient(160deg,rgba(212,175,55,0.08) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px"}}>
+        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Automation</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900}}>Trading EAs</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.6}}>Bots built on the Single Edge Method.</p>
+      </div>
+      <div style={{padding:"40px 22px",textAlign:"center"}}>
+        <div style={{width:56,height:56,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><path d="M8 15h.01M12 15h.01M16 15h.01"/></svg>
+        </div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.text,marginBottom:8,fontWeight:800}}>EAs Coming Soon</div>
+        <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Automated trading bots built on the Single Edge Method. Check back soon.</p>
+      </div>
+    </div>
+  );
+
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="Automation" title="Trading EAs" sub="Bots built on the Single Edge Method"/>
-      {eas.map(ea=>(
-        <div key={ea.id} onClick={()=>setSelected(selected===ea.id?null:ea.id)}
-          style={{background:G.card,border:`1px solid ${selected===ea.id?G.gold+"55":G.border}`,borderRadius:G.r,marginBottom:14,overflow:"hidden",cursor:"pointer",transition:"all 0.2s",boxShadow:selected===ea.id?`0 0 28px ${G.gold}15`:"0 2px 8px rgba(0,0,0,0.2)"}}>
-          {/* Top accent bar */}
-          <div style={{height:3,background:`linear-gradient(90deg,${G.gold},${G.gold}44)`}}/>
-          {/* Image */}
-          {ea.image&&(
-            <div style={{position:"relative",overflow:"hidden"}}>
-              <img src={ea.image} alt={ea.name} style={{width:"100%",maxHeight:200,objectFit:"cover",display:"block",filter:"brightness(0.92)"}}/>
-              <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 40%,rgba(22,24,25,0.95))"}}/>
-              <div style={{position:"absolute",bottom:14,left:18,right:18}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:G.text,textShadow:"0 2px 8px rgba(0,0,0,0.8)"}}>{ea.name}</div>
-                {ea.tagline&&<div style={{fontSize:12,color:G.gold,marginTop:3,textShadow:"0 1px 4px rgba(0,0,0,0.9)"}}>{ea.tagline}</div>}
-              </div>
-            </div>
-          )}
-          <div style={{padding:"16px 18px"}}>
-            {!ea.image&&(
-              <>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:900,color:G.text,marginBottom:4}}>{ea.name}</div>
-                {ea.tagline&&<div style={{fontSize:12,color:G.gold,marginBottom:10}}>{ea.tagline}</div>}
-              </>
-            )}
-            {/* Stats row */}
-            {(ea.winRate||ea.pairs||ea.timeframe||ea.price)&&(
-              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14,marginTop:ea.image?8:0}}>
-                {ea.winRate&&(
-                  <div style={{background:`${G.green}15`,border:`1px solid ${G.green}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:15,fontWeight:900,color:G.green,fontFamily:"'Playfair Display',serif"}}>{ea.winRate}</div>
-                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>WIN RATE</div>
-                  </div>
-                )}
-                {ea.pairs&&(
-                  <div style={{background:`${G.gold}10`,border:`1px solid ${G.gold}22`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:13,fontWeight:800,color:G.gold}}>{ea.pairs}</div>
-                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>PAIRS</div>
-                  </div>
-                )}
-                {ea.timeframe&&(
-                  <div style={{background:`${G.blue}10`,border:`1px solid ${G.blue}22`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:13,fontWeight:800,color:G.blue}}>{ea.timeframe}</div>
-                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>TIMEFRAME</div>
-                  </div>
-                )}
-                {ea.price&&(
-                  <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 12px",textAlign:"center",marginLeft:"auto"}}>
-                    <div style={{fontSize:15,fontWeight:900,color:G.text,fontFamily:"'Playfair Display',serif"}}>{ea.price}</div>
-                    <div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>PRICE</div>
-                  </div>
-                )}
+    <div style={{paddingBottom:32}}>
+      {/* Hero */}
+      <div style={{background:`linear-gradient(160deg,rgba(212,175,55,0.09) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,right:0,width:"50%",height:"100%",background:`radial-gradient(ellipse at right,${G.gold}06,transparent)`,pointerEvents:"none"}}/>
+        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Automation</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>Trading EAs</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:"0 0 16px",lineHeight:1.6}}>Bots built on the Single Edge Method. Set and forget.</p>
+        {/* Auth notice */}
+        {!user&&(
+          <div style={{display:"flex",alignItems:"center",gap:8,background:`${G.gold}0a`,border:`1px solid ${G.gold}22`,borderRadius:10,padding:"10px 14px"}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span style={{fontSize:12,color:G.gold,fontWeight:600}}>Sign in to purchase — browsing is free</span>
+          </div>
+        )}
+      </div>
+
+      <div style={{padding:"20px 22px 0"}}>
+        {eas.map((ea,ei)=>(
+          <div key={ea.id} onClick={()=>setSelected(selected===ea.id?null:ea.id)}
+            style={{background:G.card,border:`1px solid ${selected===ea.id?G.gold+"55":G.border}`,borderRadius:G.r,marginBottom:14,overflow:"hidden",cursor:"pointer",
+              transition:"all 0.22s cubic-bezier(0.4,0,0.2,1)",
+              boxShadow:selected===ea.id?`0 0 32px ${G.gold}15,0 8px 32px rgba(0,0,0,0.35)`:"0 4px 16px rgba(0,0,0,0.2)",
+              animation:`fadeUp 0.35s ${ei*0.07}s ease both`}}>
+            <div style={{height:3,background:`linear-gradient(90deg,${G.gold},${G.gold}33)`}}/>
+            {/* Banner image */}
+            {ea.image&&(
+              <div style={{position:"relative",overflow:"hidden"}}>
+                <img src={ea.image} alt={ea.name} style={{width:"100%",maxHeight:200,objectFit:"cover",display:"block",filter:"brightness(0.88)"}}/>
+                <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,rgba(10,11,13,0.97))"}}/>
+                <div style={{position:"absolute",bottom:14,left:18,right:18}}>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:900,color:G.text,textShadow:"0 2px 8px rgba(0,0,0,0.9)"}}>{ea.name}</div>
+                  {ea.tagline&&<div style={{fontSize:12,color:G.gold,marginTop:3}}>{ea.tagline}</div>}
+                </div>
               </div>
             )}
-            {/* Short description always visible */}
-            {ea.shortDesc&&<p style={{color:G.textSub,fontSize:13,lineHeight:1.75,margin:"0 0 14px"}}>{ea.shortDesc}</p>}
-            {/* Expanded body */}
-            {selected===ea.id&&ea.body&&(
-              <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14,marginTop:4}}>
-                {renderBody(ea.body,true)}
+            <div style={{padding:"16px 18px"}}>
+              {!ea.image&&(
+                <div style={{marginBottom:12}}>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:900,color:G.text,marginBottom:4}}>{ea.name}</div>
+                  {ea.tagline&&<div style={{fontSize:12,color:G.gold}}>{ea.tagline}</div>}
+                </div>
+              )}
+              {/* Stats */}
+              {(ea.winRate||ea.pairs||ea.timeframe||ea.price)&&(
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14,marginTop:ea.image?10:0}}>
+                  {ea.winRate&&<div style={{background:`${G.green}12`,border:`1px solid ${G.green}33`,borderRadius:9,padding:"7px 12px",textAlign:"center"}}><div style={{fontSize:15,fontWeight:900,color:G.green,fontFamily:"'Playfair Display',serif"}}>{ea.winRate}</div><div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>WIN RATE</div></div>}
+                  {ea.pairs&&<div style={{background:`${G.gold}0e`,border:`1px solid ${G.gold}22`,borderRadius:9,padding:"7px 12px",textAlign:"center"}}><div style={{fontSize:13,fontWeight:800,color:G.gold}}>{ea.pairs}</div><div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>PAIRS</div></div>}
+                  {ea.timeframe&&<div style={{background:`${G.blue}0e`,border:`1px solid ${G.blue}22`,borderRadius:9,padding:"7px 12px",textAlign:"center"}}><div style={{fontSize:13,fontWeight:800,color:G.blue}}>{ea.timeframe}</div><div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>TIMEFRAME</div></div>}
+                  {ea.price&&<div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:9,padding:"7px 12px",textAlign:"center",marginLeft:"auto"}}><div style={{fontSize:15,fontWeight:900,color:G.text,fontFamily:"'Playfair Display',serif"}}>{ea.price}</div><div style={{fontSize:9,color:G.textSub,letterSpacing:1,marginTop:2}}>PRICE</div></div>}
+                </div>
+              )}
+              {ea.shortDesc&&<p style={{color:G.textSub,fontSize:13,lineHeight:1.75,margin:"0 0 14px"}}>{ea.shortDesc}</p>}
+              {/* Expanded content */}
+              {selected===ea.id&&(
+                <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14,marginTop:4,animation:"fadeUp 0.2s ease"}}>
+                  {ea.body&&<div style={{marginBottom:12}}>{renderBody(ea.body,true)}</div>}
+                  {ea.images&&ea.images.length>0&&(
+                    <div style={{display:"grid",gridTemplateColumns:ea.images.length===1?"1fr":"1fr 1fr",gap:8,marginBottom:14}}>
+                      {ea.images.map((img,i)=><img key={i} src={img} alt={`chart-${i}`} style={{width:"100%",borderRadius:8,display:"block",objectFit:"cover",maxHeight:160}}/>)}
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* CTA — gated */}
+              {user?(
+                <a href={`https://t.me/RegimeEdge_Admin?text=I'm interested in the ${encodeURIComponent(ea.name)} EA`}
+                  target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
+                  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:14,padding:"13px 0",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:13,textDecoration:"none",letterSpacing:0.3,boxShadow:`0 4px 18px rgba(212,175,55,0.3)`}}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
+                  Buy via Telegram →
+                </a>
+              ):(
+                <SignInGate eaName={ea.name}/>
+              )}
+              {/* Expand toggle */}
+              <div style={{textAlign:"center",marginTop:10,fontSize:11,color:G.textDim,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{transform:selected===ea.id?"rotate(180deg)":"rotate(0)",transition:"transform 0.2s"}}><polyline points="6 9 12 15 18 9"/></svg>
+                {selected===ea.id?"Show less":"Full details"}
               </div>
-            )}
-            {/* Extra images */}
-            {selected===ea.id&&ea.images&&ea.images.length>0&&(
-              <div style={{display:"grid",gridTemplateColumns:ea.images.length===1?"1fr":"1fr 1fr",gap:8,marginTop:12}}>
-                {ea.images.map((img,i)=>(
-                  <img key={i} src={img} alt={`chart-${i}`} style={{width:"100%",borderRadius:8,display:"block",objectFit:"cover",maxHeight:160}}/>
-                ))}
-              </div>
-            )}
-            {/* CTA */}
-            <a href={`https://t.me/RegimeEdge_Admin?text=I'm interested in the ${encodeURIComponent(ea.name)} EA`}
-              target="_blank" rel="noreferrer"
-              onClick={e=>e.stopPropagation()}
-              style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:14,padding:"13px 0",background:G.gold,borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:13,textDecoration:"none",letterSpacing:0.3}}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
-              Buy via Telegram →
-            </a>
-            {/* Expand toggle hint */}
-            <div style={{textAlign:"center",marginTop:10,fontSize:11,color:G.textDim}}>
-              {selected===ea.id?"▲ Show less":"▼ Full details"}
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
 
 // ── BOOKS PAGE ────────────────────────────────────────────────────────────────
-function BooksPage({st}){
+function BooksPage({st,user,onSignIn}){
   const books=st.books||[];
+
+  const LockedDownload=()=>(
+    <button onClick={()=>onSignIn&&onSignIn()} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"9px 16px",background:`${G.gold}0e`,border:`1px solid ${G.gold}33`,borderRadius:9,color:G.gold,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s"}}
+      onMouseEnter={e=>{e.currentTarget.style.background=`${G.gold}18`;}}
+      onMouseLeave={e=>{e.currentTarget.style.background=`${G.gold}0e`;}}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Sign in to Download
+    </button>
+  );
+
   if(books.length===0) return(
-    <div style={{padding:"48px 22px",textAlign:"center"}}>
-      <div style={{fontSize:40,marginBottom:16}}>📚</div>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.text,marginBottom:8}}>Library Coming Soon</div>
-      <p style={{color:G.textSub,fontSize:13,lineHeight:1.7}}>Free trading books and guides, curated by RegimeEdge.</p>
+    <div style={{paddingBottom:32}}>
+      <div style={{background:`linear-gradient(160deg,rgba(96,165,250,0.07) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px"}}>
+        <div style={{fontSize:10,color:G.blue,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Free Resource</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900}}>Trading Library</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.6}}>Curated books and guides by RegimeEdge.</p>
+      </div>
+      <div style={{padding:"40px 22px",textAlign:"center"}}>
+        <div style={{width:56,height:56,borderRadius:"50%",background:`${G.blue}10`,border:`1px solid ${G.blue}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={G.blue} strokeWidth="1.8" strokeLinecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:G.text,marginBottom:8,fontWeight:800}}>Library Coming Soon</div>
+        <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Free trading books and guides, curated by RegimeEdge. Check back soon.</p>
+      </div>
     </div>
   );
+
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="Free Resource" title="Trading Library" sub="Download and read — completely free"/>
-      <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:"12px 16px",marginBottom:22,display:"flex",alignItems:"center",gap:10}}>
-        <span style={{fontSize:18}}>🎁</span>
-        <p style={{color:G.gold,fontSize:12,lineHeight:1.7,margin:0,fontWeight:600}}>All books are free. No sign-up required to download. Build your edge.</p>
+    <div style={{paddingBottom:32}}>
+      {/* Hero */}
+      <div style={{background:`linear-gradient(160deg,rgba(96,165,250,0.08) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,right:0,width:"50%",height:"100%",background:`radial-gradient(ellipse at right,${G.blue}06,transparent)`,pointerEvents:"none"}}/>
+        <div style={{fontSize:10,color:G.blue,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Free Resource</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>Trading Library</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:"0 0 16px",lineHeight:1.6}}>Curated books and guides — completely free for members.</p>
+        {/* Auth status */}
+        {user?(
+          <div style={{display:"inline-flex",alignItems:"center",gap:7,background:`${G.green}0e`,border:`1px solid ${G.green}22`,borderRadius:10,padding:"7px 12px"}}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={G.green} strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span style={{fontSize:11,color:G.green,fontWeight:700}}>Signed in — all downloads unlocked</span>
+          </div>
+        ):(
+          <div style={{display:"flex",alignItems:"center",gap:8,background:`${G.gold}0a`,border:`1px solid ${G.gold}22`,borderRadius:10,padding:"10px 14px"}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span style={{fontSize:12,color:G.gold,fontWeight:600}}>Sign in to download — browsing is free</span>
+          </div>
+        )}
       </div>
-      {books.map(book=>(
-        <div key={book.id} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:14,overflow:"hidden"}}>
-          <div style={{height:3,background:`linear-gradient(90deg,${G.blue},${G.blue}44)`}}/>
-          <div style={{display:"flex",gap:0}}>
-            {/* Cover */}
-            {book.cover?(
-              <div style={{width:90,flexShrink:0,background:G.surface,overflow:"hidden"}}>
-                <img src={book.cover} alt={book.title} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",minHeight:120}}/>
+
+      <div style={{padding:"20px 22px 0"}}>
+        {books.map((book,bi)=>(
+          <div key={book.id} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:14,overflow:"hidden",animation:`fadeUp 0.35s ${bi*0.07}s ease both`,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",transition:"all 0.22s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=`${G.blue}33`;e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 12px 32px rgba(0,0,0,0.35)`;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.2)";}}>
+            <div style={{height:2,background:`linear-gradient(90deg,${G.blue},${G.blue}22)`}}/>
+            <div style={{display:"flex",gap:0}}>
+              {/* Cover */}
+              {book.cover?(
+                <div style={{width:96,flexShrink:0,overflow:"hidden",background:G.surface}}>
+                  <img src={book.cover} alt={book.title} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",minHeight:130}}/>
+                </div>
+              ):(
+                <div style={{width:96,flexShrink:0,background:`${G.blue}08`,border:`0px solid ${G.blue}`,borderRight:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",minHeight:130}}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={G.blue} strokeWidth="1.5" strokeLinecap="round" opacity="0.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                </div>
+              )}
+              {/* Info */}
+              <div style={{flex:1,padding:"14px 16px",display:"flex",flexDirection:"column",justifyContent:"space-between",minHeight:130}}>
+                <div>
+                  <div style={{fontSize:8,color:G.blue,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginBottom:6}}>{book.category||"Trading"}</div>
+                  <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.35,marginBottom:4}}>{book.title}</div>
+                  {book.author&&<div style={{fontSize:11,color:G.textSub,marginBottom:6}}>by {book.author}</div>}
+                  {book.desc&&<p style={{color:G.textDim,fontSize:11,lineHeight:1.65,margin:"0 0 10px"}}>{book.desc}</p>}
+                </div>
+                {/* Download — gated */}
+                {user?(
+                  <a href={book.pdfUrl} target="_blank" rel="noreferrer"
+                    style={{display:"inline-flex",alignItems:"center",gap:7,padding:"9px 16px",background:`${G.blue}12`,border:`1px solid ${G.blue}33`,borderRadius:9,color:G.blue,fontSize:12,fontWeight:800,textDecoration:"none",alignSelf:"flex-start",transition:"all 0.2s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=`${G.blue}20`;e.currentTarget.style.borderColor=`${G.blue}55`;}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=`${G.blue}12`;e.currentTarget.style.borderColor=`${G.blue}33`;}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Free Download
+                  </a>
+                ):(
+                  <LockedDownload/>
+                )}
               </div>
-            ):(
-              <div style={{width:90,flexShrink:0,background:G.surface,display:"flex",alignItems:"center",justifyContent:"center",minHeight:120}}>
-                <span style={{fontSize:36}}>📖</span>
-              </div>
-            )}
-            {/* Info */}
-            <div style={{flex:1,padding:"14px 16px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
-              <div>
-                <div style={{fontSize:8,color:G.blue,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginBottom:5}}>{book.category||"Trading"}</div>
-                <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.4,marginBottom:5}}>{book.title}</div>
-                {book.author&&<div style={{fontSize:11,color:G.textSub,marginBottom:6}}>by {book.author}</div>}
-                {book.desc&&<p style={{color:G.textDim,fontSize:11,lineHeight:1.65,margin:"0 0 10px"}}>{book.desc}</p>}
-              </div>
-              <a href={book.pdfUrl} target="_blank" rel="noreferrer"
-                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",background:`${G.blue}18`,border:`1px solid ${G.blue}44`,borderRadius:8,color:G.blue,fontSize:11,fontWeight:800,textDecoration:"none",alignSelf:"flex-start"}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Free Download
-              </a>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+
+        {/* Sign-in CTA at bottom if not logged in */}
+        {!user&&(
+          <div style={{background:`linear-gradient(135deg,${G.gold}0a,${G.card})`,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:"20px 22px",textAlign:"center",marginTop:8}}>
+            <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:6}}>Want to download?</div>
+            <p style={{color:G.textSub,fontSize:12,lineHeight:1.65,margin:"0 0 14px"}}>Create a free account to unlock all downloads instantly.</p>
+            <button onClick={()=>onSignIn&&onSignIn()} style={{padding:"12px 28px",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,border:"none",borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:`0 4px 18px rgba(212,175,55,0.25)`}}>
+              Sign In / Create Account →
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -3541,8 +3620,8 @@ export default function App(){
   const pages={
     home:<HomePage st={st} setPage={nav}/>,
     weekly:<WeeklyPage st={st}/>,
-    eas:<EAsPage st={st}/>,
-    books:<BooksPage st={st}/>,
+    eas:<EAsPage st={st} user={user} onSignIn={()=>setShowAuth(true)}/>,
+    books:<BooksPage st={st} user={user} onSignIn={()=>setShowAuth(true)}/>,
     macro:<MacroPage st={st}/>,
     events:<EventsPage st={st}/>,
     news:<NewsPage st={st}/>,

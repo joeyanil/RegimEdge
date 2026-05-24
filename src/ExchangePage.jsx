@@ -2136,7 +2136,7 @@ function CancelTradeModal({ trade, user, isBuyer, onCancelled, onClose }) {
   );
 }
 
-function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
+function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell, onSignIn }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -2146,22 +2146,24 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Expire stale waiting_payment trades
-      const pendingRows = await p2pSelect("p2p_trades", "?status=eq.waiting_payment&select=id,listing_id,expires_at,amount_usdt").catch(() => []);
-      const now = new Date();
-      for (const t of (pendingRows || [])) {
-        if (t.expires_at && new Date(t.expires_at) < now) {
-          try {
-            await p2pUpdate("p2p_trades", `id=eq.${t.id}`, { status:"cancelled", cancellation_reason:"Expired", cancelled_by:"system" });
-            if (t.listing_id) {
-              const listingRows = await p2pSelect("p2p_listings", `?id=eq.${t.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
-              const listing = listingRows?.[0] || {};
-              const restoredAmount = (listing.trade_remaining_usdt ?? 0) + (t.amount_usdt || 0) || listing.amount_usdt;
-              await p2pUpdate("p2p_listings", `id=eq.${t.listing_id}`, { status:"open", amount_usdt:restoredAmount, trade_remaining_usdt:null });
-            }
-          } catch {}
+      // 1. Expire stale waiting_payment trades (only if logged in)
+      if (user?.id) {
+        const pendingRows = await p2pSelect("p2p_trades", "?status=eq.waiting_payment&select=id,listing_id,expires_at,amount_usdt").catch(() => []);
+        const now = new Date();
+        for (const t of (pendingRows || [])) {
+          if (t.expires_at && new Date(t.expires_at) < now) {
+            try {
+              await p2pUpdate("p2p_trades", `id=eq.${t.id}`, { status:"cancelled", cancellation_reason:"Expired", cancelled_by:"system" });
+              if (t.listing_id) {
+                const listingRows = await p2pSelect("p2p_listings", `?id=eq.${t.listing_id}&select=amount_usdt,trade_remaining_usdt`).catch(() => []);
+                const listing = listingRows?.[0] || {};
+                const restoredAmount = (listing.trade_remaining_usdt ?? 0) + (t.amount_usdt || 0) || listing.amount_usdt;
+                await p2pUpdate("p2p_listings", `id=eq.${t.listing_id}`, { status:"open", amount_usdt:restoredAmount, trade_remaining_usdt:null });
+              }
+            } catch {}
+          }
         }
-      }
+      } // end if user?.id
 
       // 2. Fetch all open listings
       let fetchedListings = await p2pSelect("p2p_listings", "?status=eq.open&order=seller_trust_plus.desc,created_at.asc&select=*").catch(() => []);
@@ -2318,15 +2320,30 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
           </div>
         </div>
         <ErrBox msg={err} />
+        {/* Guest browse banner */}
+        {!user&&(
+          <div style={{background:`linear-gradient(135deg,${G.gold}0a,${G.card})`,border:`1px solid ${G.gold}33`,borderRadius:G.r,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:36,height:36,borderRadius:10,background:G.goldBg,border:`1px solid ${G.gold}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:3}}>Browsing as guest</div>
+              <div style={{fontSize:11,color:G.textSub,lineHeight:1.5}}>Sign in and complete KYC to buy USDT.</div>
+            </div>
+            <button onClick={()=>onSignIn&&onSignIn()} style={{flexShrink:0,padding:"9px 14px",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,border:"none",borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",boxShadow:`0 4px 16px rgba(212,175,55,0.25)`}}>
+              Sign In →
+            </button>
+          </div>
+        )}
         {loading ? <Spinner /> : listings.length === 0 ? (
           <Card style={{ textAlign:"center", padding:44 }}>
             <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}><Icon name="list" size={36} color={G.textDim} /></div>
             <div style={{ color:G.textSub, fontSize:14 }}>No listings right now. Be the first to sell.</div>
-            {onSell && <div style={{ marginTop:14 }}><Btn onClick={onSell} full={false} style={{ padding:"10px 24px" }}>Post Your Listing</Btn></div>}
+            {onSell && user && <div style={{ marginTop:14 }}><Btn onClick={onSell} full={false} style={{ padding:"10px 24px" }}>Post Your Listing</Btn></div>}
           </Card>
         ) : listings.map(l => {
           const methods = l.payment_method ? l.payment_method.split(", ") : [];
-          const isOwn = l.seller_id === user.id;
+          const isOwn = user && l.seller_id === user.id;
           const hasTrades = l.seller_completed_trades > 0;
           const hasRating = l.seller_rating > 0;
           const hasSuccess = l.seller_success_rate > 0;
@@ -2442,7 +2459,11 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
                 </div>
                 {isOwn
                   ? <span style={{ fontSize:11, color:G.textDim, fontStyle:"italic", flexShrink:0 }}>Your listing</span>
-                  : <Btn onClick={() => setBuyFlowListing(l)} disabled={buying === l.id} full={false} style={{ padding:"10px 20px", fontSize:13, flexShrink:0 }}>{buying === l.id ? "Opening..." : "Buy Now"}</Btn>
+                  : !user
+                    ? <button onClick={()=>onSignIn&&onSignIn()} style={{padding:"10px 18px",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,border:"none",borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"inherit",flexShrink:0,boxShadow:`0 4px 16px rgba(212,175,55,0.25)`}}>Sign In to Buy</button>
+                    : !kyc || kyc.status!=="approved"
+                      ? <button onClick={onBack} style={{padding:"10px 14px",background:`${G.blue}12`,border:`1px solid ${G.blue}33`,borderRadius:G.rs,color:G.blue,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>Verify KYC →</button>
+                      : <Btn onClick={() => setBuyFlowListing(l)} disabled={buying === l.id} full={false} style={{ padding:"10px 20px", fontSize:13, flexShrink:0 }}>{buying === l.id ? "Opening..." : "Buy Now"}</Btn>
                 }
               </div>
             </div>
@@ -3505,7 +3526,7 @@ function GuidePage({ onBack }) {
   );
 }
 
-function NotLoggedIn({ onSignIn, onGuide }) {
+function NotLoggedIn({ onSignIn, onGuide, onBrowse }) {
   const steps = [
     { icon:`<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>`, label:"Verify Identity", desc:"Submit your Ethiopian ID for KYC", color:G.green },
     { icon:`<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>`, label:"Browse Listings", desc:"Find a seller at your rate", color:G.blue },
@@ -3539,6 +3560,12 @@ function NotLoggedIn({ onSignIn, onGuide }) {
           {/* CTA */}
           <button onClick={onSignIn} style={{ width:"100%", padding:"15px 0", background:`linear-gradient(135deg,${G.goldLight},${G.gold})`, border:"none", borderRadius:G.rs, color:"#000", fontSize:14, fontWeight:900, cursor:"pointer", fontFamily:"inherit", boxShadow:`0 8px 28px rgba(212,175,55,0.35)`, letterSpacing:0.3, marginBottom:10 }}>
             Sign In / Create Account →
+          </button>
+          <button onClick={onBrowse} style={{ width:"100%", padding:"12px 0", background:"transparent", border:`1px solid ${G.border}`, borderRadius:G.rs, color:G.textSub, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginBottom:10, transition:"all 0.2s" }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold+"44";e.currentTarget.style.color=G.gold;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textSub;}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Browse Listings First
           </button>
           {onGuide&&(
             <button onClick={onGuide} style={{ width:"100%", padding:"12px 0", background:"transparent", border:`1px solid ${G.border}`, borderRadius:G.rs, color:G.textSub, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
@@ -3662,8 +3689,11 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
   // (before the !user check, otherwise setting screen="guide" from NotLoggedIn is blocked)
   if (screen === "guide") return <GuidePage onBack={goHub} />;
 
-  // Not logged in
-  if (!user?.id) return <NotLoggedIn onSignIn={onSignIn} onGuide={() => setScreen("guide")} />;
+  // Not logged in — can still browse listings and guide
+  if (!user?.id) {
+    if (screen === "listings") return <ListingsBrowser user={null} kyc={null} config={config||{platform_fee_etb:50,min_usdt:5}} onOpenTrade={()=>{}} onBack={goHub} onSell={()=>{}} onSignIn={onSignIn}/>;
+    return <NotLoggedIn onSignIn={onSignIn} onGuide={() => setScreen("guide")} onBrowse={() => setScreen("listings")}/>;
+  }
 
   // Exchange paused
   if (config && config.exchange_active === false) return (
@@ -3737,6 +3767,7 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
         onOpenTrade={openTrade}
         onBack={goHub}
         onSell={() => setScreen("sell")}
+        onSignIn={onSignIn}
       />
     );
   }
