@@ -770,7 +770,9 @@ const HomePage = React.memo(function HomePage({st,setPage}){
                 <div key={book.id} onClick={()=>setPage("books")} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<Math.min(st.books.length,3)-1?`1px solid ${G.border}`:"none",cursor:"pointer",transition:"background 0.15s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=G.surface}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{width:32,height:32,borderRadius:8,background:`${G.blue}15`,border:`1px solid ${G.blue}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>📖</div>
+                  <div style={{width:32,height:32,borderRadius:8,background:`${G.blue}15`,border:`1px solid ${G.blue}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.blue} strokeWidth="2" strokeLinecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                  </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{book.title}</div>
                     {book.author&&<div style={{fontSize:11,color:G.textSub}}>by {book.author}</div>}
@@ -811,7 +813,7 @@ const WeeklyPage = React.memo(function WeeklyPage({st}){
         {!hasWeekly?(
           <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"40px 24px",textAlign:"center",marginBottom:16}}>
             <div style={{width:56,height:56,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
-              <span style={{fontSize:24}}>📊</span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8" strokeLinecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             </div>
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:G.text,marginBottom:8,fontWeight:800}}>No Bias Posted Yet</div>
             <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Weekly bias is posted every Monday. Check back then.</p>
@@ -874,6 +876,11 @@ const WeeklyPage = React.memo(function WeeklyPage({st}){
               <BiasTag d={st.dailyBias.direction}/>
             </div>
             <div style={{marginBottom:10}}>{renderBody(st.dailyBias.body,true)}</div>
+            {st.dailyBias.image&&(
+              <div style={{borderRadius:10,overflow:"hidden",marginBottom:10,border:`1px solid ${G.border}`}}>
+                <img src={st.dailyBias.image} style={{width:"100%",display:"block"}}/>
+              </div>
+            )}
             <div style={{fontSize:11,color:G.textDim}}>{st.dailyBias.updatedAt}</div>
           </GlowCard>
         )}
@@ -890,35 +897,72 @@ const WeeklyPage = React.memo(function WeeklyPage({st}){
 
 // ── MACRO DASHBOARD ───────────────────────────────────────────────────────────
 function MacroPage({st}){
+  const wColor=st.weeklyBias.direction==="Bullish"?G.green:st.weeklyBias.direction==="Bearish"?G.red:G.gold;
+  const dColor=st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold;
   const inds=[
-    {label:"Real Yields (TIPS 10Y)",note:"Primary gold driver",status:"Falling",bull:true},
-    {label:"DXY — US Dollar Index",note:"Inverse relationship with gold",status:"Declining",bull:true},
-    {label:"VIX — Volatility Index",note:"Risk sentiment",status:"Low / 18.4",bull:true},
-    {label:"Inflation Breakeven",note:"Rising inflation = gold demand",status:"Rising",bull:true},
-    {label:"GLD ETF Holdings",note:"Institutional positioning",status:"Inflows",bull:true},
+    {label:"Real Yields (TIPS 10Y)",note:"Primary gold driver",status:"Falling",color:G.green},
+    {label:"DXY — US Dollar Index",note:"Inverse to gold",status:"Declining",color:G.green},
+    {label:"VIX — Volatility Index",note:"Risk sentiment",status:"Low / 18.4",color:G.green},
+    {label:"Inflation Breakeven",note:"Rising = gold demand",status:"Rising",color:G.green},
+    {label:"GLD ETF Holdings",note:"Institutional positioning",status:"Inflows",color:G.green},
   ];
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="Daily Intelligence" title="Macro Dashboard"/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
-        {[["WEEK",st.weeklyBias.direction,st.weeklyBias.dayLabel],["TODAY",st.dailyBias.direction,st.dailyBias.dayLabel]].map(([l,d,v])=>(
-          <GlowCard key={l} color={d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold}>
-            <div style={{fontSize:9,color:G.textSub,letterSpacing:2,marginBottom:8}}>{l}</div>
-            <div style={{fontSize:16,fontWeight:900,color:d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold,fontFamily:"'Playfair Display',serif",lineHeight:1.2}}>{v}</div>
-          </GlowCard>
-        ))}
+    <div style={{paddingBottom:32}}>
+      {/* Hero */}
+      <div style={{background:`linear-gradient(160deg,rgba(212,175,55,0.08) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,right:0,width:"50%",height:"100%",background:`radial-gradient(ellipse at right,${G.gold}06,transparent)`,pointerEvents:"none"}}/>
+        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Daily Intelligence</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>Macro Dashboard</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.6}}>Real-time regime conditions driving gold direction.</p>
       </div>
-      <p style={{color:G.textSub,fontSize:13,lineHeight:1.8,marginBottom:24}}>{st.dailyBias.body}</p>
-      <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Macro Indicators</div>
-      {inds.map((ind,i)=>(
-        <div key={i} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"14px 16px",marginBottom:9,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:3}}>{ind.label}</div>
-            <div style={{fontSize:11,color:G.textSub}}>{ind.note}</div>
-          </div>
-          <Badge color={ind.bull?G.green:G.red}>{ind.status}</Badge>
+
+      <div style={{padding:"24px 22px 0"}}>
+        {/* Bias cards */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+          {[["WEEK",st.weeklyBias.direction,st.weeklyBias.dayLabel,wColor],["TODAY",st.dailyBias.direction,st.dailyBias.dayLabel,dColor]].map(([l,d,v,c],i)=>(
+            <GlowCard key={l} color={c} style={{padding:"16px 14px",animation:`fadeUp 0.35s ${i*0.07}s ease both`}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+                <div style={{width:3,height:12,background:c,borderRadius:2}}/>
+                <div style={{fontSize:9,color:G.textSub,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>{l}</div>
+              </div>
+              <div style={{fontSize:15,fontWeight:900,color:c,fontFamily:"'Playfair Display',serif",lineHeight:1.2,marginBottom:4}}>{v||"—"}</div>
+              <Badge color={c} style={{fontSize:9,padding:"2px 8px"}}>{d||"Neutral"}</Badge>
+            </GlowCard>
+          ))}
         </div>
-      ))}
+
+        {/* Daily body */}
+        {st.dailyBias.body&&(
+          <div style={{background:G.card,border:`1px solid ${G.border}`,borderLeft:`3px solid ${dColor}`,borderRadius:G.r,padding:"14px 18px",marginBottom:20}}>
+            <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Today's Outlook</div>
+            {renderBody(st.dailyBias.body,true)}
+          </div>
+        )}
+        {st.dailyBias.image&&(
+          <div style={{marginBottom:20,borderRadius:12,overflow:"hidden",border:`1px solid ${G.border}`}}>
+            <img src={st.dailyBias.image} style={{width:"100%",display:"block"}}/>
+          </div>
+        )}
+
+        {/* Macro Indicators */}
+        <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:12,fontWeight:700}}>Macro Indicators</div>
+        {inds.map((ind,i)=>(
+          <div key={i} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"13px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",animation:`fadeUp 0.35s ${0.1+i*0.06}s ease both`,transition:"all 0.2s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=`${ind.color}33`;e.currentTarget.style.background=`${ind.color}05`;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.card;}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:3}}>{ind.label}</div>
+              <div style={{fontSize:11,color:G.textSub}}>{ind.note}</div>
+            </div>
+            <Badge color={ind.color}>{ind.status}</Badge>
+          </div>
+        ))}
+
+        {/* Disclaimer */}
+        <div style={{marginTop:18,background:G.surface,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}`,borderRadius:G.r,padding:"12px 16px"}}>
+          <p style={{color:G.textDim,fontSize:11,lineHeight:1.7,margin:0}}>Macro indicators reflect current regime conditions. Data is directional context, not trading signals. Always use your own judgment and risk management.</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -926,106 +970,113 @@ function MacroPage({st}){
 // ── EVENTS ────────────────────────────────────────────────────────────────────
 function EventsPage({st}){
   const UPCOMING=[
-    { id:"nfp", title:"Non-Farm Payrolls", short:"NFP", date:"Jun 5, 2026", time:"12:30 UTC", color:G.gold, icon:"◈",
-      desc:"Monthly US jobs report. Largest single monthly driver of gold and USD volatility.", impact:"Very High",
-      sig: st.nfpSignal },
-    { id:"fomc", title:"FOMC Rate Decision", short:"FOMC", date:"Jun 17–18, 2026", time:"18:00 UTC", color:G.blue, icon:"⬡",
-      desc:"Federal Reserve policy statement and rate decision. Determines USD and gold macro direction.", impact:"Very High",
-      sig: st.fomcSignal },
-    { id:"cpi", title:"US CPI Inflation", short:"CPI", date:"Jun 10, 2026", time:"12:30 UTC", color:"#f472b6", icon:"▲",
-      desc:"Consumer price index release. Primary inflation gauge feeding into Fed rate path expectations.", impact:"High",
-      sig: null },
-    { id:"gdp", title:"US GDP (Q1 Final)", short:"GDP", date:"Jun 26, 2026", time:"12:30 UTC", color:G.textSub, icon:"◉",
-      desc:"Quarterly economic output. Confirms growth trajectory and risk sentiment direction.", impact:"Medium",
-      sig: null },
+    {id:"nfp",title:"Non-Farm Payrolls",short:"NFP",date:"Jun 5, 2026",time:"12:30 UTC",color:G.gold,
+      desc:"Monthly US jobs report. Largest single monthly driver of gold and USD volatility.",impact:"Very High",sig:st.nfpSignal},
+    {id:"fomc",title:"FOMC Rate Decision",short:"FOMC",date:"Jun 17–18, 2026",time:"18:00 UTC",color:G.blue,
+      desc:"Federal Reserve policy statement and rate decision. Determines USD and gold macro direction.",impact:"Very High",sig:st.fomcSignal},
+    {id:"cpi",title:"US CPI Inflation",short:"CPI",date:"Jun 10, 2026",time:"12:30 UTC",color:"#f472b6",
+      desc:"Consumer price index release. Primary inflation gauge feeding into Fed rate path expectations.",impact:"High",sig:null},
+    {id:"gdp",title:"US GDP (Q1 Final)",short:"GDP",date:"Jun 26, 2026",time:"12:30 UTC",color:G.textSub,
+      desc:"Quarterly economic output. Confirms growth trajectory and risk sentiment direction.",impact:"Medium",sig:null},
   ];
-  const impactColor=(i)=>i==="Very High"?G.gold:i==="High"?"#f472b6":G.textSub;
+  const impactColor=i=>i==="Very High"?G.gold:i==="High"?"#f472b6":G.textSub;
+  const impactBg=i=>i==="Very High"?`${G.gold}0e`:i==="High"?"rgba(244,114,182,0.08)":"transparent";
 
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="High Conviction" title="High Impact Events"/>
-      <div style={{background:G.goldBg,border:`1px solid ${G.gold}22`,borderRadius:G.r,padding:16,marginBottom:28}}>
-        <p style={{color:G.gold,fontSize:12,lineHeight:1.8,margin:0,fontWeight:600}}>⚡ RegimeEdge posts pre-event signals before NFP and FOMC. Position before the market moves.</p>
+    <div style={{paddingBottom:32}}>
+      {/* Hero */}
+      <div style={{background:`linear-gradient(160deg,rgba(212,175,55,0.09) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 24px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-20,right:-10,fontSize:120,color:G.gold,opacity:0.04,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none"}}>⚡</div>
+        <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>High Conviction</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>Event Signals</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:0,lineHeight:1.6}}>Pre-event positioning before NFP and FOMC.</p>
       </div>
 
-      {UPCOMING.map(ev=>(
-        <div key={ev.id} style={{marginBottom:16}}>
-          <div style={{background:G.card,border:`1px solid ${ev.color}33`,borderRadius:G.r,overflow:"hidden",
-            boxShadow:`0 0 24px ${ev.color}0a`}}>
-            {/* Card header bar */}
-            <div style={{height:3,background:`linear-gradient(90deg,${ev.color},${ev.color}44)`}}/>
-            <div style={{padding:"16px 18px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:36,height:36,borderRadius:10,background:`${ev.color}14`,border:`1px solid ${ev.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{ev.icon}</div>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:800,color:G.text,lineHeight:1.2}}>{ev.title}</div>
-                    <div style={{fontSize:10,color:G.textSub,marginTop:2}}>{ev.short}</div>
+      <div style={{padding:"24px 22px 0"}}>
+        {/* Signal callout */}
+        <div style={{background:`linear-gradient(135deg,${G.gold}0e,${G.card})`,border:`1px solid ${G.gold}33`,borderRadius:G.r,padding:"14px 18px",marginBottom:20,display:"flex",alignItems:"flex-start",gap:12}}>
+          <div style={{width:36,height:36,borderRadius:10,background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,animation:"glow 3s ease-in-out infinite"}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={G.gold} stroke={G.gold} strokeWidth="0"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <p style={{color:G.textSub,fontSize:12,lineHeight:1.8,margin:0}}><span style={{color:G.gold,fontWeight:800}}>RegimeEdge posts pre-event signals</span> before NFP and FOMC. Position before the market moves — not after.</p>
+        </div>
+
+        {/* Event cards */}
+        {UPCOMING.map((ev,ei)=>(
+          <div key={ev.id} style={{marginBottom:14,animation:`fadeUp 0.35s ${ei*0.07}s ease both`}}>
+            <div style={{background:G.card,border:`1px solid ${ev.color}22`,borderRadius:G.r,overflow:"hidden",boxShadow:`0 4px 20px ${ev.color}08`}}>
+              <div style={{height:3,background:`linear-gradient(90deg,${ev.color},${ev.color}22)`}}/>
+              <div style={{padding:"16px 18px"}}>
+                {/* Header */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:42,height:42,borderRadius:12,background:`${ev.color}12`,border:`1px solid ${ev.color}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={{fontFamily:"'Playfair Display',serif",fontSize:13,fontWeight:900,color:ev.color}}>{ev.short}</span>
+                    </div>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.2,marginBottom:2}}>{ev.title}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={G.textDim} strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span style={{fontSize:11,color:G.textSub}}>{ev.date}</span>
+                        <span style={{color:G.textDim,fontSize:10}}>·</span>
+                        <span style={{fontSize:11,color:G.textDim}}>{ev.time}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{background:impactBg(ev.impact),border:`1px solid ${impactColor(ev.impact)}22`,borderRadius:8,padding:"5px 10px",textAlign:"center",flexShrink:0}}>
+                    <div style={{fontSize:11,fontWeight:800,color:impactColor(ev.impact)}}>{ev.impact}</div>
+                    <div style={{fontSize:9,color:G.textDim,letterSpacing:0.5}}>IMPACT</div>
                   </div>
                 </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontSize:10,fontWeight:700,color:impactColor(ev.impact),letterSpacing:0.5}}>{ev.impact}</div>
-                  <div style={{fontSize:9,color:G.textDim,marginTop:2}}>IMPACT</div>
-                </div>
-              </div>
 
-              <div style={{display:"flex",gap:14,marginBottom:12}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  
-                  <span style={{fontSize:11,color:G.text,fontWeight:600}}>{ev.date}</span>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  
-                  <span style={{fontSize:11,color:G.textSub}}>{ev.time}</span>
-                </div>
-              </div>
+                <p style={{color:G.textSub,fontSize:12,lineHeight:1.75,margin:"0 0 14px"}}>{ev.desc}</p>
 
-              <p style={{color:G.textSub,fontSize:12,lineHeight:1.75,margin:"0 0 14px"}}>{ev.desc}</p>
-
-              {/* Signal block — only for NFP/FOMC */}
-              {ev.sig&&(
-                <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14,marginTop:2}}>
-                  {ev.sig.active&&ev.sig.prediction?(
-                    <div>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                        <div style={{fontSize:9,color:G.gold,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>RegimeEdge Signal — Live</div>
-                        <div style={{width:7,height:7,borderRadius:"50%",background:G.green,boxShadow:`0 0 8px ${G.green}`}}/>
-                      </div>
-                      <div style={{background:G.goldBg2,border:`1px solid ${ev.color}44`,borderRadius:G.rs,padding:"12px 14px",marginBottom:10}}>
-                        <div style={{fontSize:18,fontWeight:900,color:G.text,fontFamily:"'Playfair Display',serif"}}>{ev.sig.prediction}</div>
-                      </div>
-                      {ev.sig.body&&<p style={{color:G.text,fontSize:13,lineHeight:1.8,margin:"0 0 8px"}}>{ev.sig.body}</p>}
-                      {ev.sig.result&&(
-                        <div style={{padding:"10px 14px",background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs,marginTop:8}}>
-                          <div style={{fontSize:12,color:G.green,fontWeight:700}}>Result: {ev.sig.result}</div>
+                {/* Signal block */}
+                {ev.sig&&(
+                  <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14}}>
+                    {ev.sig.active&&ev.sig.prediction?(
+                      <div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7}}>
+                            <div style={{width:7,height:7,borderRadius:"50%",background:G.green,boxShadow:`0 0 8px ${G.green}`,animation:"pulseDot 1.5s ease-in-out infinite"}}/>
+                            <div style={{fontSize:9,color:G.green,letterSpacing:2,textTransform:"uppercase",fontWeight:800}}>Signal Live</div>
+                          </div>
+                          <span style={{fontSize:9,color:G.textDim}}>RegimeEdge</span>
                         </div>
-                      )}
-                    </div>
-                  ):(
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <div style={{width:7,height:7,borderRadius:"50%",background:G.textDim,flexShrink:0}}/>
-                      <div style={{fontSize:12,color:G.textSub}}>Pre-forecast not yet posted. RegimeEdge signals before the release.</div>
-                    </div>
-                  )}
-                </div>
-              )}
+                        <div style={{background:`linear-gradient(135deg,${ev.color}12,${G.card})`,border:`1px solid ${ev.color}33`,borderRadius:G.rs,padding:"14px 16px",marginBottom:10}}>
+                          <div style={{fontSize:20,fontWeight:900,color:G.text,fontFamily:"'Playfair Display',serif",lineHeight:1.2}}>{ev.sig.prediction}</div>
+                        </div>
+                        {ev.sig.body&&<div style={{marginBottom:10}}>{renderBody(ev.sig.body,true)}</div>}
+                        {ev.sig.result&&(
+                          <div style={{padding:"10px 14px",background:G.greenBg,border:`1px solid ${G.green}33`,borderRadius:G.rs,display:"flex",alignItems:"center",gap:8}}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={G.green} strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            <div style={{fontSize:12,color:G.green,fontWeight:700}}>Result: {ev.sig.result}</div>
+                          </div>
+                        )}
+                      </div>
+                    ):(
+                      <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0"}}>
+                        <div style={{width:7,height:7,borderRadius:"50%",background:G.textDim,flexShrink:0}}/>
+                        <div style={{fontSize:12,color:G.textSub,lineHeight:1.6}}>Signal not yet posted. RegimeEdge signals before the release — check back.</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
-
-      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.r,padding:16,marginTop:8}}>
-        <div style={{fontSize:11,fontWeight:700,color:G.textSub,marginBottom:8,letterSpacing:1}}>HOW REGIMEEDGE USES EVENTS</div>
-        {[
-          "NFP signal posted the night before — so you're positioned, not reacting.",
-          "FOMC signal posted 2–3 hours before announcement.",
-          "These are directional pre-forecasts based on macro conditions, not short-term guesses.",
-        ].map((t,i)=>(
-          <div key={i} style={{display:"flex",gap:9,marginBottom:7,alignItems:"flex-start"}}>
-            <span style={{color:G.gold,fontSize:11,flexShrink:0,marginTop:1}}>◈</span>
-            <span style={{color:G.textSub,fontSize:12,lineHeight:1.65}}>{t}</span>
-          </div>
         ))}
+
+        {/* How RegimeEdge uses events */}
+        <div style={{background:G.surface,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}`,borderRadius:G.r,padding:"14px 18px",marginTop:4}}>
+          <div style={{fontSize:10,fontWeight:800,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>How RegimeEdge Uses Events</div>
+          {["NFP signal posted the night before — so you're positioned, not reacting.","FOMC signal posted 2–3 hours before announcement.","These are directional pre-forecasts based on macro conditions, not short-term guesses."].map((t,i)=>(
+            <div key={i} style={{display:"flex",gap:9,marginBottom:i<2?8:0,alignItems:"flex-start"}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:G.gold,flexShrink:0,marginTop:5}}/>
+              <span style={{color:G.textSub,fontSize:12,lineHeight:1.7}}>{t}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1037,35 +1088,72 @@ function NewsPage({st}){
   const TAGS=["All","Gold","USD","FOMC","NFP","Risk","Macro"];
   const[filterTag,setFilterTag]=useState("All");
   const filtered=filterTag==="All"?st.news:st.news.filter(n=>n.tag===filterTag);
+
   return(
-    <div style={{padding:"32px 22px"}}>
-      <SH label="Market Intelligence" title="News"/>
-      {/* Tag filter bar */}
-      <div style={{display:"flex",gap:7,overflowX:"auto",scrollbarWidth:"none",marginBottom:20,paddingBottom:4}}>
-        <style>{`.re-tags::-webkit-scrollbar{display:none}`}</style>
-        {TAGS.map(tag=>{
-          const active=filterTag===tag;
-          const color=tc[tag]||G.gold;
-          return(
-            <button key={tag} onClick={()=>setFilterTag(tag)} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:`1px solid ${active?color:G.border}`,background:active?`${color}18`:"none",color:active?color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3}}>
-              {tag}
-            </button>
-          );
-        })}
+    <div style={{paddingBottom:32}}>
+      {/* Hero */}
+      <div style={{background:`linear-gradient(160deg,rgba(96,165,250,0.07) 0%,${G.bgDeep} 60%)`,borderBottom:`1px solid ${G.border}`,padding:"28px 22px 20px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-10,right:-10,fontSize:120,color:G.blue,opacity:0.04,fontWeight:900,lineHeight:1,pointerEvents:"none",userSelect:"none"}}>📰</div>
+        <div style={{fontSize:10,color:G.blue,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Market Intelligence</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:G.text,margin:"0 0 6px",fontWeight:900,lineHeight:1.1}}>News & Takes</h1>
+        <p style={{color:G.textSub,fontSize:12,margin:"0 0 18px",lineHeight:1.6}}>RegimeEdge analysis on what matters for gold direction.</p>
+        {/* Tag filter */}
+        <div style={{display:"flex",gap:7,overflowX:"auto",scrollbarWidth:"none",paddingBottom:2}}>
+          {TAGS.map(tag=>{
+            const active=filterTag===tag;
+            const color=tc[tag]||G.blue;
+            return(
+              <button key={tag} onClick={()=>setFilterTag(tag)} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:`1px solid ${active?color+"66":G.border}`,background:active?`${color}15`:"transparent",color:active?color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3}}>
+                {tag}
+              </button>
+            );
+          })}
+        </div>
       </div>
-      {filtered.length===0?<div style={{textAlign:"center",padding:"60px 0",color:G.textSub}}>No news for this tag yet.</div>:
-      filtered.map(n=>(
-        <GlowCard key={n.id} color={tc[n.tag]||G.textSub} style={{marginBottom:14}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
-            <Badge color={tc[n.tag]||G.textSub}>{n.tag}</Badge>
-            <div style={{fontSize:11,color:G.textSub}}>{n.time}</div>
+
+      <div style={{padding:"20px 22px 0"}}>
+        {/* Empty state */}
+        {filtered.length===0?(
+          <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"48px 24px",textAlign:"center",animation:"fadeUp 0.3s ease both"}}>
+            <div style={{width:56,height:56,borderRadius:"50%",background:`${G.blue}10`,border:`1px solid ${G.blue}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={G.blue} strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+            </div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:G.text,marginBottom:8,fontWeight:800}}>
+              {filterTag==="All"?"No News Yet":`No ${filterTag} News Yet`}
+            </div>
+            <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:"0 0 16px"}}>
+              {filterTag==="All"?"RegimeEdge posts market intelligence when it matters. Check back soon.":"Try a different filter or check back soon."}
+            </p>
+            {filterTag!=="All"&&(
+              <button onClick={()=>setFilterTag("All")} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,padding:"9px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                Show All News
+              </button>
+            )}
           </div>
-          <div style={{fontSize:14,fontWeight:700,color:G.text,lineHeight:1.65,marginBottom:14}}>{n.headline}</div>
-          <Div/>
-          <div style={{fontSize:10,color:G.gold,fontWeight:700,marginBottom:6,letterSpacing:0.5}}>RegimeEdge Take</div>
-          <p style={{color:G.textSub,fontSize:13,lineHeight:1.75,margin:0}}>{n.take}</p>
-        </GlowCard>
-      ))}
+        ):(
+          filtered.map((n,ni)=>{
+            const color=tc[n.tag]||G.textSub;
+            return(
+              <div key={n.id} style={{background:G.card,border:`1px solid ${color}18`,borderRadius:G.r,marginBottom:14,overflow:"hidden",animation:`fadeUp 0.35s ${ni*0.05}s ease both`,boxShadow:`0 4px 16px rgba(0,0,0,0.2)`}}>
+                <div style={{height:2,background:`linear-gradient(90deg,${color},${color}22)`}}/>
+                <div style={{padding:"16px 18px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <Badge color={color}>{n.tag}</Badge>
+                    <div style={{fontSize:10,color:G.textDim}}>{n.time}</div>
+                  </div>
+                  <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.6,marginBottom:14}}>{n.headline}</div>
+                  <div style={{height:1,background:G.border,marginBottom:14}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7}}>
+                    <div style={{width:4,height:4,borderRadius:"50%",background:G.gold,flexShrink:0}}/>
+                    <div style={{fontSize:10,color:G.gold,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>RegimeEdge Take</div>
+                  </div>
+                  <p style={{color:G.textSub,fontSize:13,lineHeight:1.8,margin:0}}>{n.take}</p>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -1129,7 +1217,7 @@ const ArchivePage = React.memo(function ArchivePage({st}){
         {st.archiveWeeks.length===0?(
           <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"40px 24px",textAlign:"center"}}>
             <div style={{width:56,height:56,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
-              <span style={{fontSize:24}}>📅</span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             </div>
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:G.text,marginBottom:8,fontWeight:800}}>No Archive Yet</div>
             <p style={{color:G.textSub,fontSize:13,lineHeight:1.7,margin:0}}>Weekly records will appear here at the end of each week.</p>
@@ -1356,7 +1444,9 @@ function StrategyPage(){
 
         {/* CTA */}
         <div style={{background:`linear-gradient(135deg,${G.gold}0d,${G.card})`,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"22px",textAlign:"center",boxShadow:`0 0 40px ${G.gold}0a`}}>
-          <div style={{width:48,height:48,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:22}}>🎯</div>
+          <div style={{width:48,height:48,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          </div>
           <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Get Full Access</div>
           <p style={{color:G.textSub,fontSize:13,marginBottom:18,lineHeight:1.7}}>Purchase via USDT. Contact via Telegram and get started today.</p>
           <a href={ADMIN_TG} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 0",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:14,textDecoration:"none",boxShadow:`0 6px 24px rgba(212,175,55,0.3)`}}>
@@ -1805,6 +1895,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const eaImgRef=useRef();
   const eaImgRef2=useRef();
   const bookCoverRef=useRef();
+  const dailyImgRef=useRef();
   const[newEa,setNewEa]=useState({name:"",tagline:"",shortDesc:"",body:"",winRate:"",pairs:"",timeframe:"",price:"",image:null,images:[]});
   const[newBook,setNewBook]=useState({title:"",author:"",desc:"",category:"",pdfUrl:"",cover:null});
   const[cfg,setCfg]=useState({platform_fee_etb:75,min_usdt:5,max_usdt:500,min_rate_etb:160,max_rate_etb:195,admin_cbe_account:"",admin_cbe_name:"",admin_telebirr:"",admin_telebirr_name:"",exchange_active:true});
@@ -1875,7 +1966,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
         }
         setKycList(l=>l.map(r=>r.id===id?{...r,status:"rejected",rejection_reason:rejMsg}:r));
         setExpanded(null);
-        alert("\u2713 KYC revoked. User must reapply.");
+        showToast("KYC revoked — user must reapply","ok");
         return;
       }
 
@@ -2108,42 +2199,86 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
           )}
           <Btn onClick={async()=>{
             let imageUrl=wb.image||null;
-            // Upload new image file to Supabase Storage if selected
             if(wb._imgFile){
+              showToast("Uploading chart...","warn");
               try{
                 const token=localStorage.getItem("re_access_token");
                 const ext=wb._imgFile.name.split(".").pop()||"jpg";
+                const contentType=wb._imgFile.type||`image/${ext}`;
                 const path=`bias/weekly_${Date.now()}.${ext}`;
                 const bucket="bias-charts";
                 const upRes=await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,{
                   method:"POST",
-                  headers:{"Authorization":`Bearer ${token}`,"apikey":SUPABASE_ANON_KEY,"Content-Type":wb._imgFile.type,"x-upsert":"true"},
+                  headers:{"Authorization":`Bearer ${token}`,"apikey":SUPABASE_ANON_KEY,"Content-Type":contentType,"x-upsert":"true"},
                   body:wb._imgFile,
                 });
                 if(upRes.ok){
                   imageUrl=`${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+                  showToast("Chart uploaded ✓","ok");
                 }else{
-                  // Fallback: store without image rather than storing base64
+                  const errBody=await upRes.json().catch(()=>({}));
+                  const reason=errBody?.message||errBody?.error||`HTTP ${upRes.status}`;
+                  showToast(`Image upload failed: ${reason}`,"err");
                   imageUrl=null;
-                  showToast("Image upload failed — bias saved without chart","warn");
                 }
-              }catch{
+              }catch(e){
+                showToast(`Upload error: ${e.message}`,"err");
                 imageUrl=null;
-                showToast("Image upload failed — bias saved without chart","warn");
               }
             }
             const saved={...wb,image:imageUrl,_imgFile:undefined,_imgPreview:undefined,postedAt:new Date().toISOString()};
             update("weeklyBias",saved);
             setWb(saved);
-            showToast("Weekly bias saved ✓","ok");
+            showToast(imageUrl||!wb._imgFile?"Weekly bias saved ✓":"Bias saved — chart missing (check bucket)","ok");
           }} style={{width:"100%"}}>Save Weekly Bias</Btn>
           <Div/>
           <div style={{fontSize:13,color:G.text,fontWeight:700,marginBottom:10}}>Daily Bias</div>
           <DB val={db.direction} onChange={d=>setDb(b=>({...b,direction:d,dayLabel:`${d} Day`}))}/>
           <FTA value={db.body} onChange={v=>setDb(b=>({...b,body:v}))} placeholder="Daily note..." rows={3}/>
           <div style={{height:10}}/>
-          <FI value={db.updatedAt} onChange={v=>setDb(b=>({...b,updatedAt:v}))} placeholder="Updated at e.g. Today, 08:00 AM" style={{marginBottom:11}}/>
-          <Btn onClick={()=>{update("dailyBias",{...db,postedAt:new Date().toISOString()});showToast("Daily bias saved ✓","ok");}} style={{width:"100%"}}>Save Daily Bias</Btn>
+          <FI value={db.updatedAt} onChange={v=>setDb(b=>({...b,updatedAt:v}))} placeholder="Updated at e.g. Today, 08:00 AM" style={{marginBottom:9}}/>
+          <button onClick={()=>dailyImgRef.current.click()} style={{width:"100%",padding:11,background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.rs,color:db._imgFile||db.image?G.green:G.textSub,fontSize:12,cursor:"pointer",marginBottom:9,fontFamily:"inherit"}}>
+            {db._imgFile?"✓ Chart selected — uploads on save":db.image?"✓ Chart uploaded — tap to change":"Upload daily chart (optional)"}
+          </button>
+          <input ref={dailyImgRef} type="file" accept="image/*" onChange={e=>{
+            const f=e.target.files[0];if(!f)return;
+            const url=URL.createObjectURL(f);
+            setDb(b=>({...b,_imgFile:f,_imgPreview:url}));
+          }} style={{display:"none"}}/>
+          {(db._imgPreview||db.image)&&(
+            <div style={{marginBottom:9,position:"relative"}}>
+              <img src={db._imgPreview||db.image} style={{width:"100%",borderRadius:8,maxHeight:120,objectFit:"cover"}}/>
+              <button onClick={()=>setDb(b=>({...b,image:null,_imgFile:null,_imgPreview:null}))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:"50%",width:22,height:22,color:"#fff",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+            </div>
+          )}
+          <Btn onClick={async()=>{
+            let imageUrl=db.image||null;
+            if(db._imgFile){
+              showToast("Uploading chart...","warn");
+              try{
+                const token=localStorage.getItem("re_access_token");
+                const ext=db._imgFile.name.split(".").pop()||"jpg";
+                const contentType=db._imgFile.type||`image/${ext}`;
+                const path=`bias/daily_${Date.now()}.${ext}`;
+                const upRes=await fetch(`${SUPABASE_URL}/storage/v1/object/bias-charts/${path}`,{
+                  method:"POST",
+                  headers:{"Authorization":`Bearer ${token}`,"apikey":SUPABASE_ANON_KEY,"Content-Type":contentType,"x-upsert":"true"},
+                  body:db._imgFile,
+                });
+                if(upRes.ok){
+                  imageUrl=`${SUPABASE_URL}/storage/v1/object/public/bias-charts/${path}`;
+                }else{
+                  const errBody=await upRes.json().catch(()=>({}));
+                  showToast(`Image failed: ${errBody?.message||upRes.status}`,"err");
+                  imageUrl=null;
+                }
+              }catch(e){showToast(`Upload error: ${e.message}`,"err");imageUrl=null;}
+            }
+            const saved={...db,image:imageUrl,_imgFile:undefined,_imgPreview:undefined,postedAt:new Date().toISOString()};
+            update("dailyBias",saved);
+            setDb(saved);
+            showToast("Daily bias saved ✓","ok");
+          }} style={{width:"100%"}}>Save Daily Bias</Btn>
         </>}
 
         {tab==="events"&&<>
@@ -2809,14 +2944,13 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
   const[deleteConfirm,setDeleteConfirm]=useState(false);
 
   // Animated stat counters
-  const animTrades=useAnimatedCount(tradeStats.total);
-  // Success rate uses seller-specific denominator (sellerTotal) to match listing card stats
+  const animTrades=useAnimatedCount(tradeStats.total??0);
   const animSuccess=useAnimatedCount(
     tradeStats.sellerTotal > 0
       ? Math.round((tradeStats.completed / tradeStats.sellerTotal) * 100)
-      : tradeStats.total && tradeStats.completed !== null
+      : tradeStats.total > 0 && tradeStats.completed !== null
         ? Math.round((tradeStats.completed / tradeStats.total) * 100)
-        : null
+        : 0
   );
   const animRating=useAnimatedCount(tradeStats.rating);
 
@@ -2928,12 +3062,12 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
       {/* ② TRADE STATS ROW */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:18,animation:"slideUp 0.4s 0.08s ease both"}}>
         {[
-          [animTrades,"TRADES",G.blue,"borderTop:`3px solid ${G.blue}`"],
-          [animSuccess!==null&&tradeStats.total?`${animSuccess}%`:animSuccess,"SUCCESS",G.green,""],
-          [animRating!==null?`${animRating}★`:animRating,"RATING",G.gold,""],
+          [animTrades,"TRADES",G.blue],
+          [`${animSuccess}%`,"SUCCESS",G.green],
+          [animRating!==null?`${animRating}★`:"—","RATING",G.gold],
         ].map(([v,l,c],i)=>(
           <div key={l} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"14px 8px",textAlign:"center",borderTop:`3px solid ${c}44`,boxShadow:`inset 0 1px 0 ${c}22`,animation:"countUp 0.6s ease both",animationDelay:`${i*120}ms`}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,color:c,lineHeight:1,marginBottom:5}}>{v!==null&&v!==undefined&&v!==""?v:"—"}</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,color:c,lineHeight:1,marginBottom:5}}>{!dataLoaded?"—":v}</div>
             <div style={{fontSize:9,color:G.textSub,letterSpacing:2}}>{l}</div>
           </div>
         ))}
@@ -3068,8 +3202,8 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
                   cursor:"pointer",
                 }}
               >
-                <div style={{flexShrink:0,width:38,height:38,borderRadius:"50%",background:"rgba(0,136,204,0.12)",border:"1px solid rgba(0,136,204,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
-                  ✈
+                <div style={{flexShrink:0,width:38,height:38,borderRadius:"50%",background:"rgba(0,136,204,0.12)",border:"1px solid rgba(0,136,204,0.3)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#29b6f6"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:10,color:"#29b6f6",letterSpacing:2,textTransform:"uppercase",marginBottom:3,fontWeight:800}}>Notifications</div>

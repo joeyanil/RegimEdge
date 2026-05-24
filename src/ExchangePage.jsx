@@ -2457,7 +2457,7 @@ function ListingsBrowser({ user, kyc, config, onOpenTrade, onBack, onSell }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MY TRADES + MY LISTINGS
 // ─────────────────────────────────────────────────────────────────────────────
-function MyActivity({ user, onOpenTrade, onBack }) {
+function MyActivity({ user, onOpenTrade, onBack, showToast }) {
   const [trades, setTrades] = useState([]);
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2480,7 +2480,8 @@ function MyActivity({ user, onOpenTrade, onBack }) {
       await p2pUpdate("p2p_listings", `id=eq.${listingId}`, { status:"cancelled" });
       setListings(prev => prev.filter(l => l.id !== listingId));
     } catch (e) {
-      alert("Failed to remove listing: " + e.message);
+      if (showToast) showToast("Failed to remove listing: " + e.message, "err");
+      else console.error("Failed to remove listing:", e.message);
     } finally {
       setRemovingListing(null);
     }
@@ -3597,6 +3598,13 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState("hub");
   const [activeTrade, setActiveTrade] = useState(null);
+  const [exToast, setExToast] = useState(null);
+  const exToastTimer = useRef();
+  const showExToast = (msg, type="ok") => {
+    clearTimeout(exToastTimer.current);
+    setExToast({msg,type});
+    exToastTimer.current = setTimeout(() => setExToast(null), 3200);
+  };
   // Track last-fetched user id to detect stale cache issues
   const fetchedForRef = useRef(null);
 
@@ -3733,7 +3741,10 @@ function ExchangePage({ user, onSignIn, logoUrl }) {
     );
   }
   if (screen === "sell") return <SellForm user={user} kyc={kyc} config={config} onBack={goHub} onDone={goHub} />;
-  if (screen === "myTrades") return <MyActivity user={user} onOpenTrade={openTrade} onBack={goHub} />;
+  if (screen === "myTrades") return <>
+    <MyActivity user={user} onOpenTrade={openTrade} onBack={goHub} showToast={showExToast}/>
+    {exToast&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",zIndex:9999,background:exToast.type==="ok"?G.green:exToast.type==="warn"?G.gold:G.red,color:"#000",padding:"11px 20px",borderRadius:28,fontSize:13,fontWeight:800,boxShadow:"0 8px 32px rgba(0,0,0,0.4)",animation:"slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)",display:"flex",alignItems:"center",gap:8,whiteSpace:"nowrap",maxWidth:"90vw"}}>{exToast.type==="ok"?"✓":exToast.type==="warn"?"⚠":"✕"} {exToast.msg}</div>}
+  </>;
   if (screen === "trustPlus") return <TrustPlusScreen user={user} kyc={kyc} onBack={goHub} />;
   if (screen === "kyc") return <KYCScreen user={user} kyc={kyc} onBack={goHub} onSubmitted={() => { setKyc(p => ({ ...p, status:"pending" })); loadData(user.id); }} />;
 
