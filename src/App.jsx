@@ -42,8 +42,8 @@ function TrustBadge({size=18,style={}}){
 }
 
 const INIT = {
-  weeklyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", image:null, updatedAt:"", updatedNote:"", postedAt:null },
-  dailyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", updatedAt:"", postedAt:null },
+  weeklyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", image:null, updatedAt:"", updatedNote:"", postedAt:null, views:0 },
+  dailyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", updatedAt:"", postedAt:null, views:0 },
   nfpSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-05T12:30:00Z", posted:"", result:"", eventDate:"2026-06-05" },
   fomcSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-17T18:00:00Z", posted:"", result:"", eventDate:"2026-06-17" },
   news:[],
@@ -487,7 +487,7 @@ function PopupRotator({setPage,onClose}){
 }
 
 // ── HOME ──────────────────────────────────────────────────────────────────────
-const HomePage = React.memo(function HomePage({st,setPage}){
+const HomePage = React.memo(function HomePage({st,setPage,update}){
   const[showAllNotices,setShowAllNotices]=useState(false);
   const[hovCard,setHovCard]=useState(null);
   const liveGold = useLiveGoldPrice();
@@ -496,6 +496,37 @@ const HomePage = React.memo(function HomePage({st,setPage}){
   const noticeTypeColor=(t)=>t==="exchange"?G.blue:t==="promo"?G.gold:G.green;
   const visibleNotices=showAllNotices?st.notices:st.notices.slice(0,2);
   const winRate=st.archiveWeeks.length?Math.round((st.archiveWeeks.filter(w=>w.result==="green").length/st.archiveWeeks.length)*100):0;
+
+  // ── View counter — fires on every home page load ──────────────────────────
+  const viewBumpRef=useRef(false);
+  useEffect(()=>{
+    if(viewBumpRef.current)return;
+    viewBumpRef.current=true;
+    if(!update)return;
+
+    // Weekly bias view
+    if(st.weeklyBias.postedAt){
+      const bump=Math.floor(Math.random()*3)+1; // 1-3 per load
+      const cur=st.weeklyBias.views||0;
+      // If brand new post (no views yet), seed with random 500-799
+      const base=cur<500?(500+Math.floor(Math.random()*300)):cur;
+      update("weeklyBias",{...st.weeklyBias,views:base+bump});
+    }
+
+    // Daily bias view
+    if(st.dailyBias.postedAt){
+      const bump=Math.floor(Math.random()*3)+1;
+      const cur=st.dailyBias.views||0;
+      const base=cur<500?(500+Math.floor(Math.random()*300)):cur;
+      update("dailyBias",{...st.dailyBias,views:base+bump});
+    }
+  },[]);
+
+  const formatViews=v=>{
+    if(!v||v<1)return null;
+    if(v>=1000)return`${(v/1000).toFixed(1)}K`;
+    return String(v);
+  };
 
   // Current streak
   let streak=0;
@@ -644,11 +675,19 @@ const HomePage = React.memo(function HomePage({st,setPage}){
           </div>
           <div style={{marginBottom:14}}>{renderBody(st.weeklyBias.body,true)}</div>
           {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:10,marginBottom:14,display:"block"}}/>}
-          <button onClick={()=>setPage("weekly")} style={{width:"100%",padding:"11px 0",background:`${wColor}0e`,border:`1px solid ${wColor}33`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3}}
-            onMouseEnter={e=>{e.currentTarget.style.background=`${wColor}18`;}}
-            onMouseLeave={e=>{e.currentTarget.style.background=`${wColor}0e`;}}>
-            Full Bias Analysis →
-          </button>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <button onClick={()=>setPage("weekly")} style={{flex:1,padding:"11px 0",background:`${wColor}0e`,border:`1px solid ${wColor}33`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3,marginRight:10}}
+              onMouseEnter={e=>{e.currentTarget.style.background=`${wColor}18`;}}
+              onMouseLeave={e=>{e.currentTarget.style.background=`${wColor}0e`;}}>
+              Full Bias Analysis →
+            </button>
+            {formatViews(st.weeklyBias.views||0)&&(
+              <div style={{display:"flex",alignItems:"center",gap:5,color:G.textDim,fontSize:12,flexShrink:0}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span style={{fontWeight:600,fontFamily:"monospace"}}>{formatViews(st.weeklyBias.views||0)}</span>
+              </div>
+            )}
+          </div>
         </GlowCard>
 
         {/* Daily Bias */}
@@ -668,6 +707,12 @@ const HomePage = React.memo(function HomePage({st,setPage}){
             <span>·</span>{st.dailyBias.updatedAt}
           </div>
           <div>{renderBody(st.dailyBias.body,true)}</div>
+          {formatViews(st.dailyBias.views||0)&&(
+            <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:5,marginTop:12,color:G.textDim,fontSize:12}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span style={{fontWeight:600,fontFamily:"monospace"}}>{formatViews(st.dailyBias.views||0)}</span>
+            </div>
+          )}
         </GlowCard>
 
         {/* Active signals alert */}
@@ -789,12 +834,19 @@ const HomePage = React.memo(function HomePage({st,setPage}){
 });
 
 // ── WEEKLY BIAS ───────────────────────────────────────────────────────────────
-const WeeklyPage = React.memo(function WeeklyPage({st}){
+const WeeklyPage = React.memo(function WeeklyPage({st,update}){
   const c=st.weeklyBias.direction==="Bullish"?G.green:st.weeklyBias.direction==="Bearish"?G.red:G.gold;
   const dc=st.dailyBias.direction==="Bullish"?G.green:st.dailyBias.direction==="Bearish"?G.red:G.gold;
   const[zoomedImg,setZoomedImg]=useState(false);
   const hasWeekly=st.weeklyBias.body||st.weeklyBias.dayLabel;
   const hasDaily=st.dailyBias.body||st.dailyBias.dayLabel;
+
+  const formatViews=v=>{
+    if(!v||v<1)return null;
+    if(v>=1000)return`${(v/1000).toFixed(1)}K`;
+    return String(v);
+  };
+  const viewStr=formatViews(st.weeklyBias.views||0);
 
   return(
     <div style={{paddingBottom:32}}>
@@ -853,9 +905,17 @@ const WeeklyPage = React.memo(function WeeklyPage({st}){
                 )}
               </>
             )}
-            <div style={{display:"flex",alignItems:"center",gap:8,paddingTop:14,borderTop:`1px solid ${G.border}`,fontSize:11,color:G.textDim}}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:c,animation:"pulseDot 2s ease-in-out infinite"}}/>
-              Posted by RegimeEdge · {st.weeklyBias.updatedAt}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:14,borderTop:`1px solid ${G.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11,color:G.textDim}}>
+                <div style={{width:6,height:6,borderRadius:"50%",background:c,animation:"pulseDot 2s ease-in-out infinite"}}/>
+                Posted by RegimeEdge · {st.weeklyBias.updatedAt}
+              </div>
+              {viewStr&&(
+                <div style={{display:"flex",alignItems:"center",gap:5,color:G.textDim,fontSize:12,flexShrink:0}}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <span style={{fontWeight:600,fontFamily:"monospace"}}>{viewStr}</span>
+                </div>
+              )}
             </div>
           </GlowCard>
         )}
@@ -2276,10 +2336,31 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               <button onClick={()=>setWb(b=>({...b,image:null,_imgFile:null,_imgPreview:null}))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:"50%",width:24,height:24,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
             </div>
           )}
+          {/* View count control */}
+          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"12px 14px",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={G.textSub} strokeWidth="1.8" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span style={{fontSize:11,color:G.textSub,fontWeight:700}}>Weekly Views</span>
+              </div>
+              <span style={{fontSize:13,fontWeight:900,color:G.gold,fontFamily:"'Playfair Display',serif"}}>{wb.views||0}</span>
+            </div>
+            <div style={{display:"flex",gap:7}}>
+              <FI value={String(wb.views||0)} onChange={v=>setWb(b=>({...b,views:parseInt(v)||0}))} type="number" placeholder="Set view count" style={{flex:1,fontSize:12,padding:"8px 11px"}}/>
+              <button onClick={()=>{
+                const seed=500+Math.floor(Math.random()*400);
+                setWb(b=>({...b,views:seed}));
+              }} style={{padding:"8px 12px",background:G.goldBg,border:`1px solid ${G.gold}33`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                Random
+              </button>
+              <button onClick={()=>setWb(b=>({...b,views:0}))} style={{padding:"8px 10px",background:G.redBg,border:`1px solid ${G.red}22`,borderRadius:G.rs,color:G.red,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                Reset
+              </button>
+            </div>
+          </div>
           <Btn onClick={async()=>{
             let imageUrl=wb.image||null;
-            if(wb._imgFile){
-              showToast("Uploading chart...","warn");
+            if(wb._imgFile){              showToast("Uploading chart...","warn");
               try{
                 const token=localStorage.getItem("re_access_token");
                 const ext=wb._imgFile.name.split(".").pop()||"jpg";
@@ -2330,8 +2411,29 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               <button onClick={()=>setDb(b=>({...b,image:null,_imgFile:null,_imgPreview:null}))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:"50%",width:22,height:22,color:"#fff",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
             </div>
           )}
+          {/* Daily view count control */}
+          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"12px 14px",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={G.textSub} strokeWidth="1.8" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span style={{fontSize:11,color:G.textSub,fontWeight:700}}>Daily Views</span>
+              </div>
+              <span style={{fontSize:13,fontWeight:900,color:G.gold,fontFamily:"'Playfair Display',serif"}}>{db.views||0}</span>
+            </div>
+            <div style={{display:"flex",gap:7}}>
+              <FI value={String(db.views||0)} onChange={v=>setDb(b=>({...b,views:parseInt(v)||0}))} type="number" placeholder="Set view count" style={{flex:1,fontSize:12,padding:"8px 11px"}}/>
+              <button onClick={()=>{
+                const seed=500+Math.floor(Math.random()*400);
+                setDb(b=>({...b,views:seed}));
+              }} style={{padding:"8px 12px",background:G.goldBg,border:`1px solid ${G.gold}33`,borderRadius:G.rs,color:G.gold,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                Random
+              </button>
+              <button onClick={()=>setDb(b=>({...b,views:0}))} style={{padding:"8px 10px",background:G.redBg,border:`1px solid ${G.red}22`,borderRadius:G.rs,color:G.red,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                Reset
+              </button>
+            </div>
+          </div>
           <Btn onClick={async()=>{
-            let imageUrl=db.image||null;
             if(db._imgFile){
               showToast("Uploading chart...","warn");
               try{
@@ -3618,8 +3720,8 @@ export default function App(){
   },[]);
 
   const pages={
-    home:<HomePage st={st} setPage={nav}/>,
-    weekly:<WeeklyPage st={st}/>,
+    home:<HomePage st={st} setPage={nav} update={update}/>,
+    weekly:<WeeklyPage st={st} update={update}/>,
     eas:<EAsPage st={st} user={user} onSignIn={()=>setShowAuth(true)}/>,
     books:<BooksPage st={st} user={user} onSignIn={()=>setShowAuth(true)}/>,
     macro:<MacroPage st={st}/>,
