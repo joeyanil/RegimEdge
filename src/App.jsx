@@ -1146,7 +1146,8 @@ function EventsPage({st}){
 function NewsPage({st}){
   const tc={FOMC:G.blue,USD:G.gold,Gold:G.green,NFP:G.red,Risk:G.red,Macro:G.textSub};
   const TAGS=["All","Gold","USD","FOMC","NFP","Risk","Macro"];
-  const[filterTag,setFilterTag]=useState("All");
+  const[filterTag,setFilterTag]=useState(()=>sessionStorage.getItem("re_news_filter")||"All");
+  const setFilter=v=>{setFilterTag(v);sessionStorage.setItem("re_news_filter",v);};
   const filtered=filterTag==="All"?st.news:st.news.filter(n=>n.tag===filterTag);
 
   return(
@@ -1163,7 +1164,7 @@ function NewsPage({st}){
             const active=filterTag===tag;
             const color=tc[tag]||G.blue;
             return(
-              <button key={tag} onClick={()=>setFilterTag(tag)} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:`1px solid ${active?color+"66":G.border}`,background:active?`${color}15`:"transparent",color:active?color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3}}>
+              <button key={tag} onClick={()=>setFilter(tag)} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:`1px solid ${active?color+"66":G.border}`,background:active?`${color}15`:"transparent",color:active?color:G.textSub,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3}}>
                 {tag}
               </button>
             );
@@ -1185,7 +1186,7 @@ function NewsPage({st}){
               {filterTag==="All"?"RegimeEdge posts market intelligence when it matters. Check back soon.":"Try a different filter or check back soon."}
             </p>
             {filterTag!=="All"&&(
-              <button onClick={()=>setFilterTag("All")} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,padding:"9px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              <button onClick={()=>setFilter("All")} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,padding:"9px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                 Show All News
               </button>
             )}
@@ -1225,7 +1226,11 @@ const ArchivePage = React.memo(function ArchivePage({st}){
   const green=st.archiveWeeks.filter(w=>w.result==="green").length;
   const rate=st.archiveWeeks.length?Math.round((green/st.archiveWeeks.length)*100):0;
   const[barAnimated,setBarAnimated]=useState(false);
-  useEffect(()=>{ const t=setTimeout(()=>setBarAnimated(true),100); return()=>clearTimeout(t); },[]);
+  useEffect(()=>{
+    if(st.archiveWeeks.length===0)return;
+    const t=setTimeout(()=>setBarAnimated(true),150);
+    return()=>clearTimeout(t);
+  },[st.archiveWeeks.length]);
 
   // Consecutive streak from most recent
   let streak=0;
@@ -1699,6 +1704,12 @@ const sbDB = async (path, options={}) => {
       ...(options.headers||{}),
     },
   });
+  if(res.status===401){
+    // Token expired — clear session and force re-login
+    localStorage.removeItem("re_access_token");
+    window.dispatchEvent(new CustomEvent("re_session_expired"));
+    throw new Error("Session expired. Please sign in again.");
+  }
   if (!res.ok) { const d = await res.json(); throw new Error(d.message||"Database error."); }
   try { return await res.json(); } catch { return null; }
 };
@@ -2063,6 +2074,14 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
   const[rejInput,setRejInput]=useState({});
   const[banInput,setBanInput]=useState({});
   const[kycBusy,setKycBusy]=useState({});
+  const[pendingKycCount,setPendingKycCount]=useState(0);
+
+  // Fetch pending count on admin panel open
+  useEffect(()=>{
+    p2pSelect("kyc_submissions","?status=eq.pending&select=id")
+      .then(rows=>setPendingKycCount((rows||[]).length))
+      .catch(()=>{});
+  },[]);
 
   const fetchKyc=async(filter)=>{
     const f=filter!==undefined?filter:kycFilter;
@@ -2306,7 +2325,15 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
               cursor:"pointer",fontFamily:"inherit",
               textTransform:"capitalize",letterSpacing:0.3,
               transition:"all 0.2s",whiteSpace:"nowrap",
-            }}>{t}</button>
+              display:"flex",alignItems:"center",gap:6,
+            }}>
+              {t}
+              {t==="kyc"&&pendingKycCount>0&&(
+                <span style={{background:G.red,color:"#fff",fontSize:9,fontWeight:900,borderRadius:10,padding:"1px 6px",lineHeight:1.6,minWidth:16,textAlign:"center"}}>
+                  {pendingKycCount}
+                </span>
+              )}
+            </button>
           ))}
         </div>
       </div>
@@ -2680,12 +2707,19 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
                     {k.status!=="approved"&&<button disabled={busy} onClick={()=>kycAction(k.id,"approved")} style={{width:"100%",padding:11,background:G.greenBg,border:`1px solid ${G.green}`,borderRadius:G.rs,color:G.green,fontSize:13,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>{busy?"Saving...":"✓ Approve — Grant Exchange Access"}</button>}
                     {k.status==="approved"&&<>
                       <div style={{padding:"8px 12px",background:G.greenBg,border:`1px solid ${G.green}44`,borderRadius:G.rs,fontSize:12,color:G.green,textAlign:"center",fontWeight:700}}>✓ Currently Approved</div>
-                      <button disabled={busy} onClick={()=>{
-                        if(!window.confirm(`Revoke KYC for ${k.full_name}? They will be able to reapply.`)) return;
-                        kycAction(k.id,"revoked",{revoke_reason:"KYC revoked by admin", rejection_reason:null});
-                      }} style={{width:"100%",padding:10,background:"rgba(239,68,68,0.06)",border:`1px solid ${G.red}55`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>
-                        {busy?"Revoking...":"⊘ Revoke KYC — User Must Reapply"}
-                      </button>
+                      {rejInput[k.id+"_revoke_confirm"]?(
+                        <div style={{background:G.redBg,border:`1px solid ${G.red}33`,borderRadius:G.rs,padding:"12px 14px"}}>
+                          <div style={{fontSize:12,color:G.red,fontWeight:700,marginBottom:10}}>Revoke KYC for {k.full_name}? They will need to reapply.</div>
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={()=>{kycAction(k.id,"revoked",{revoke_reason:"KYC revoked by admin",rejection_reason:null});setRejInput(r=>({...r,[k.id+"_revoke_confirm"]:false}));}} style={{flex:1,padding:"9px 0",background:G.red,border:"none",borderRadius:G.rs,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>Yes, Revoke</button>
+                            <button onClick={()=>setRejInput(r=>({...r,[k.id+"_revoke_confirm"]:false}))} style={{flex:1,padding:"9px 0",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                          </div>
+                        </div>
+                      ):(
+                        <button disabled={busy} onClick={()=>setRejInput(r=>({...r,[k.id+"_revoke_confirm"]:true}))} style={{width:"100%",padding:10,background:"rgba(239,68,68,0.06)",border:`1px solid ${G.red}55`,borderRadius:G.rs,color:G.red,fontSize:12,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.5:1}}>
+                          {busy?"Revoking...":"⊘ Revoke KYC — User Must Reapply"}
+                        </button>
+                      )}
                     </>}
                     {k.status!=="rejected"&&<div>
                       <input value={rejInput[k.id]||""} onChange={e=>setRejInput(r=>({...r,[k.id]:e.target.value}))} placeholder="Rejection reason (required)..." style={{width:"100%",background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"9px 11px",color:G.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:6}}/>
@@ -3133,7 +3167,7 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
         ? Math.round((tradeStats.completed / tradeStats.total) * 100)
         : 0
   );
-  const animRating=useAnimatedCount(tradeStats.rating);
+  const animRating=useAnimatedCount(tradeStats.rating??0);
 
   if(!user) return(
     <div style={{padding:"48px 22px",textAlign:"center"}}>
@@ -3198,7 +3232,6 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
     <div style={{padding:"0 0 40px"}}>
       <style>{`
         @keyframes avatarSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-        @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @keyframes verifiedPulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)}60%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}
         @keyframes ckDraw{from{stroke-dashoffset:20}to{stroke-dashoffset:0}}
         @keyframes rowSlide{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
@@ -3245,7 +3278,7 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
         {[
           [animTrades,"TRADES",G.blue],
           [`${animSuccess}%`,"SUCCESS",G.green],
-          [animRating!==null?`${animRating}★`:"—","RATING",G.gold],
+          [animRating>0?`${animRating}★`:"—","RATING",G.gold],
         ].map(([v,l,c],i)=>(
           <div key={l} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.rs,padding:"14px 8px",textAlign:"center",borderTop:`3px solid ${c}44`,boxShadow:`inset 0 1px 0 ${c}22`,animation:"countUp 0.6s ease both",animationDelay:`${i*120}ms`}}>
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,color:c,lineHeight:1,marginBottom:5}}>{!dataLoaded?"—":v}</div>
@@ -3668,6 +3701,17 @@ export default function App(){
       localStorage.removeItem("re_ea_"+(user?.id||""));
     }catch{}
   };
+
+  // Listen for session expiry (401 from sbDB)
+  useEffect(()=>{
+    const handler=()=>{
+      setUser(null);
+      setIsApproved(false);
+      setShowAuth(true);
+    };
+    window.addEventListener("re_session_expired",handler);
+    return()=>window.removeEventListener("re_session_expired",handler);
+  },[]);
 
   // When admin closes the panel: sign out the admin Supabase session and
   // restore the regular user's tokens so their session is unaffected.

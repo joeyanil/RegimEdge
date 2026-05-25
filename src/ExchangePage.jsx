@@ -2543,11 +2543,7 @@ function MyActivity({ user, onOpenTrade, onBack, showToast }) {
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    if (window.confirm("Remove this listing? It will no longer be visible to buyers.")) {
-                      removeListing(l.id);
-                    }
-                  }}
+                  onClick={() => removeListing(l.id)}
                   disabled={removingListing === l.id}
                   style={{
                     background:G.redBg, border:`1px solid ${G.red}44`,
@@ -2664,6 +2660,7 @@ function SellForm({ user, kyc, config, onBack, onDone }) {
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
+  const [dupConfirm, setDupConfirm] = useState(false);
 
   const minRate = config?.min_rate_etb || 160;
   const maxRate = config?.max_rate_etb || 195;
@@ -2720,8 +2717,8 @@ function SellForm({ user, kyc, config, onBack, onDone }) {
     try {
       const existing = await p2pSelect("p2p_listings", `?seller_id=eq.${user.id}&status=eq.open&select=id`).catch(() => []);
       if (existing?.length > 0) {
-        const proceed = window.confirm("You already have an active listing. Post another one?");
-        if (!proceed) { setLoading(false); return; }
+        if (!dupConfirm) { setDupConfirm(true); setLoading(false); return; }
+        setDupConfirm(false);
       }
 
       // Fetch real seller stats to stamp onto the listing — so buyers see accurate trust data
@@ -2870,9 +2867,19 @@ function SellForm({ user, kyc, config, onBack, onDone }) {
       </div>
 
       <ErrBox msg={err} />
-      <Btn onClick={handlePost} disabled={!canSubmit || loading}>
+      {dupConfirm&&(
+        <div style={{background:`${G.gold}0a`,border:`1px solid ${G.gold}33`,borderRadius:G.r,padding:"14px 16px",marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:6}}>You already have an active listing</div>
+          <p style={{color:G.textSub,fontSize:12,lineHeight:1.65,margin:"0 0 12px"}}>Post another one anyway? Both will be visible to buyers.</p>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={handlePost} style={{flex:1,padding:"10px 0",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,border:"none",borderRadius:G.rs,color:"#000",fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Yes, Post Another</button>
+            <button onClick={()=>setDupConfirm(false)} style={{flex:1,padding:"10px 0",background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.rs,color:G.textSub,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {!dupConfirm&&<Btn onClick={handlePost} disabled={!canSubmit || loading}>
         {loading ? "Posting..." : "Post Listing — Free"}
-      </Btn>
+      </Btn>}
     </div>
   );
 }
@@ -2885,25 +2892,25 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
   const hasTrustPlus = kyc?.trust_plus;
   const [stats, setStats] = useState({ trades:0, rating:0, success:0 });
   const [globalStats, setGlobalStats] = useState({ total:0 });
+  const [activeTrade, setActiveTrade] = useState(null);
 
   useEffect(() => {
     if (!user?.id) return;
     Promise.all([
-      // All trades (buyer + seller) — for "My Trades" total count
       p2pSelect("p2p_trades", `?or=(buyer_id.eq.${user.id},seller_id.eq.${user.id})&select=id,status`),
-      // Seller-only trades (non-pending) — for success rate matching listing stats
       p2pSelect("p2p_trades", `?seller_id=eq.${user.id}&status=not.eq.waiting_payment&select=id,status`),
       p2pSelect("trade_ratings", `?seller_id=eq.${user.id}&select=stars`),
       p2pSelect("p2p_trades", "?status=eq.completed&select=id"),
-    ]).then(([allTrds, sellerTrds, ratings, allCompleted]) => {
-      // Success rate: seller-completed / seller-total (matches listing cards & profile formula)
+      // Check for active trades
+      p2pSelect("p2p_trades", `?or=(buyer_id.eq.${user.id},seller_id.eq.${user.id})&status=in.(waiting_payment,payment_sent,usdt_sent,disputed)&select=id,status,amount_usdt,trade_ref&order=created_at.desc&limit=1`),
+    ]).then(([allTrds, sellerTrds, ratings, allCompleted, active]) => {
       const sellerCompleted = (sellerTrds || []).filter(t => t.status === "completed").length;
       const sellerTotal = (sellerTrds || []).length;
       const successRate = sellerTotal > 0 ? Math.round(sellerCompleted / sellerTotal * 100) : 0;
       const avgRating = ratings.length > 0 ? +(ratings.reduce((s, r) => s + r.stars, 0) / ratings.length).toFixed(1) : 0;
-      // "My Trades" shows all trades across both buyer and seller roles
       setStats({ trades: (allTrds || []).length, rating: avgRating, success: successRate });
       setGlobalStats({ total: (allCompleted || []).length });
+      setActiveTrade(active?.[0] || null);
     }).catch(() => {});
   }, [user?.id]);
 
@@ -3019,6 +3026,25 @@ function ExchangeHub({ user, kyc, config, setScreen, logoUrl }) {
           <StatPill label="Platform" value={globalStats.total > 0 ? globalStats.total : "—"} color={G.textSub} />
         </div>
       </div>
+
+      {/* Active trade banner */}
+      {activeTrade&&(
+        <div onClick={()=>setScreen("myTrades")} style={{margin:"14px 18px 0",background:`linear-gradient(135deg,${G.gold}12,${G.card})`,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"12px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,boxShadow:`0 0 24px ${G.gold}0a`,animation:"glow 2.5s ease-in-out infinite"}}>
+          <div style={{width:36,height:36,borderRadius:10,background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:11,fontWeight:800,color:G.gold,letterSpacing:1,textTransform:"uppercase",marginBottom:2}}>Active Trade</div>
+            <div style={{fontSize:13,color:G.text,fontWeight:700}}>
+              ${activeTrade.amount_usdt} USDT ·{" "}
+              <span style={{color:activeTrade.status==="disputed"?G.red:activeTrade.status==="usdt_sent"?"#a78bfa":G.gold,textTransform:"capitalize"}}>
+                {activeTrade.status?.replace(/_/g," ")}
+              </span>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+      )}
 
       <div style={{ padding:"18px 18px 0" }}>
         {/* Quick actions — upgraded */}
