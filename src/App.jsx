@@ -43,7 +43,7 @@ function TrustBadge({size=18,style={}}){
 
 const INIT = {
   weeklyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", image:null, updatedAt:"", updatedNote:"", postedAt:null, views:0 },
-  dailyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", updatedAt:"", postedAt:null, views:0 },
+  dailyBias:{ direction:"Neutral", dayLabel:"No bias posted yet", body:"", image:null, updatedAt:"", postedAt:null, views:0 },
   nfpSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-05T12:30:00Z", posted:"", result:"", eventDate:"2026-06-05" },
   fomcSignal:{ active:false, prediction:"", body:"", countdownTo:"2026-06-17T18:00:00Z", posted:"", result:"", eventDate:"2026-06-17" },
   news:[],
@@ -487,7 +487,7 @@ function PopupRotator({setPage,onClose}){
 }
 
 // ── HOME ──────────────────────────────────────────────────────────────────────
-const HomePage = React.memo(function HomePage({st,setPage,update}){
+const HomePage = React.memo(function HomePage({st,setPage,update,contentLoading}){
   const[showAllNotices,setShowAllNotices]=useState(false);
   const[hovCard,setHovCard]=useState(null);
   const liveGold = useLiveGoldPrice();
@@ -500,6 +500,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
   // ── View counter — fires on every home page load ──────────────────────────
   const viewBumpRef=useRef(false);
   useEffect(()=>{
+    if(contentLoading)return;
     if(viewBumpRef.current)return;
     viewBumpRef.current=true;
     if(!update)return;
@@ -520,7 +521,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
       const base=cur<500?(500+Math.floor(Math.random()*300)):cur;
       update("dailyBias",{...st.dailyBias,views:base+bump});
     }
-  },[]);
+  },[contentLoading]);
 
   const formatViews=v=>{
     if(!v||v<1)return null;
@@ -3765,7 +3766,7 @@ export default function App(){
   },[]);
 
   const pages={
-    home:<HomePage st={st} setPage={nav} update={update}/>,
+    home:<HomePage st={st} setPage={nav} update={update} contentLoading={contentLoading}/>,
     weekly:<WeeklyPage st={st} update={update}/>,
     eas:<EAsPage st={st} user={user} onSignIn={()=>setShowAuth(true)}/>,
     books:<BooksPage st={st} user={user} onSignIn={()=>setShowAuth(true)}/>,
