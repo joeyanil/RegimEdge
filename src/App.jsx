@@ -2461,6 +2461,7 @@ function AdminPanel({st,update,addItem,removeItem,onClose}){
             </div>
           </div>
           <Btn onClick={async()=>{
+            let imageUrl=db.image||null;
             if(db._imgFile){
               showToast("Uploading chart...","warn");
               try{
