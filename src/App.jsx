@@ -3171,7 +3171,7 @@ function ProfilePage({user,onLogout,onSignIn,isApproved,initTab,onNavigate}){
 
   if(!user) return(
     <div style={{padding:"48px 22px",textAlign:"center"}}>
-      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
       <div style={{animation:"slideUp 0.5s ease both"}}>
         <div style={{width:72,height:72,borderRadius:"50%",background:G.goldBg,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={G.gold} strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
