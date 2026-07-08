@@ -6,8 +6,12 @@ import {
   sendNotificationEmail,
   Icon, P2P_TEXT,
 } from "./p2pHelpers.jsx";
-import { G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div, GlobalStyles, Skeleton } from "./theme.jsx";
+import { G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div, GlobalStyles, Skeleton, Grain } from "./theme.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useGSAP } from "@gsap/react";
+gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 // ── TOKENS: imported from ./theme.js (G, Card, GlowCard, Btn, Badge, FI, FTA, SH, Div) ──
 const ADMIN_PASS = "12345@Jon";
@@ -548,8 +552,45 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
     {icon:"▣",title:"Live News",desc:"Gold market intel",page:"news"},
   ];
 
+  const rootRef=useRef(null);
+  useGSAP(()=>{
+    const mm=gsap.matchMedia();
+    mm.add(
+      {reduce:"(prefers-reduced-motion: reduce)", full:"(prefers-reduced-motion: no-preference)"},
+      (ctx)=>{
+        const{reduce}=ctx.conditions;
+        const d=reduce?0.01:undefined; // near-instant, still respects the guard, no jarring motion
+
+        const heroTl=gsap.timeline({defaults:{ease:"power3.out"}});
+        heroTl
+          .from(".re-eyebrow",{opacity:0,y:reduce?0:12,duration:d||0.5})
+          .from(".re-title-word",{opacity:0,y:reduce?0:24,stagger:reduce?0:0.09,duration:d||0.65},"-=0.35")
+          .from(".re-tagline",{opacity:0,y:reduce?0:10,duration:d||0.5},"-=0.3")
+          .from(".re-price-pill",{opacity:0,y:reduce?0:10,duration:d||0.5},"-=0.25")
+          .from(".re-bias-pill",{opacity:0,y:reduce?0:10,stagger:reduce?0:0.08,duration:d||0.5},"-=0.3")
+          .from(".re-candle-wrap",{opacity:0,scale:reduce?1:0.94,duration:d||0.7},"-=0.55");
+
+        ScrollTrigger.batch(".re-reveal",{
+          start:"top 90%",
+          once:true,
+          onEnter:(els)=>gsap.to(els,{opacity:1,y:0,stagger:reduce?0:0.08,duration:d||0.5,ease:"power2.out"}),
+        });
+        // Opacity-only variant: used where transform is already owned by React hover state,
+        // so GSAP must not touch transform (a later re-render would overwrite it).
+        ScrollTrigger.batch(".re-reveal-fade",{
+          start:"top 90%",
+          once:true,
+          onEnter:(els)=>gsap.to(els,{opacity:1,stagger:reduce?0:0.08,duration:d||0.5,ease:"power2.out"}),
+        });
+
+        return()=>heroTl.kill();
+      }
+    );
+    return()=>mm.revert();
+  },{scope:rootRef, dependencies:[st.notices.length, st.eas?.length, st.books?.length]});
+
   return(
-    <div>
+    <div ref={rootRef}>
       <GlobalStyles/>
       <style>{`
         @keyframes goldPulse{0%,100%{opacity:0.6}50%{opacity:1}}
@@ -569,24 +610,24 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
 
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,position:"relative"}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:10,color:G.gold,letterSpacing:4,textTransform:"uppercase",marginBottom:12,fontWeight:700,animation:"fadeUp 0.5s ease both"}}>
+            <div className="re-eyebrow" style={{fontSize:10,color:G.gold,letterSpacing:4,textTransform:"uppercase",marginBottom:12,fontWeight:700}}>
               Macro Intelligence
             </div>
-            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,9vw,42px)",color:G.text,margin:"0 0 10px",fontWeight:900,lineHeight:1.05,animation:"fadeUp 0.5s 0.05s ease both"}}>
-              Regime<span style={{color:G.gold,textShadow:"0 0 40px rgba(212,175,55,0.4)"}}> Edge</span>
+            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,9vw,42px)",color:G.text,margin:"0 0 10px",fontWeight:900,lineHeight:1.15}}>
+              <span className="re-title-word" style={{display:"inline-block"}}>Regime</span><span className="re-title-word" style={{display:"inline-block",color:G.gold,textShadow:"0 0 40px rgba(212,175,55,0.4)"}}> Edge</span>
             </h1>
-            <p style={{color:G.textSub,fontSize:12,margin:"0 0 16px",lineHeight:1.75,animation:"fadeUp 0.5s 0.1s ease both"}}>
+            <p className="re-tagline" style={{color:G.textSub,fontSize:12,margin:"0 0 16px",lineHeight:1.75}}>
               Not signals. Reasoning. Direction. Discipline.
             </p>
 
             {/* Live gold price — upgraded */}
-            <div style={{display:"inline-flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.gold}22`,borderRadius:24,padding:"7px 14px 7px 10px",marginBottom:16,animation:"fadeUp 0.5s 0.15s ease both",boxShadow:`0 0 20px rgba(212,175,55,0.08)`}}>
+            <div className="re-price-pill" style={{display:"inline-flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.gold}22`,borderRadius:24,padding:"7px 14px 7px 10px",marginBottom:16,boxShadow:`0 0 20px rgba(212,175,55,0.08)`}}>
               <div style={{width:6,height:6,borderRadius:"50%",background:liveGold.error?G.red:G.green,flexShrink:0,animation:!liveGold.loading&&!liveGold.error?"pulseDot 2s ease-in-out infinite":"none"}}/>
-              <span style={{fontFamily:"monospace",fontSize:10,color:G.textSub,fontWeight:600,letterSpacing:1}}>XAU/USD</span>
+              <span style={{fontFamily:G.mono,fontSize:10,color:G.textSub,fontWeight:600,letterSpacing:1}}>XAU/USD</span>
               {liveGold.loading?(
-                <span style={{fontFamily:"monospace",fontSize:11,color:G.textDim}}>—</span>
+                <span style={{fontFamily:G.mono,fontSize:11,color:G.textDim}}>—</span>
               ):liveGold.error?(
-                <span style={{fontFamily:"monospace",fontSize:11,color:G.textDim}}>Unavailable</span>
+                <span style={{fontFamily:G.mono,fontSize:11,color:G.textDim}}>Unavailable</span>
               ):(
                 <>
                   <span style={{fontFamily:"'Playfair Display',serif",fontSize:15,color:G.gold,fontWeight:900,animation:"priceIn 0.3s ease"}}>
@@ -600,11 +641,11 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
             </div>
 
             {/* Bias pills */}
-            <div style={{display:"flex",flexDirection:"column",gap:8,animation:"fadeUp 0.5s 0.2s ease both"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {[["WEEK",st.weeklyBias.direction,st.weeklyBias.dayLabel,"weekly"],[" DAY",st.dailyBias.direction,st.dailyBias.dayLabel,"weekly"]].map(([l,d,v,pg])=>{
                 const c=d==="Bullish"?G.green:d==="Bearish"?G.red:G.gold;
                 return(
-                  <button key={l} onClick={()=>setPage(pg)} style={{display:"flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderLeft:`3px solid ${c}`,borderRadius:10,padding:"9px 13px",cursor:"pointer",textAlign:"left",width:"100%",transition:"all 0.2s",boxShadow:"none"}}
+                  <button key={l} className="re-bias-pill" onClick={()=>setPage(pg)} style={{display:"flex",alignItems:"center",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderLeft:`3px solid ${c}`,borderRadius:10,padding:"9px 13px",cursor:"pointer",textAlign:"left",width:"100%",transition:"all 0.2s",boxShadow:"none"}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=c;e.currentTarget.style.background=`${c}0a`;e.currentTarget.style.boxShadow=`0 4px 16px ${c}18`;}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.surface;e.currentTarget.style.boxShadow="none";}}>
                     <div style={{fontSize:8,color:G.textDim,letterSpacing:1.5,flexShrink:0,textTransform:"uppercase",fontWeight:700}}>{l}</div>
@@ -615,8 +656,9 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
               })}
             </div>
           </div>
-          <div style={{flexShrink:0,animation:"fadeUp 0.5s 0.25s ease both"}}><CandleAnim/></div>
+          <div className="re-candle-wrap" style={{flexShrink:0}}><CandleAnim/></div>
         </div>
+        <Grain opacity={0.03}/>
       </div>
 
       {/* Gold divider */}
@@ -632,7 +674,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
           <div style={{marginBottom:24}}>
             <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Updates</div>
             {visibleNotices.map((n,ni)=>(
-              <div key={n.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"11px 14px",marginBottom:7,display:"flex",gap:0,alignItems:"stretch",overflow:"hidden",position:"relative",animation:`fadeUp 0.3s ${ni*0.05}s ease both`}}>
+              <div key={n.id} className="re-reveal" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"11px 14px",marginBottom:7,display:"flex",gap:0,alignItems:"stretch",overflow:"hidden",position:"relative",opacity:0,transform:"translateY(18px)"}}>
                 <div style={{width:3,background:noticeTypeColor(n.type),borderRadius:2,flexShrink:0,marginRight:12,alignSelf:"stretch",minHeight:20}}/>
                 <div style={{flex:1}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
@@ -676,7 +718,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
           <div style={{marginBottom:14}}>{renderBody(st.weeklyBias.body,true)}</div>
           {st.weeklyBias.image&&<img src={st.weeklyBias.image} alt="chart" style={{width:"100%",borderRadius:10,marginBottom:14,display:"block"}}/>}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <button onClick={()=>setPage("weekly")} style={{flex:1,padding:"11px 0",background:`${wColor}0e`,border:`1px solid ${wColor}33`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3,marginRight:10}}
+            <button onClick={()=>setPage("weekly")} className="re-cta-tactile" style={{flex:1,padding:"11px 0",background:`${wColor}0e`,border:`1px solid ${wColor}33`,borderRadius:G.rs,color:wColor,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",letterSpacing:0.3,marginRight:10}}
               onMouseEnter={e=>{e.currentTarget.style.background=`${wColor}18`;}}
               onMouseLeave={e=>{e.currentTarget.style.background=`${wColor}0e`;}}>
               Full Bias Analysis →
@@ -684,7 +726,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
             {formatViews(st.weeklyBias.views||0)&&(
               <div style={{display:"flex",alignItems:"center",gap:5,color:G.textDim,fontSize:12,flexShrink:0}}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                <span style={{fontWeight:600,fontFamily:"monospace"}}>{formatViews(st.weeklyBias.views||0)}</span>
+                <span style={{fontWeight:600,fontFamily:G.mono}}>{formatViews(st.weeklyBias.views||0)}</span>
               </div>
             )}
           </div>
@@ -710,14 +752,14 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
           {formatViews(st.dailyBias.views||0)&&(
             <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:5,marginTop:12,color:G.textDim,fontSize:12}}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <span style={{fontWeight:600,fontFamily:"monospace"}}>{formatViews(st.dailyBias.views||0)}</span>
+              <span style={{fontWeight:600,fontFamily:G.mono}}>{formatViews(st.dailyBias.views||0)}</span>
             </div>
           )}
         </GlowCard>
 
         {/* Active signals alert */}
         {(st.nfpSignal.active||st.fomcSignal.active)&&(
-          <div onClick={()=>setPage("events")} style={{background:`linear-gradient(135deg,${G.gold}12,${G.card})`,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"14px 18px",marginBottom:12,cursor:"pointer",animation:"glow 2.5s ease-in-out infinite",boxShadow:`0 0 24px rgba(212,175,55,0.1)`}}>
+          <div onClick={()=>setPage("events")} className="re-reveal" style={{background:`linear-gradient(135deg,${G.gold}12,${G.card})`,border:`1px solid ${G.gold}44`,borderRadius:G.r,padding:"14px 18px",marginBottom:12,cursor:"pointer",animation:"glow 2.5s ease-in-out infinite",boxShadow:`0 0 24px rgba(212,175,55,0.1)`,opacity:0,transform:"translateY(18px)"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:G.gold,animation:"pulseDot 1.5s ease-in-out infinite"}}/>
               <div style={{fontSize:10,color:G.gold,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Signal Active</div>
@@ -737,12 +779,13 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
             return(
               <button key={page} onClick={()=>setPage(page)}
                 onMouseEnter={()=>setHovCard(page)} onMouseLeave={()=>setHovCard(null)}
+                className="re-reveal-fade"
                 style={{background:G.card,border:`1px solid ${hov?color+"55":G.border}`,borderRadius:G.r,padding:"16px 14px",textAlign:"left",cursor:"pointer",
                   transition:"all 0.22s cubic-bezier(0.4,0,0.2,1)",
                   borderTop:`3px solid ${color}`,
                   transform:hov?"translateY(-3px)":"none",
                   boxShadow:hov?`0 12px 32px rgba(0,0,0,0.4),0 0 0 1px ${color}22`:"0 4px 16px rgba(0,0,0,0.25)",
-                  animation:`fadeUp 0.4s ${qi*0.07}s ease both`}}>
+                  opacity:0}}>
                 <div style={{width:36,height:36,borderRadius:10,background:`${color}15`,border:`1px solid ${color}22`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10,fontSize:18,color}}>{icon}</div>
                 <div style={{fontSize:13,fontWeight:800,color:G.text,marginBottom:3}}>{label}</div>
                 <div style={{fontSize:11,color:G.textSub,marginBottom:statusText||terminalStatus?6:0,lineHeight:1.4}}>{sub}</div>
@@ -759,7 +802,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
           <div style={{fontSize:10,color:G.textSub,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>What RegimeEdge Tracks</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
             {pillars.map((p,pi)=>(
-              <button key={p.page} onClick={()=>setPage(p.page)} style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"14px 10px",textAlign:"center",cursor:"pointer",transition:"all 0.2s",animation:`fadeUp 0.4s ${0.1+pi*0.07}s ease both`}}
+              <button key={p.page} onClick={()=>setPage(p.page)} className="re-reveal" style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,padding:"14px 10px",textAlign:"center",cursor:"pointer",transition:"all 0.2s",opacity:0,transform:"translateY(18px)"}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold+"44";e.currentTarget.style.background=G.goldBg;e.currentTarget.style.transform="translateY(-2px)";}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.card;e.currentTarget.style.transform="none";}}>
                 <div style={{fontSize:20,marginBottom:7}}>{p.icon}</div>
@@ -779,8 +822,8 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
             </div>
             {st.eas.slice(0,2).map(ea=>(
               <div key={ea.id} onClick={()=>setPage("eas")}
-                style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:10,overflow:"hidden",cursor:"pointer",transition:"all 0.22s"}}
-                className="re-card-hover">
+                style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,marginBottom:10,overflow:"hidden",cursor:"pointer",transition:"all 0.22s",opacity:0,transform:"translateY(18px)"}}
+                className="re-card-hover re-reveal">
                 <div style={{height:2,background:`linear-gradient(90deg,${G.gold},${G.gold}33)`}}/>
                 <div style={{display:"flex",gap:0}}>
                   {ea.image&&(
@@ -812,7 +855,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
             </div>
             <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:G.r,overflow:"hidden"}}>
               {st.books.slice(0,3).map((book,i)=>(
-                <div key={book.id} onClick={()=>setPage("books")} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<Math.min(st.books.length,3)-1?`1px solid ${G.border}`:"none",cursor:"pointer",transition:"background 0.15s"}}
+                <div key={book.id} onClick={()=>setPage("books")} className="re-reveal" style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<Math.min(st.books.length,3)-1?`1px solid ${G.border}`:"none",cursor:"pointer",transition:"background 0.15s",opacity:0,transform:"translateY(18px)"}}
                   onMouseEnter={e=>e.currentTarget.style.background=G.surface}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <div style={{width:32,height:32,borderRadius:8,background:`${G.blue}15`,border:`1px solid ${G.blue}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>

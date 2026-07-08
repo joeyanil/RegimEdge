@@ -13,6 +13,7 @@ export const G = {
   blue:"#60a5fa", blueBg:"rgba(96,165,250,0.08)",
   purple:"#a78bfa", purpleBg:"rgba(167,139,250,0.08)",
   r:16, rs:11,
+  mono:"'JetBrains Mono',monospace",
 };
 
 // Global keyframes injected once
@@ -40,8 +41,29 @@ export const GlobalStyles = () => (
     .re-card-hover{transition:all 0.22s cubic-bezier(0.4,0,0.2,1)}
     .re-card-hover:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,0.4)!important}
     .re-btn-press:active{transform:scale(0.97)}
+    @media (hover:hover) and (pointer:fine){
+      .re-cta-tactile{transition:transform 0.18s cubic-bezier(0.4,0,0.2,1)}
+      .re-cta-tactile:hover{transform:scale(1.015)}
+      .re-cta-tactile:active{transform:scale(0.985)}
+    }
     input::placeholder,textarea::placeholder{color:#353A47}
+    @media (prefers-reduced-motion: reduce){
+      *,*::before,*::after{
+        animation-duration:0.001ms!important;
+        animation-iteration-count:1!important;
+        transition-duration:0.001ms!important;
+        scroll-behavior:auto!important;
+      }
+    }
   `}</style>
+);
+
+// Subtle photographic grain — removes digital sterility, near-zero perf cost (static SVG, no animation)
+export const Grain = ({ opacity=0.035 }) => (
+  <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity,pointerEvents:"none",mixBlendMode:"overlay"}}>
+    <filter id="re-grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/></filter>
+    <rect width="100%" height="100%" filter="url(#re-grain)"/>
+  </svg>
 );
 
 export const Card = ({ children, style={}, gold, glow }) => (
