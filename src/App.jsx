@@ -289,156 +289,156 @@ const CandleAnim = React.memo(function CandleAnim() {
   useEffect(()=>{
     const cv=ref.current; if(!cv)return;
     const ctx=cv.getContext("2d");
-    // High-DPI
-    const DPR=window.devicePixelRatio||1;
-    const W=200,H=260;
+    const DPR=Math.min(window.devicePixelRatio||1,2.5);
+    const W=224,H=272;
     cv.width=W*DPR; cv.height=H*DPR; cv.style.width=W+"px"; cv.style.height=H+"px";
     ctx.scale(DPR,DPR);
 
-    // Canvas coords: y=0 is TOP, y increases downward
-    // For a BULLISH candle: open > close means open is LOWER on screen (larger y), close is HIGHER (smaller y)
-    // Body: top=close y, bottom=open y  (close is higher price = smaller y)
-    // Bullish: close higher than open → bodyTop=close(small y), bodyBot=open(large y)
-    // Bearish: close lower than open  → bodyTop=open(small y), bodyBot=close(large y)
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // All candles fully defined:
-    const bull={
-      x:52,
-      wickTop:40,      // upper wick tip (high)
-      bodyTop:80,      // close price (bullish = close above open)
-      bodyBot:210,     // open price
-      wickBot:215,     // lower wick tip (low)
-      color:"#3B82F6",
-      bullish:true
-    };
-    const sweep={
-      x:118,
-      wickTop:35,      // sweep ABOVE bull high
-      bodyTop:88,      // small body top
-      bodyBot:106,     // small body bottom
-      wickBot:130,     // lower wick
-      color:"#6B7280",
-      bullish:false    // bearish/doji candle (rejection)
-    };
-    const bear={
-      x:178,
-      wickTop:80,      // upper wick
-      bodyTop:92,      // open price (bear opens near bull close)
-      bodyBot:230,     // close price (bear closes far below)
-      wickBot:238,     // lower wick
-      color:"#4B5563",
-      bullish:false
-    };
+    const bull={ x:58, wickTop:44, bodyTop:86, bodyBot:214, wickBot:220, hi:"#60A5FA", lo:"#2563EB", bullish:true };
+    const sweep={ x:130, wickTop:38, bodyTop:94, bodyBot:112, wickBot:136, hi:"#9CA3AF", lo:"#4B5563", bullish:false };
+    const bear={ x:196, wickTop:86, bodyTop:98, bodyBot:236, wickBot:244, hi:"#6B7280", lo:"#374151", bullish:false };
+    const swingHighY = bull.wickTop, swingLowY = bull.wickBot;
 
-    // Lines anchored to WICKS:
-    // swing high line = bull.wickTop (top wick of bull candle)
-    // swing low line  = bull.wickBot  (bottom wick of bull candle)
-    const swingHighY = bull.wickTop;
-    const swingLowY  = bull.wickBot;
+    // Ambient embers — small glowing particles drifting upward, independent of the
+    // candle-loop phase so the hero never reads as a static frame between cycles.
+    const embers = Array.from({length:14},(_,i)=>({
+      x:Math.random()*W, y:H+Math.random()*40,
+      r:0.6+Math.random()*1.6, spd:0.12+Math.random()*0.22,
+      drift:(Math.random()-0.5)*0.35, phase:Math.random()*Math.PI*2,
+      hue: i%3===0?"212,175,55":i%3===1?"96,165,250":"180,180,190",
+    }));
 
-    // Phase durations (frames at ~60fps)
-    const PH=[90,55,65,95,55];
+    const PH=[85,55,60,90,50,35]; // last entry = fade-out hold before crossfade reset
     const TOTAL=PH.reduce((a,b)=>a+b,0);
     let frame=0;
-
-    function getPhase(){
-      let f=frame;
-      for(let i=0;i<PH.length;i++){ if(f<PH[i])return{ph:i,p:f/PH[i]}; f-=PH[i]; }
-      return{ph:PH.length-1,p:1};
-    }
+    function getPhase(){ let f=frame; for(let i=0;i<PH.length;i++){ if(f<PH[i])return{ph:i,p:f/PH[i]}; f-=PH[i]; } return{ph:PH.length-1,p:1}; }
     function easeOut(t){return 1-Math.pow(1-t,3);}
+    function easeInOut(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
 
-    // Draw a candle animating from bottom to top (bullish) or top to bottom (bearish)
-    function drawCandle(c, prog, alpha=1){
+    function drawCandle(c, prog, glow=1){
       if(prog<=0)return;
-      ctx.globalAlpha=alpha;
       const ep=Math.min(prog,1);
-
       let bodyTop,bodyBot;
-      if(c.bullish){
-        // Bullish: grows upward — start at open (bodyBot), top moves up toward close (bodyTop)
-        bodyBot=c.bodyBot;
-        bodyTop=c.bodyBot-(c.bodyBot-c.bodyTop)*easeOut(ep);
-      } else {
-        // Bearish: grows downward — start at open (bodyTop), bottom moves down toward close (bodyBot)
-        bodyTop=c.bodyTop;
-        bodyBot=c.bodyTop+(c.bodyBot-c.bodyTop)*easeOut(ep);
-      }
-      const bodyH=Math.max(1,bodyBot-bodyTop);
+      if(c.bullish){ bodyBot=c.bodyBot; bodyTop=c.bodyBot-(c.bodyBot-c.bodyTop)*easeOut(ep); }
+      else { bodyTop=c.bodyTop; bodyBot=c.bodyTop+(c.bodyBot-c.bodyTop)*easeOut(ep); }
+      const bodyH=Math.max(1.5,bodyBot-bodyTop);
 
-      // Wicks (only draw once body progress > 0.3)
-      if(ep>0.3){
-        ctx.strokeStyle=c.color+"88";
-        ctx.lineWidth=1.5;
-        // Upper wick
+      if(ep>0.25){
+        ctx.save();
+        ctx.strokeStyle=c.lo+"AA"; ctx.lineWidth=1.6; ctx.lineCap="round";
+        ctx.shadowColor=c.hi; ctx.shadowBlur=5*glow;
         ctx.beginPath(); ctx.moveTo(c.x,c.wickTop); ctx.lineTo(c.x,bodyTop); ctx.stroke();
-        // Lower wick
         ctx.beginPath(); ctx.moveTo(c.x,bodyBot); ctx.lineTo(c.x,c.wickBot); ctx.stroke();
+        ctx.restore();
       }
-      // Body
-      ctx.fillStyle=c.color+(c.bullish?"CC":"BB");
-      ctx.strokeStyle=c.color;
-      ctx.lineWidth=1.5;
+      ctx.save();
+      ctx.shadowColor=c.hi; ctx.shadowBlur=9*glow;
+      const grad=ctx.createLinearGradient(0,bodyTop,0,bodyBot);
+      grad.addColorStop(0,c.hi); grad.addColorStop(1,c.lo);
+      ctx.fillStyle=grad;
+      ctx.strokeStyle=c.hi+"DD"; ctx.lineWidth=1.2;
       ctx.beginPath();
-      if(ctx.roundRect) ctx.roundRect(c.x-20,bodyTop,40,bodyH,2);
-      else ctx.rect(c.x-20,bodyTop,40,bodyH);
+      const r=Math.min(3,bodyH/2);
+      if(ctx.roundRect) ctx.roundRect(c.x-18,bodyTop,36,bodyH,r); else ctx.rect(c.x-18,bodyTop,36,bodyH);
       ctx.fill(); ctx.stroke();
-      ctx.globalAlpha=1;
+      ctx.globalAlpha=0.22*glow;
+      ctx.fillStyle="#fff";
+      ctx.fillRect(c.x-18,bodyTop,36,Math.max(2,bodyH*0.22));
+      ctx.restore();
     }
 
-    function drawHLine(y,x1,x2,alpha,color=G.gold){
-      ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=1;
+    function drawHLine(y,x1,x2,alpha,color){
+      ctx.save(); ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=1;
       ctx.setLineDash([5,6]);
       ctx.beginPath(); ctx.moveTo(x1,y); ctx.lineTo(x2,y); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha=1;
+      ctx.restore();
+    }
+
+    function drawBeam(y,x1,x2,t,color){
+      const bw=34, x=x1+(x2-x1)*t;
+      const grad=ctx.createLinearGradient(x-bw,y,x+bw,y);
+      grad.addColorStop(0,color+"00"); grad.addColorStop(0.5,color+"CC"); grad.addColorStop(1,color+"00");
+      ctx.save(); ctx.strokeStyle=grad; ctx.lineWidth=2; ctx.shadowColor=color; ctx.shadowBlur=6;
+      ctx.beginPath(); ctx.moveTo(Math.max(x1,x-bw),y); ctx.lineTo(Math.min(x2,x+bw),y); ctx.stroke();
+      ctx.restore();
     }
 
     function drawX(x,y,alpha){
-      ctx.globalAlpha=alpha; ctx.strokeStyle="#60A5FA"; ctx.lineWidth=2;
-      const s=6;
+      ctx.save(); ctx.globalAlpha=alpha; ctx.strokeStyle="#93C5FD"; ctx.lineWidth=2; ctx.lineCap="round";
+      ctx.shadowColor="#60A5FA"; ctx.shadowBlur=6;
+      const s=6.5;
       ctx.beginPath(); ctx.moveTo(x-s,y-s); ctx.lineTo(x+s,y+s); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x+s,y-s); ctx.lineTo(x-s,y+s); ctx.stroke();
-      ctx.globalAlpha=1;
+      ctx.restore();
     }
 
+    function drawEmbers(t){
+      for(const e of embers){
+        e.y-=e.spd; e.x+=Math.sin(t*0.02+e.phase)*e.drift;
+        if(e.y<-6){ e.y=H+Math.random()*20; e.x=Math.random()*W; }
+        const tw=0.35+0.4*Math.sin(t*0.05+e.phase);
+        ctx.save();
+        ctx.globalAlpha=Math.max(0,tw);
+        ctx.fillStyle=`rgba(${e.hue},1)`;
+        ctx.shadowColor=`rgba(${e.hue},0.9)`; ctx.shadowBlur=4;
+        ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    let t=0;
     function render(){
+      t++;
       ctx.clearRect(0,0,W,H);
-      // grid
-      ctx.strokeStyle=G.border+"33"; ctx.lineWidth=0.5;
-      for(let y=40;y<H;y+=50){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+      const bg=ctx.createRadialGradient(W*0.5,H*0.42,10,W*0.5,H*0.42,W*0.75);
+      bg.addColorStop(0,"rgba(212,175,55,0.06)"); bg.addColorStop(1,"rgba(212,175,55,0)");
+      ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+      ctx.strokeStyle="rgba(255,255,255,0.04)"; ctx.lineWidth=0.5;
+      for(let y=40;y<H;y+=46){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+      drawEmbers(t);
 
       const{ph,p}=getPhase();
       const ep=easeOut(p);
+      const isFadeHold = ph===PH.length-1;
 
-      // Phase 0: bull candle grows upward
+      let sceneAlpha=1;
+      if(isFadeHold) sceneAlpha = 1-easeInOut(p);
+      else if(frame<18) sceneAlpha = easeInOut(frame/18);
+      ctx.save();
+      ctx.globalAlpha=sceneAlpha;
+
       if(ph>=0){ drawCandle(bull, ph===0?ep:1); }
 
-      // Phase 1: lines appear + sweep body appears
       if(ph>=1){
-        const la=ph===1?ep*0.8:0.8;
-        drawHLine(swingHighY, 8, W-8, la, G.gold);
-        drawHLine(swingLowY,  8, W-8, la, G.gold+"99");
+        const la=ph===1?ep*0.85:0.85;
+        drawHLine(swingHighY, 8, W-8, la, "#D4AF37");
+        drawHLine(swingLowY,  8, W-8, la, "#D4AF3799");
+        if(!reduceMotion){
+          drawBeam(swingHighY,8,W-8,(t*0.006)%1,"#D4AF37");
+          drawBeam(swingLowY,8,W-8,((t*0.006)+0.5)%1,"#D4AF37");
+        }
         drawCandle(sweep, ph===1?ep:1);
       }
 
-      // Phase 2: sweep wick extends above bull high (the liquidity grab)
       if(ph>=2){
         const ep2=ph===2?easeOut(p):1;
-        // Extend upper wick of sweep upward beyond bull high
         const sweepWickY=sweep.bodyTop-(sweep.bodyTop-sweep.wickTop)*ep2;
-        ctx.globalAlpha=1; ctx.strokeStyle=sweep.color+"99"; ctx.lineWidth=1.5;
+        ctx.save(); ctx.strokeStyle="#9CA3AF"; ctx.lineWidth=1.6; ctx.shadowColor="#9CA3AF"; ctx.shadowBlur=4;
         ctx.beginPath(); ctx.moveTo(sweep.x,sweepWickY); ctx.lineTo(sweep.x,sweep.bodyTop); ctx.stroke();
-        ctx.globalAlpha=1;
-        // X mark where the sweep happens
+        ctx.restore();
         drawX(sweep.x, sweep.wickTop+(sweepWickY-sweep.wickTop)*0.5, ep2);
-        // small line at sweep level
         drawHLine(sweepWickY+4, sweep.x-24, sweep.x+24, ep2*0.5, "#60A5FA");
       }
 
-      // Phase 3: bearish candle grows DOWNWARD
       if(ph>=3){ drawCandle(bear, ph===3?ep:1); }
 
-      // Phase 4: hold
+      ctx.restore();
+
       frame++; if(frame>=TOTAL)frame=0;
       animRef.current=requestAnimationFrame(render);
     }
@@ -448,8 +448,8 @@ const CandleAnim = React.memo(function CandleAnim() {
 
   return(
     <div style={{position:"relative"}}>
-      <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 50%,rgba(212,175,55,0.05) 0%,transparent 70%)",borderRadius:16,pointerEvents:"none"}}/>
-      <canvas ref={ref} style={{borderRadius:12,display:"block"}}/>
+      <div style={{position:"absolute",inset:-10,background:"radial-gradient(ellipse at 50% 45%,rgba(212,175,55,0.10) 0%,transparent 72%)",borderRadius:20,pointerEvents:"none",filter:"blur(2px)"}}/>
+      <canvas ref={ref} style={{borderRadius:14,display:"block",position:"relative"}}/>
     </div>
   );
 });
@@ -559,29 +559,40 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
       {reduce:"(prefers-reduced-motion: reduce)", full:"(prefers-reduced-motion: no-preference)"},
       (ctx)=>{
         const{reduce}=ctx.conditions;
-        const d=reduce?0.01:undefined; // near-instant, still respects the guard, no jarring motion
+        // Reduced-motion still gets a real, visible transition — just opacity-only,
+        // no large translation/scale — rather than an imperceptible 0.01s snap.
+        const d=reduce?0.35:undefined;
 
         const heroTl=gsap.timeline({defaults:{ease:"power3.out"}});
         heroTl
-          .from(".re-eyebrow",{opacity:0,y:reduce?0:12,duration:d||0.5})
-          .from(".re-title-word",{opacity:0,y:reduce?0:24,stagger:reduce?0:0.09,duration:d||0.65},"-=0.35")
-          .from(".re-tagline",{opacity:0,y:reduce?0:10,duration:d||0.5},"-=0.3")
-          .from(".re-price-pill",{opacity:0,y:reduce?0:10,duration:d||0.5},"-=0.25")
-          .from(".re-bias-pill",{opacity:0,y:reduce?0:10,stagger:reduce?0:0.08,duration:d||0.5},"-=0.3")
-          .from(".re-candle-wrap",{opacity:0,scale:reduce?1:0.94,duration:d||0.7},"-=0.55");
+          .from(".re-eyebrow",{opacity:0,y:reduce?0:22,duration:d||0.65})
+          .from(".re-title-word",{opacity:0,y:reduce?0:44,rotateX:reduce?0:25,transformOrigin:"50% 100%",stagger:reduce?0:0.12,duration:d||0.9},"-=0.45")
+          .from(".re-tagline",{opacity:0,y:reduce?0:18,duration:d||0.6},"-=0.45")
+          .from(".re-price-pill",{opacity:0,y:reduce?0:18,scale:reduce?1:0.9,duration:d||0.6},"-=0.3")
+          .from(".re-bias-pill",{opacity:0,y:reduce?0:20,stagger:reduce?0:0.1,duration:d||0.6},"-=0.35")
+          .from(".re-candle-wrap",{opacity:0,scale:reduce?1:0.85,rotate:reduce?0:-4,duration:d||1.0,ease:"back.out(1.4)"},"-=0.7")
+          .add(()=>{
+            if(reduce)return;
+            // Idle breathing — keeps the hero visibly alive at rest, not just
+            // during the one-time entrance. Subtle: opacity + soft glow pulse only.
+            gsap.to(".re-price-pill",{boxShadow:"0 0 32px rgba(212,175,55,0.22)",duration:1.8,repeat:-1,yoyo:true,ease:"sine.inOut"});
+            gsap.to(".re-bias-pill",{y:-3,duration:2.4,repeat:-1,yoyo:true,ease:"sine.inOut",stagger:{each:0.3,from:"start"}});
+            gsap.to(".re-candle-wrap",{y:-6,duration:3.2,repeat:-1,yoyo:true,ease:"sine.inOut"});
+          });
 
         ScrollTrigger.batch(".re-reveal",{
           start:"top 90%",
           once:true,
-          onEnter:(els)=>gsap.to(els,{opacity:1,y:0,stagger:reduce?0:0.08,duration:d||0.5,ease:"power2.out"}),
+          onEnter:(els)=>gsap.to(els,{opacity:1,y:0,stagger:reduce?0:0.08,duration:d||0.55,ease:"power2.out"}),
         });
         // Opacity-only variant: used where transform is already owned by React hover state,
         // so GSAP must not touch transform (a later re-render would overwrite it).
         ScrollTrigger.batch(".re-reveal-fade",{
           start:"top 90%",
           once:true,
-          onEnter:(els)=>gsap.to(els,{opacity:1,stagger:reduce?0:0.08,duration:d||0.5,ease:"power2.out"}),
+          onEnter:(els)=>gsap.to(els,{opacity:1,stagger:reduce?0:0.08,duration:d||0.55,ease:"power2.out"}),
         });
+
 
         return()=>heroTl.kill();
       }
@@ -613,7 +624,7 @@ const HomePage = React.memo(function HomePage({st,setPage,update}){
             <div className="re-eyebrow" style={{fontSize:10,color:G.gold,letterSpacing:4,textTransform:"uppercase",marginBottom:12,fontWeight:700}}>
               Macro Intelligence
             </div>
-            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,9vw,42px)",color:G.text,margin:"0 0 10px",fontWeight:900,lineHeight:1.15}}>
+            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,9vw,42px)",color:G.text,margin:"0 0 10px",fontWeight:900,lineHeight:1.15,perspective:600}}>
               <span className="re-title-word" style={{display:"inline-block"}}>Regime</span><span className="re-title-word" style={{display:"inline-block",color:G.gold,textShadow:"0 0 40px rgba(212,175,55,0.4)"}}> Edge</span>
             </h1>
             <p className="re-tagline" style={{color:G.textSub,fontSize:12,margin:"0 0 16px",lineHeight:1.75}}>
